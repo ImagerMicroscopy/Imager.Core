@@ -8,6 +8,8 @@ import qualified Data.Text as T
 import Data.Vector.Unboxed (Vector)
 import qualified Data.Vector.Unboxed as V
 
+data Environment = Environment
+
 type GPIOPin = Int  -- temporary
 type ExposureTime = Double
 
