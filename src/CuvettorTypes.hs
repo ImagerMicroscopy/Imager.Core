@@ -46,13 +46,13 @@ instance FromJSON RequestMessage where
     parseJSON _ = fail "expected a JSON object"
 
 data ResponseMessage = StatusOK
-                     | StatusError
+                     | StatusError !String
                      | AcquiredSpectrum !(Vector Double)
                      | Wavelengths !(Vector Double)
 
 instance ToJSON ResponseMessage where
     toJSON StatusOK = object [("responsetype", "status"), ("status", "ok")]
-    toJSON StatusError = object [("responsetype", "status"), ("status", "error")]
+    toJSON (StatusError s) = object [("responsetype", "status"), ("status", "error"), ("error" .= s)]
     toJSON (AcquiredSpectrum v) = object [("responsetype", "spectrum"), "spectrum" .= (V.toList v)]
     toJSON (Wavelengths v) = object [("responsetype", "wavelengths"), "wavelengths" .= (V.toList v)]
 

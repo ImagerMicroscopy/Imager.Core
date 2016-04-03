@@ -14,6 +14,9 @@ import SimpleJSONServer
 
 import CuvettorTypes
 
+availablePins :: [GPIOPin]
+availablePins = [Pin2]
+
 main :: IO ()
 main =
     withGPIOPins (zip availablePins (repeat $ Output Low)) $ \gpioPins ->
@@ -33,11 +36,41 @@ messageHandler msg env =
 performAction :: Environment -> RequestMessage -> IO (ResponseMessage, Environment)
 performAction _ (SetPinHigh pin) = undefined
 performAction _ (SetPinLow pin) = undefined
-performAction _ (AcquireSpectrum e n) = undefined
-performAction env SendWavelengths = return (Wavelengths (V.fromList [0.0 .. 100.0]), env)
 
-availablePins :: [GPIOPin]
-availablePins = [Pin2]
+performAction env (AcquireSpectrum exposure nSpectra) =
+    ifSpectrometer maybeSpectrometer (\ids -> acquireSpectrum ids exposure nSpectra) >>= \spectrum ->
+    case spectrum of
+        Left err -> return (StatusError err, env)
+        Right v  -> return (AcquiredSpectrum v, env)
+    where
+        maybeSpectrometer = envSpectrometer env
+
+performAction env SendWavelengths =
+    ifSpectrometer maybeSpectrometer acquireWavelengths >>= \wavelengths ->
+    case wavelengths of
+        Left err -> return (StatusError err, env)
+        Right v  -> return (Wavelengths v, env)
+    where
+        maybeSpectrometer = envSpectrometer env
+
+ifSpectrometer :: Maybe (DeviceID, FeatureID) -> ((DeviceID, FeatureID) -> IO (Either String (Vector Double))) -> IO (Either String (Vector Double))
+ifSpectrometer Nothing _ = return $ Left "no spectrometer available"
+ifSpectrometer (Just ids) action = action ids
+
+acquireSpectrum :: (DeviceID, FeatureID) -> Double -> Int -> IO (Either String (Vector Double))
+acquireSpectrum (deviceID, featureID) exposure nSpectra =
+    if ((exposure <= 0.0) || (nSpectra < 1))
+        then return (Left "invalid number of spectra or exposure time")
+        else
+          runExceptT (
+              ExceptT (setIntegrationTimeMicros deviceID featureID integrationMicroseconds) >>
+              ExceptT (measureAveragedSpectrum deviceID featureID nSpectra))
+    where
+        integrationMicroseconds = floor (exposure * 1e6)
+
+acquireWavelengths :: (DeviceID, FeatureID) -> IO (Either String (Vector Double))
+acquireWavelengths (deviceID, featureID) =
+    getWavelengths deviceID featureID
 
 fetchAvailableSpectrometer :: IO (Maybe (DeviceID, FeatureID))
 fetchAvailableSpectrometer =
