@@ -34,8 +34,8 @@ messageHandler msg env =
         Success v -> performAction env v >>= \(resp, newEnv) -> return (toJSON resp, newEnv)
 
 performAction :: Environment -> RequestMessage -> IO (ResponseMessage, Environment)
-performAction _ (SetPinHigh pin) = undefined
-performAction _ (SetPinLow pin) = undefined
+performAction env (SetPinHigh pin) = setPinLevelOrError env pin High
+performAction env (SetPinLow pin)  = setPinLevelOrError env pin Low
 
 performAction env (AcquireSpectrum exposure nSpectra) =
     ifSpectrometer maybeSpectrometer (\ids -> acquireSpectrum ids exposure nSpectra) >>= \spectrum ->
@@ -52,6 +52,16 @@ performAction env SendWavelengths =
         Right v  -> return (Wavelengths v, env)
     where
         maybeSpectrometer = envSpectrometer env
+
+setPinLevelOrError :: Environment -> GPIOPin -> Level -> IO (ResponseMessage, Environment)
+setPinLevelOrError env pin level =
+    if (not havePin)
+      then return (StatusError "pin not available", env)
+      else
+          setPinLevel gpioHandles pin level >> return (StatusOK, env)
+    where
+        havePin = pin `elem` (envAvailablePins env)
+        gpioHandles = envGPIOHandles env
 
 ifSpectrometer :: Maybe (DeviceID, FeatureID) -> ((DeviceID, FeatureID) -> IO (Either String (Vector Double))) -> IO (Either String (Vector Double))
 ifSpectrometer Nothing _ = return $ Left "no spectrometer available"
