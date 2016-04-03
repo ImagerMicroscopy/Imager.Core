@@ -9,10 +9,12 @@ import Data.Vector.Unboxed (Vector)
 import qualified Data.Vector.Unboxed as V
 
 import GPIO
+import OOSeaBreeze
 
 data Environment = Environment {
                       envGPIOHandles :: !GPIOHandles
                     , envAvailablePins :: [GPIOPin]
+                    , envSpectrometer :: !(Maybe (DeviceID, FeatureID))
 }
 
 type ExposureTime = Double
