@@ -8,9 +8,13 @@ import qualified Data.Text as T
 import Data.Vector.Unboxed (Vector)
 import qualified Data.Vector.Unboxed as V
 
-data Environment = Environment
+import GPIO
 
-type GPIOPin = Int  -- temporary
+data Environment = Environment {
+                      envGPIOHandles :: !GPIOHandles
+                    , envAvailablePins :: [GPIOPin]
+}
+
 type ExposureTime = Double
 
 data RequestMessage = SetPinHigh !GPIOPin
@@ -49,3 +53,16 @@ instance ToJSON ResponseMessage where
     toJSON StatusError = object [("responsetype", "status"), ("status", "error")]
     toJSON (AcquiredSpectrum v) = object [("responsetype", "spectrum"), "spectrum" .= (V.toList v)]
     toJSON (Wavelengths v) = object [("responsetype", "wavelengths"), "wavelengths" .= (V.toList v)]
+
+instance FromJSON GPIOPin where
+    parseJSON (String s) =
+        case (T.toLower s) of
+            "pin2"  -> return Pin2
+            "pin3"  -> return Pin3
+            "pin4"  -> return Pin4
+            "pin7"  -> return Pin7
+            "pin8"  -> return Pin8
+            "pin9"  -> return Pin9
+            "pin10"  -> return Pin10
+            "pin11"  -> return Pin11
+    parseJSON invalid = fail "can't decode gpio pin"

@@ -21,4 +21,6 @@ executable RaspCuvettor
                      , text
                      , vector
                      , SimpleJSONServer
+                     , GPIO
+                     , hsOceanOptics
   other-modules:       CuvettorTypes
