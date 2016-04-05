@@ -17,6 +17,9 @@ import CuvettorTypes
 availablePins :: [GPIOPin]
 availablePins = [Pin2]
 
+handlerTimeout :: Int
+handlerTimeout = 2 * 1000000
+
 main :: IO ()
 main =
     withGPIOPins (zip availablePins (repeat $ Output Low)) $ \gpioPins ->
@@ -25,7 +28,7 @@ main =
     bracket fetchAvailableSpectrometer closeAvailableSpectrometer $ \maybeSpectrometer ->
 
     return (Environment gpioPins availablePins maybeSpectrometer) >>= \env ->
-    runServer 3200 messageHandler env
+    runServer 3200 messageHandler env (Just handlerTimeout)
 
 messageHandler :: MessageHandler Environment
 messageHandler msg env =

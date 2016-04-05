@@ -8,10 +8,10 @@ packages:
 - '.'
 - location:
     git: git@bitbucket.org:pdedecker/simplejsonserver.git
-    commit: 10b47c8f424dc5daf4cba6caa28a1031428bc01a
+    commit: 81c1b37135d65651ef7c45b71fbcbb7bc367ba3c
 - location:
     git: git@bitbucket.org:pdedecker/hsoceanoptics.git
-    commit: 7aba34c9f66f6f6189195d7622ce4b799238fe61
+    commit: 70f90904fb87908163afeb5db63f9faf0d069be8
 - location:
     git: git@bitbucket.org:pdedecker/hsgpio.git
     commit: 2a660e360b6895a00f11720ad69853e85d00a237
