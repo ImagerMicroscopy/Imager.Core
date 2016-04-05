@@ -21,6 +21,8 @@ availablePins = [Pin2]
 handlerTimeout :: Int
 handlerTimeout = 2 * 1000000
 
+serverSettings = defaultSettings {ssDebugMessages = True}
+
 main :: IO ()
 main =
     withGPIOPins (zip availablePins (repeat $ Output Low)) (\gpioPins ->
@@ -33,7 +35,7 @@ main =
 
     putStrLn ("running server") >>
     return (Environment gpioPins availablePins maybeSpectrometer) >>= \env ->
-    runServer 3200 messageHandler env (Just handlerTimeout)
+    runServer 3200 messageHandler env serverSettings
     ))
 
 messageHandler :: MessageHandler Environment
