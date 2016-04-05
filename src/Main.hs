@@ -5,6 +5,7 @@ module Main where
 import Control.Exception
 import Control.Monad.Trans.Except
 import Data.Aeson
+import Data.Maybe
 import Data.Vector.Unboxed (Vector)
 import qualified Data.Vector.Unboxed as V
 
@@ -22,13 +23,18 @@ handlerTimeout = 2 * 1000000
 
 main :: IO ()
 main =
-    withGPIOPins (zip availablePins (repeat $ Output Low)) $ \gpioPins ->
+    withGPIOPins (zip availablePins (repeat $ Output Low)) (\gpioPins ->
+    putStrLn ("opened GPIO pins: " ++ concat (map show availablePins)) >>
     
-    withSeaBreeze $
+    withSeaBreeze (
     bracket fetchAvailableSpectrometer closeAvailableSpectrometer $ \maybeSpectrometer ->
+    
+    putStrLn (if (isJust maybeSpectrometer) then "opened spectrometer" else "no spectrometer found") >>
 
+    putStrLn ("running server") >>
     return (Environment gpioPins availablePins maybeSpectrometer) >>= \env ->
     runServer 3200 messageHandler env (Just handlerTimeout)
+    ))
 
 messageHandler :: MessageHandler Environment
 messageHandler msg env =
