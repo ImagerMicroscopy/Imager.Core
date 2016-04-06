@@ -41,15 +41,16 @@ main =
 messageHandler :: MessageHandler Environment
 messageHandler msg env =
     case (fromJSON msg) of
-        Error _   -> return (object [("responsetype", "invalidquery")], env)
-        Success v -> performAction env v >>= \(resp, newEnv) -> return (toJSON resp, newEnv)
+        Error _   -> return (ResponseJSON (object [("responsetype", "invalidquery")]), env)
+        Success v -> performAction env v >>= \(resp, newEnv) -> return (ResponseLBS (encode resp), newEnv)
 
 performAction :: Environment -> RequestMessage -> IO (ResponseMessage, Environment)
 performAction env (SetPinHigh pin) = setPinLevelOrError env pin High
 performAction env (SetPinLow pin)  = setPinLevelOrError env pin Low
 
 performAction env (AcquireSpectrum exposure nSpectra) =
-    ifSpectrometer maybeSpectrometer (\ids -> acquireSpectrum ids exposure nSpectra) >>= \spectrum ->
+    --ifSpectrometer maybeSpectrometer (\ids -> acquireSpectrum ids exposure nSpectra) >>= \spectrum ->
+    let spectrum = Right dummySpectrum in
     case spectrum of
         Left err -> return (StatusError err, env)
         Right v  -> return (AcquiredSpectrum v, env)
@@ -63,6 +64,8 @@ performAction env SendWavelengths =
         Right v  -> return (Wavelengths v, env)
     where
         maybeSpectrometer = envSpectrometer env
+
+dummySpectrum = V.fromList [0.0 .. 3599.0]
 
 setPinLevelOrError :: Environment -> GPIOPin -> Level -> IO (ResponseMessage, Environment)
 setPinLevelOrError env pin level =
