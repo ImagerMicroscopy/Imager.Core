@@ -30,7 +30,7 @@ data RequestMessage = SetPinHigh !GPIOPin
 instance ToJSON RequestMessage where
     toJSON (SetPinHigh pin) = object [("action", "setpinhigh"), "pin" .= show pin]
     toJSON (SetPinLow pin) = object [("action", "setpinlow"), "pin" .= show pin]
-    toJSON (AcquireSpectrum e n) = object [("action", "acquirespectrum"), "exposureTime" .= show e, "nspectra" .= show n]
+    toJSON (AcquireSpectrum e n) = object [("action", "acquirespectrum"), "exposuretime" .= e, "nspectra" .= n]
     toJSON SendWavelengths = object [("action", "sendwavelengths")]
 
 instance FromJSON RequestMessage where
@@ -39,7 +39,7 @@ instance FromJSON RequestMessage where
         case (T.toLower action) of
             "setpinhigh" -> SetPinHigh <$> v .: "pin"
             "setpinlow"  -> SetPinLow <$> v .: "pin"
-            "acquirespectrum" -> AcquireSpectrum <$> v .: "exposureTime" <*> v .: "nspectra"
+            "acquirespectrum" -> AcquireSpectrum <$> v .: "exposuretime" <*> v .: "nspectra"
             "sendwavelengths" -> return SendWavelengths
             _                 -> fail $ "invalid action \"" ++ (T.unpack action) ++ "\""
     
@@ -53,8 +53,8 @@ data ResponseMessage = StatusOK
 instance ToJSON ResponseMessage where
     toJSON StatusOK = object [("responsetype", "status"), ("status", "ok")]
     toJSON (StatusError s) = object [("responsetype", "status"), ("status", "error"), ("error" .= s)]
-    toJSON (AcquiredSpectrum v) = object [("responsetype", "spectrum"), "spectrum" .= (V.toList v)]
-    toJSON (Wavelengths v) = object [("responsetype", "wavelengths"), "wavelengths" .= (V.toList v)]
+    toJSON (AcquiredSpectrum v) = object [("responsetype", "spectrum"), "spectrum" .= v]
+    toJSON (Wavelengths v) = object [("responsetype", "wavelengths"), "wavelengths" .= v]
 
 instance FromJSON GPIOPin where
     parseJSON (String s) =
