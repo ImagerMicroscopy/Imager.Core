@@ -21,7 +21,7 @@ availablePins = [Pin2]
 handlerTimeout :: Int
 handlerTimeout = 2 * 1000000
 
-serverSettings = defaultSettings {ssDebugMessages = True}
+serverSettings = defaultSettings {ssDebugMessages = False}
 
 main :: IO ()
 main =
@@ -49,8 +49,7 @@ performAction env (SetPinHigh pin) = setPinLevelOrError env pin High
 performAction env (SetPinLow pin)  = setPinLevelOrError env pin Low
 
 performAction env (AcquireSpectrum exposure nSpectra) =
-    --ifSpectrometer maybeSpectrometer (\ids -> acquireSpectrum ids exposure nSpectra) >>= \spectrum ->
-    let spectrum = Right dummySpectrum in
+    ifSpectrometer maybeSpectrometer (\ids -> acquireSpectrum ids exposure nSpectra) >>= \spectrum ->
     case spectrum of
         Left err -> return (StatusError err, env)
         Right v  -> return (AcquiredSpectrum v, env)
@@ -64,8 +63,6 @@ performAction env SendWavelengths =
         Right v  -> return (Wavelengths v, env)
     where
         maybeSpectrometer = envSpectrometer env
-
-dummySpectrum = V.fromList [0.0 .. 3599.0]
 
 setPinLevelOrError :: Environment -> GPIOPin -> Level -> IO (ResponseMessage, Environment)
 setPinLevelOrError env pin level =
