@@ -1,7 +1,7 @@
 # For more information, see: http://docs.haskellstack.org/en/stable/yaml_configuration.html
 
 # Specifies the GHC version and set of packages available (e.g., lts-3.5, nightly-2015-09-21, ghc-7.10.2)
-resolver: lts-5.0
+resolver: nightly-2016-04-05
 
 # Local packages, usually specified by relative directory name
 packages:
@@ -11,7 +11,7 @@ packages:
     commit: e19e6797c2c533bce010a153c76e40723db413e6
 - location:
     git: git@bitbucket.org:pdedecker/hsoceanoptics.git
-    commit: dd0914ab592716988edcc60cac863ae66aeeff1b
+    commit: 99f763aee95ccba59b3326066ca16ade47d73e58
 - location:
     git: git@bitbucket.org:pdedecker/hsgpio.git
     commit: 27c7f434aaf03807b681a85cf24db06172e26496

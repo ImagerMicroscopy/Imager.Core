@@ -1,8 +1,10 @@
-{-# LANGUAGE BangPatterns, OverloadedStrings #-}
+{-# LANGUAGE BangPatterns, OverloadedStrings, DeriveGeneric #-}
 
 module CuvettorTypes where
 
+import GHC.Generics
 import Data.Aeson
+import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Vector.Unboxed (Vector)
@@ -24,14 +26,15 @@ data RequestMessage = SetPinHigh !GPIOPin
                     | AcquireSpectrum {
                         exposureTime :: !ExposureTime
                       , nSpectra :: !Int
-                    }
+                      }
                     | SendWavelengths
+                    deriving (Generic)
 
 instance ToJSON RequestMessage where
-    toJSON (SetPinHigh pin) = object [("action", "setpinhigh"), "pin" .= show pin]
-    toJSON (SetPinLow pin) = object [("action", "setpinlow"), "pin" .= show pin]
-    toJSON (AcquireSpectrum e n) = object [("action", "acquirespectrum"), "exposuretime" .= e, "nspectra" .= n]
-    toJSON SendWavelengths = object [("action", "sendwavelengths")]
+    toEncoding (SetPinHigh pin) = pairs ("action" .= ("setpinhigh" :: Text) <> "pin" .= show pin)
+    toEncoding (SetPinLow pin) = pairs ("action" .= ("setpinlow" :: Text) <> "pin" .= show pin)
+    toEncoding (AcquireSpectrum e n) = pairs ("action" .= ("acquirespectrum"  :: Text) <> "exposuretime" .= e <> "nspectra" .= n)
+    toEncoding SendWavelengths = pairs ("action" .= ("sendwavelengths"  :: Text))
 
 instance FromJSON RequestMessage where
     parseJSON (Object v) =
@@ -49,12 +52,13 @@ data ResponseMessage = StatusOK
                      | StatusError !String
                      | AcquiredSpectrum !(Vector Double)
                      | Wavelengths !(Vector Double)
+                     deriving (Generic)
 
 instance ToJSON ResponseMessage where
-    toJSON StatusOK = object [("responsetype", "status"), ("status", "ok")]
-    toJSON (StatusError s) = object [("responsetype", "status"), ("status", "error"), ("error" .= s)]
-    toJSON (AcquiredSpectrum v) = object [("responsetype", "spectrum"), "spectrum" .= v]
-    toJSON (Wavelengths v) = object [("responsetype", "wavelengths"), "wavelengths" .= v]
+    toEncoding StatusOK = pairs ("responsetype" .= ("status" :: Text) <> "status" .= ("ok" :: Text))
+    toEncoding (StatusError s) = pairs ("responsetype" .= ("status" :: Text) <> "status" .= ("error"  :: Text) <> "error" .= s)
+    toEncoding (AcquiredSpectrum v) = pairs ("responsetype" .= ("spectrum" :: Text) <> "spectrum" .= v)
+    toEncoding (Wavelengths v) = pairs ("responsetype" .= ("wavelengths" :: Text) <> "wavelengths" .= v)
 
 instance FromJSON GPIOPin where
     parseJSON (String s) =
@@ -68,3 +72,13 @@ instance FromJSON GPIOPin where
             "pin10"  -> return Pin10
             "pin11"  -> return Pin11
     parseJSON invalid = fail "can't decode gpio pin"
+
+instance ToJSON GPIOPin where
+    toJSON Pin2 = "pin2"
+    toJSON Pin3 = "pin3"
+    toJSON Pin4 = "pin4"
+    toJSON Pin7 = "pin7"
+    toJSON Pin8 = "pin8"
+    toJSON Pin9 = "pin9"
+    toJSON Pin10 = "pin10"
+    toJSON Pin11 = "pin11"
