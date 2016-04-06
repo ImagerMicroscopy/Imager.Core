@@ -28,6 +28,7 @@ data RequestMessage = SetPinHigh !GPIOPin
                       , nSpectra :: !Int
                       }
                     | SendWavelengths
+                    | Ping
                     deriving (Generic)
 
 instance ToJSON RequestMessage where
@@ -35,6 +36,7 @@ instance ToJSON RequestMessage where
     toEncoding (SetPinLow pin) = pairs ("action" .= ("setpinlow" :: Text) <> "pin" .= show pin)
     toEncoding (AcquireSpectrum e n) = pairs ("action" .= ("acquirespectrum"  :: Text) <> "exposuretime" .= e <> "nspectra" .= n)
     toEncoding SendWavelengths = pairs ("action" .= ("sendwavelengths"  :: Text))
+    toEncoding Ping = pairs ("action" .= ("ping" :: Text))
 
 instance FromJSON RequestMessage where
     parseJSON (Object v) =
@@ -44,6 +46,7 @@ instance FromJSON RequestMessage where
             "setpinlow"  -> SetPinLow <$> v .: "pin"
             "acquirespectrum" -> AcquireSpectrum <$> v .: "exposuretime" <*> v .: "nspectra"
             "sendwavelengths" -> return SendWavelengths
+            "ping"      -> return Ping
             _                 -> fail $ "invalid action \"" ++ (T.unpack action) ++ "\""
     
     parseJSON _ = fail "expected a JSON object"
@@ -52,6 +55,7 @@ data ResponseMessage = StatusOK
                      | StatusError !String
                      | AcquiredSpectrum !(Vector Double)
                      | Wavelengths !(Vector Double)
+                     | Pong
                      deriving (Generic)
 
 instance ToJSON ResponseMessage where
@@ -59,6 +63,7 @@ instance ToJSON ResponseMessage where
     toEncoding (StatusError s) = pairs ("responsetype" .= ("status" :: Text) <> "status" .= ("error"  :: Text) <> "error" .= s)
     toEncoding (AcquiredSpectrum v) = pairs ("responsetype" .= ("spectrum" :: Text) <> "spectrum" .= v)
     toEncoding (Wavelengths v) = pairs ("responsetype" .= ("wavelengths" :: Text) <> "wavelengths" .= v)
+    toEncoding (Pong) = pairs ("responsetype" .= ("pong" :: Text))
 
 instance FromJSON GPIOPin where
     parseJSON (String s) =

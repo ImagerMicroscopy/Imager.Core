@@ -64,6 +64,8 @@ performAction env SendWavelengths =
     where
         maybeSpectrometer = envSpectrometer env
 
+performAction env Ping = return (Pong, env)
+
 setPinLevelOrError :: Environment -> GPIOPin -> Level -> IO (ResponseMessage, Environment)
 setPinLevelOrError env pin level =
     if (not havePin)
