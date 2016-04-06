@@ -6,8 +6,8 @@ import Control.Exception
 import Control.Monad.Trans.Except
 import Data.Aeson
 import Data.Maybe
-import Data.Vector.Unboxed (Vector)
-import qualified Data.Vector.Unboxed as V
+import Data.Vector.Storable (Vector)
+import qualified Data.Vector.Storable as V
 
 import GPIO
 import OOSeaBreeze

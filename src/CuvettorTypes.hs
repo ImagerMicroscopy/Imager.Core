@@ -7,8 +7,8 @@ import Data.Aeson
 import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as T
-import Data.Vector.Unboxed (Vector)
-import qualified Data.Vector.Unboxed as V
+import Data.Vector.Storable (Vector)
+import qualified Data.Vector.Storable as V
 
 import GPIO
 import OOSeaBreeze
