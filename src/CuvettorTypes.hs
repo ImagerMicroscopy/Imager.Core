@@ -1,14 +1,21 @@
-{-# LANGUAGE BangPatterns, OverloadedStrings, DeriveGeneric #-}
+{-# LANGUAGE BangPatterns, OverloadedStrings, DeriveGeneric, ScopedTypeVariables #-}
 
 module CuvettorTypes where
 
 import GHC.Generics
 import Data.Aeson
+import qualified Data.ByteString as SB
+import qualified Data.ByteString.Lazy as LB
+import qualified Data.ByteString.Unsafe as SB
+import qualified Data.ByteString.Base64 as B64
 import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
+import Foreign
+import System.IO.Unsafe
 
 import GPIO
 import OOSeaBreeze
@@ -61,8 +68,8 @@ data ResponseMessage = StatusOK
 instance ToJSON ResponseMessage where
     toEncoding StatusOK = pairs ("responsetype" .= ("status" :: Text) <> "status" .= ("ok" :: Text))
     toEncoding (StatusError s) = pairs ("responsetype" .= ("status" :: Text) <> "status" .= ("error"  :: Text) <> "error" .= s)
-    toEncoding (AcquiredSpectrum v) = pairs ("responsetype" .= ("spectrum" :: Text) <> "spectrum" .= v)
-    toEncoding (Wavelengths v) = pairs ("responsetype" .= ("wavelengths" :: Text) <> "wavelengths" .= v)
+    toEncoding (AcquiredSpectrum v) = pairs ("responsetype" .= ("spectrum" :: Text) <> "spectrum" .= (T.decodeUtf8 . B64.encode $ byteStringFromVector v))
+    toEncoding (Wavelengths v) = pairs ("responsetype" .= ("wavelengths" :: Text) <> "wavelengths" .= (T.decodeUtf8 . B64.encode $ byteStringFromVector v))
     toEncoding (Pong) = pairs ("responsetype" .= ("pong" :: Text))
 
 instance FromJSON GPIOPin where
@@ -87,3 +94,13 @@ instance ToJSON GPIOPin where
     toJSON Pin9 = "pin9"
     toJSON Pin10 = "pin10"
     toJSON Pin11 = "pin11"
+
+byteStringFromVector :: forall a . Storable a => Vector a -> SB.ByteString
+byteStringFromVector v = unsafePerformIO $
+    let sizeOfElem = sizeOf (undefined :: a)
+        nElems = V.length v
+        nBytes = nElems * sizeOfElem in
+    V.unsafeWith v $ \vecPtr ->
+    mallocBytes nBytes >>= \bsPtr ->
+    copyBytes (castPtr bsPtr) vecPtr nBytes >>
+    SB.unsafePackMallocCStringLen (bsPtr, nBytes)

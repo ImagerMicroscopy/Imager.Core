@@ -1,13 +1,10 @@
-{-# LANGUAGE OverloadedStrings, ScopedTypeVariables #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Main where
 
 import Control.Exception
 import Control.Monad.Trans.Except
 import Data.Aeson
-import qualified Data.ByteString as SB
-import qualified Data.ByteString.Unsafe as SB
-import Foreign
 import Data.Maybe
 import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
@@ -115,13 +112,3 @@ fetchAvailableSpectrometer =
 closeAvailableSpectrometer :: Maybe (DeviceID, FeatureID) -> IO ()
 closeAvailableSpectrometer Nothing              = return ()
 closeAvailableSpectrometer (Just (deviceID, _)) = closeDevice deviceID >> return ()
-
-vectorAsByteString :: forall a . Storable a => Vector a -> IO SB.ByteString
-vectorAsByteString v =
-    let sizeOfElem = sizeOf (undefined :: a)
-        nElems = V.length v
-        nBytes = nElems * sizeOfElem in
-    V.unsafeWith v $ \vecPtr ->
-    mallocBytes nBytes >>= \bsPtr ->
-    copyBytes (castPtr bsPtr) vecPtr (nElems * sizeOfElem) >>
-    SB.unsafePackMallocCStringLen (bsPtr, nBytes)
