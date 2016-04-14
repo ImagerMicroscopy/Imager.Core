@@ -5,6 +5,8 @@ module Main where
 import Control.Exception
 import Control.Monad.Trans.Except
 import Data.Aeson
+import qualified Data.ByteString as SB
+import qualified Data.ByteString.Base64 as B64
 import Data.Maybe
 import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
@@ -30,13 +32,20 @@ main =
     
     withSeaBreeze (
     bracket fetchAvailableSpectrometer closeAvailableSpectrometer $ \maybeSpectrometer ->
+    fetchEncodedWavelengths maybeSpectrometer >>= \encodedWavelengths ->
     
     putStrLn (if (isJust maybeSpectrometer) then "opened spectrometer" else "no spectrometer found") >>
 
     putStrLn ("running server") >>
-    return (Environment gpioPins availablePins maybeSpectrometer) >>= \env ->
+    return (Environment gpioPins availablePins maybeSpectrometer encodedWavelengths) >>= \env ->
     runServer 3200 messageHandler env serverSettings
     ))
+    where
+        fetchEncodedWavelengths :: Maybe (DeviceID, FeatureID) -> IO SB.ByteString
+        fetchEncodedWavelengths Nothing = return SB.empty
+        fetchEncodedWavelengths (Just (dID, fID)) =
+            getWavelengths dID fID >>= \(Right wLengths) ->
+            return . B64.encode . byteStringFromVector $ wLengths
 
 messageHandler :: MessageHandler Environment
 messageHandler msg env =
