@@ -82,11 +82,12 @@ ifSpectrometer (Just ids) action = action ids
 
 acquireSpectrum :: (DeviceID, FeatureID) -> Double -> Int -> IO (Either String (Vector Double))
 acquireSpectrum (deviceID, featureID) exposure nSpectra =
-    if ((exposure <= 0.0) || (nSpectra < 1))
+    if ((exposure <= 0.0) || (exposure > 1.0) || (nSpectra < 1))
         then return (Left "invalid number of spectra or exposure time")
         else
           runExceptT (
               ExceptT (setIntegrationTimeMicros deviceID featureID integrationMicroseconds) >>
+              ExceptT (measureSpectrum deviceID featureID) >>   -- force a fresh acquisition
               ExceptT (measureAveragedSpectrum deviceID featureID nSpectra))
     where
         integrationMicroseconds = floor (exposure * 1e6)
