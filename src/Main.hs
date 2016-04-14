@@ -16,12 +16,12 @@ import SimpleJSONServer
 import CuvettorTypes
 
 availablePins :: [GPIOPin]
-availablePins = [Pin2]
+availablePins = [Pin2, Pin3, Pin4, Pin17]
 
 handlerTimeout :: Int
 handlerTimeout = 2 * 1000000
 
-serverSettings = defaultSettings {ssDebugMessages = False}
+serverSettings = defaultSettings {ssHandlerTimeout = Just (round 2.5e6)}
 
 main :: IO ()
 main =

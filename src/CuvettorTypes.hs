@@ -81,8 +81,9 @@ instance FromJSON GPIOPin where
             "pin7"  -> return Pin7
             "pin8"  -> return Pin8
             "pin9"  -> return Pin9
-            "pin10"  -> return Pin10
-            "pin11"  -> return Pin11
+            "pin10" -> return Pin10
+            "pin11" -> return Pin11
+            "pin17" -> return Pin17
     parseJSON invalid = fail "can't decode gpio pin"
 
 instance ToJSON GPIOPin where
@@ -94,6 +95,7 @@ instance ToJSON GPIOPin where
     toJSON Pin9 = "pin9"
     toJSON Pin10 = "pin10"
     toJSON Pin11 = "pin11"
+    toJSON Pin17 = "pin17"
 
 byteStringFromVector :: forall a . Storable a => Vector a -> SB.ByteString
 byteStringFromVector v = unsafePerformIO $
