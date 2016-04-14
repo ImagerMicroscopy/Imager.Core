@@ -6,6 +6,9 @@ import Control.Exception
 import Control.Monad.Trans.Except
 import Data.Aeson
 import qualified Data.ByteString as SB
+import Data.Text (Text)
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import qualified Data.ByteString.Base64 as B64
 import Data.Maybe
 import Data.Vector.Storable (Vector)
@@ -41,11 +44,11 @@ main =
     runServer 3200 messageHandler env serverSettings
     ))
     where
-        fetchEncodedWavelengths :: Maybe (DeviceID, FeatureID) -> IO SB.ByteString
-        fetchEncodedWavelengths Nothing = return SB.empty
+        fetchEncodedWavelengths :: Maybe (DeviceID, FeatureID) -> IO Text
+        fetchEncodedWavelengths Nothing = return T.empty
         fetchEncodedWavelengths (Just (dID, fID)) =
             getWavelengths dID fID >>= \(Right wLengths) ->
-            return . B64.encode . byteStringFromVector $ wLengths
+            return . T.decodeUtf8 . B64.encode . byteStringFromVector $ wLengths
 
 messageHandler :: MessageHandler Environment
 messageHandler msg env =
@@ -61,9 +64,10 @@ performAction env (AcquireSpectrum exposure nSpectra) =
     ifSpectrometer maybeSpectrometer (\ids -> acquireSpectrum ids exposure nSpectra) >>= \spectrum ->
     case spectrum of
         Left err -> return (StatusError err, env)
-        Right v  -> return (AcquiredSpectrum v, env)
+        Right v  -> return (AcquiredSpectrum v wl, env)
     where
         maybeSpectrometer = envSpectrometer env
+        wl = envEncodedSpectrometerWavelengths env
 
 performAction env SendWavelengths =
     ifSpectrometer maybeSpectrometer acquireWavelengths >>= \wavelengths ->
