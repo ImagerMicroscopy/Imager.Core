@@ -1,0 +1,13 @@
+#! /usr/bin/env bash
+
+echo 2 > /sys/class/gpio/export
+echo 3 > /sys/class/gpio/export
+echo 4 > /sys/class/gpio/export
+echo 17 > /sys/class/gpio/export
+cd /home/peter/Documents/Haskell/RaspCuvettor
+while :
+do
+    stack exec RaspCuvettor
+    sleep 5
+done
+
