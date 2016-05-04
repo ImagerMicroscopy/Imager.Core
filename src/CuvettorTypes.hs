@@ -24,6 +24,7 @@ data Environment = Environment {
                       envGPIOHandles :: !GPIOHandles
                     , envAvailablePins :: [GPIOPin]
                     , envSpectrometer :: !(Maybe (DeviceID, FeatureID))
+                    , envSpectrometerNonlinearityCorrection :: Double -> Double
                     , envEncodedSpectrometerWavelengths :: !Text
 }
 

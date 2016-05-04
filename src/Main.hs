@@ -36,11 +36,12 @@ main =
     withSeaBreeze (
     bracket fetchAvailableSpectrometer closeAvailableSpectrometer $ \maybeSpectrometer ->
     fetchEncodedWavelengths maybeSpectrometer >>= \encodedWavelengths ->
+    nonlinearityCorrection maybeSpectrometer >>= \nonlinearityCorrFunc ->
     
     putStrLn (if (isJust maybeSpectrometer) then "opened spectrometer" else "no spectrometer found") >>
-
+    
     putStrLn ("running server") >>
-    return (Environment gpioPins availablePins maybeSpectrometer encodedWavelengths) >>= \env ->
+    return (Environment gpioPins availablePins maybeSpectrometer nonlinearityCorrFunc encodedWavelengths) >>= \env ->
     runServer 3200 messageHandler env serverSettings
     ))
     where
@@ -49,6 +50,13 @@ main =
         fetchEncodedWavelengths (Just (dID, fID)) =
             getWavelengths dID fID >>= \(Right wLengths) ->
             return . T.decodeUtf8 . B64.encode . byteStringFromVector $ wLengths
+        nonlinearityCorrection :: Maybe (DeviceID, FeatureID) -> IO (Double -> Double)
+        nonlinearityCorrection Nothing = return id
+        nonlinearityCorrection (Just (dID, _)) = 
+            V.toList <$> getNonlinearityCoeffs dID >>= \coeffs ->
+            return (\x -> x / polyCorr x coeffs)
+            where
+                polyCorr x coeffs = sum $ zipWith3 (\x coeff order -> coeff * x^order) (repeat x) coeffs ([0 ..] :: [Int])
 
 messageHandler :: MessageHandler Environment
 messageHandler msg env =
@@ -64,10 +72,11 @@ performAction env (AcquireSpectrum exposure nSpectra) =
     ifSpectrometer maybeSpectrometer (\ids -> acquireSpectrum ids exposure nSpectra) >>= \spectrum ->
     case spectrum of
         Left err -> return (StatusError err, env)
-        Right v  -> return (AcquiredSpectrum v wl, env)
+        Right v  -> return (AcquiredSpectrum (V.map nonlinearityCorrection v) wl, env)
     where
         maybeSpectrometer = envSpectrometer env
         wl = envEncodedSpectrometerWavelengths env
+        nonlinearityCorrection = envSpectrometerNonlinearityCorrection env
 
 performAction env SendWavelengths =
     ifSpectrometer maybeSpectrometer acquireWavelengths >>= \wavelengths ->

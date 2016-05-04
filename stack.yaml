@@ -11,7 +11,7 @@ packages:
     commit: c458b082dcb69d300c9d858dbb88addaffb9f194
 - location:
     git: git@bitbucket.org:pdedecker/hsoceanoptics.git
-    commit: d5449342500fe33fdcad019dd67b97eae42f7cdb
+    commit: 68be521b551490870516de999d2154e628c26e70
 - location:
     git: git@bitbucket.org:pdedecker/hsgpio.git
     commit: e8e80cd5fd8048f6596c36c4663465f5aebaf2e7
