@@ -22,10 +22,12 @@ executable RaspCuvettor
                      , bytestring
                      , base64-bytestring
                      , transformers
+                     , time
                      , vector
                      , SimpleJSONServer
                      , GPIO
                      , hsOceanOptics
   other-modules:       CuvettorTypes
                      , LightSources
+                     , IrradiationProgram
   ghc-options:         -O2
