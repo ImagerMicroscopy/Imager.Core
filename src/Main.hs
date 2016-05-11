@@ -74,7 +74,10 @@ performAction env (SetPinHigh pin) = setPinLevelOrError env pin High
 performAction env (SetPinLow pin)  = setPinLevelOrError env pin Low
 
 performAction env (AcquireSpectrum exposure nSpectra) =
-    ifSpectrometer maybeSpectrometer (\ids -> acquireSpectrum ids exposure nSpectra) >>= \spectrum ->
+    runExceptT (
+        ExceptT (return $ ensureSpectrometerAvailable maybeSpectrometer) >>
+        ExceptT (ensureAsyncAcquisitionNotRunning env) >>
+        ExceptT (acquireSpectrum (fromJust maybeSpectrometer) exposure nSpectra)) >>= \spectrum ->
     case spectrum of
         Left err -> return (StatusError err, env)
         Right v  -> return (AcquiredSpectrum (V.map nonlinearityCorrection v) wl, env)
@@ -84,7 +87,10 @@ performAction env (AcquireSpectrum exposure nSpectra) =
         nonlinearityCorrection = envSpectrometerNonlinearityCorrection env
 
 performAction env SendWavelengths =
-    ifSpectrometer maybeSpectrometer acquireWavelengths >>= \wavelengths ->
+    runExceptT (
+        ExceptT (return $ ensureSpectrometerAvailable maybeSpectrometer) >>
+        ExceptT (ensureAsyncAcquisitionNotRunning env) >>
+        ExceptT (acquireWavelengths (fromJust maybeSpectrometer))) >>= \wavelengths ->
     case wavelengths of
         Left err -> return (StatusError err, env)
         Right v  -> return (Wavelengths v, env)
@@ -106,6 +112,15 @@ setPinLevelOrError env pin level =
 ensureSpectrometerAvailable :: Maybe (DeviceID, FeatureID) -> Either String ()
 ensureSpectrometerAvailable Nothing = Left "no spectrometer available"
 ensureSpectrometerAvailable (Just _) = Right ()
+
+ensureAsyncAcquisitionNotRunning :: Environment -> IO (Either String ())
+ensureAsyncAcquisitionNotRunning env =
+    poll worker >>= \workerStatus ->
+    case workerStatus of
+        Nothing -> return (Left "async acquisition running")
+        Just _  -> return (Right ())
+    where
+        worker = envAsyncProgramWorker env
 
 ifSpectrometer :: Maybe (DeviceID, FeatureID) -> ((DeviceID, FeatureID) -> IO (Either String (Vector Double))) -> IO (Either String (Vector Double))
 ifSpectrometer Nothing _ = return $ Left "no spectrometer available"
