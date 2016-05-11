@@ -2,6 +2,8 @@
 
 module CuvettorTypes where
 
+import Control.Concurrent
+import Control.Concurrent.Async
 import GHC.Generics
 import Data.Aeson
 import qualified Data.ByteString as SB
@@ -26,6 +28,8 @@ data Environment = Environment {
                     , envSpectrometer :: !(Maybe (DeviceID, FeatureID))
                     , envSpectrometerNonlinearityCorrection :: Double -> Double
                     , envEncodedSpectrometerWavelengths :: !Text
+                    , envAsyncSpectraMVar :: MVar ([[(V.Vector Double, Double)]])
+                    , envAsyncProgramWorker :: Async ()
 }
 
 type ExposureTime = Double

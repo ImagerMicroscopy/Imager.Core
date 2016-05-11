@@ -2,6 +2,8 @@
 
 module Main where
 
+import Control.Concurrent
+import Control.Concurrent.Async
 import Control.Exception
 import Control.Monad.Trans.Except
 import Data.Aeson
@@ -41,7 +43,10 @@ main =
     putStrLn (if (isJust maybeSpectrometer) then "opened spectrometer" else "no spectrometer found") >>
     
     putStrLn ("running server") >>
-    return (Environment gpioPins availablePins maybeSpectrometer nonlinearityCorrFunc encodedWavelengths) >>= \env ->
+    newEmptyMVar >>= \asyncSpectraMVar ->
+    async (return ()) >>= \asyncProgramWorker ->
+    wait asyncProgramWorker >>
+    return (Environment gpioPins availablePins maybeSpectrometer nonlinearityCorrFunc encodedWavelengths asyncSpectraMVar asyncProgramWorker) >>= \env ->
     runServer 3200 messageHandler env serverSettings
     ))
     where
@@ -97,6 +102,10 @@ setPinLevelOrError env pin level =
     where
         havePin = pin `elem` (envAvailablePins env)
         gpioHandles = envGPIOHandles env
+
+ensureSpectrometerAvailable :: Maybe (DeviceID, FeatureID) -> Either String ()
+ensureSpectrometerAvailable Nothing = Left "no spectrometer available"
+ensureSpectrometerAvailable (Just _) = Right ()
 
 ifSpectrometer :: Maybe (DeviceID, FeatureID) -> ((DeviceID, FeatureID) -> IO (Either String (Vector Double))) -> IO (Either String (Vector Double))
 ifSpectrometer Nothing _ = return $ Left "no spectrometer available"
