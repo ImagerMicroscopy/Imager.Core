@@ -7,6 +7,7 @@ import Control.Exception
 import Control.Monad
 import Control.Monad.Trans.Except
 import Data.Aeson
+import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Vector.Storable as V
 import System.Clock
@@ -46,28 +47,44 @@ instance FromJSON IrradiationProgram where
     parseJSON (Object v) =
         IrradiationProgram <$> v .: "programsteps"
                            <*> v .: "detection"
-    parseJSON invalid = fail "can't decode irradiation program"
+    parseJSON _ = fail "can't decode irradiation program"
+instance ToJSON IrradiationProgram where
+    toEncoding (IrradiationProgram steps detection) =
+        pairs ("programsteps" .= steps <> "detection" .= detection)
+    toJSON _ = error "no toJSON"
 
 instance FromJSON ProgramStep where
     parseJSON (Object v) =
         ProgramStep <$> v .: "irradiationduration"
                     <*> v .: "nrepeats"
                     <*> v .: "irradiation"
-    parseJSON invalid = fail "can't decode program step"
+    parseJSON _ = fail "can't decode program step"
+instance ToJSON ProgramStep where
+    toEncoding (ProgramStep duration nRepeats irr) =
+        pairs ("irradiationduration" .= duration <> "nrepeats" .= nRepeats <> "irradiation" .= irr)
+    toJSON _ = error "no toJSON"
 
 instance FromJSON DetectionParams where
     parseJSON (Object v) =
         DetectionParams <$> v .: "exposuretime"
                         <*> v .: "nspectra"
                         <*> v .: "irradiation"
-    parseJSON invalid = fail "can't decode detection params"
+    parseJSON _ = fail "can't decode detection params"
+instance ToJSON DetectionParams where
+    toEncoding (DetectionParams expTime nSpectra irr) =
+        pairs ("exposuretime" .= expTime <> "nspectra" .= nSpectra <> "irradiation" .= irr)
+    toJSON _ = error "no toJSON"
 
 instance FromJSON IrradiationParams where
     parseJSON (Object v) =
         IrradiationParams <$> v .: "lightsourcename"
                           <*> v .: "lightsourcechannel"
                           <*> v .: "lightsourcepower"
-    parseJSON invalid = fail "can't decode irradiation params"
+    parseJSON _ = fail "can't decode irradiation params"
+instance ToJSON IrradiationParams where
+    toEncoding (IrradiationParams lName channel power) =
+        pairs ("lightsourcename" .= lName <> "lightsourcechannel" .= channel <> "lightsourcepower" .= power)
+    toJSON _ = error "no toJSON"
 
 executeIrradiationProgram :: IrradiationProgram -> ProgramEnvironment -> IO ()
 executeIrradiationProgram (IrradiationProgram steps detection) env =
