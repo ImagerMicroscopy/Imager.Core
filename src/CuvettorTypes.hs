@@ -21,6 +21,7 @@ import System.IO.Unsafe
 
 import GPIO
 import OOSeaBreeze
+import IrradiationProgram
 
 data Environment = Environment {
                       envGPIOHandles :: !GPIOHandles
@@ -42,6 +43,9 @@ data RequestMessage = SetPinHigh !GPIOPin
                       }
                     | SendWavelengths
                     | Ping
+                    | ExecuteIrradiationProgram {
+                        execIrradiationProgram :: !IrradiationProgram
+                      }
                     deriving (Generic)
 
 instance ToJSON RequestMessage where
@@ -50,6 +54,7 @@ instance ToJSON RequestMessage where
     toEncoding (AcquireSpectrum e n) = pairs ("action" .= ("acquirespectrum"  :: Text) <> "exposuretime" .= e <> "nspectra" .= n)
     toEncoding SendWavelengths = pairs ("action" .= ("sendwavelengths"  :: Text))
     toEncoding Ping = pairs ("action" .= ("ping" :: Text))
+    toEncoding (ExecuteIrradiationProgram prog) = pairs ("action" .= ("executeirradiationprogram" :: Text) <> "program" .= prog)
 
 instance FromJSON RequestMessage where
     parseJSON (Object v) =
@@ -60,6 +65,7 @@ instance FromJSON RequestMessage where
             "acquirespectrum" -> AcquireSpectrum <$> v .: "exposuretime" <*> v .: "nspectra"
             "sendwavelengths" -> return SendWavelengths
             "ping"      -> return Ping
+            "executeirradiationprogram" -> ExecuteIrradiationProgram <$> v .: "program"
             _                 -> fail $ "invalid action \"" ++ (T.unpack action) ++ "\""
     
     parseJSON _ = fail "expected a JSON object"
