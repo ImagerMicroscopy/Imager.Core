@@ -122,10 +122,6 @@ ensureAsyncAcquisitionNotRunning env =
     where
         worker = envAsyncProgramWorker env
 
-ifSpectrometer :: Maybe (DeviceID, FeatureID) -> ((DeviceID, FeatureID) -> IO (Either String (Vector Double))) -> IO (Either String (Vector Double))
-ifSpectrometer Nothing _ = return $ Left "no spectrometer available"
-ifSpectrometer (Just ids) action = action ids
-
 acquireSpectrum :: (DeviceID, FeatureID) -> Double -> Int -> IO (Either String (Vector Double))
 acquireSpectrum (deviceID, featureID) exposure nSpectra =
     if ((exposure <= 0.0) || (exposure > 1.0) || (nSpectra < 1))
