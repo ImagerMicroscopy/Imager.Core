@@ -89,8 +89,11 @@ instance ToJSON IrradiationParams where
 executeIrradiationProgram :: IrradiationProgram -> ProgramEnvironment -> IO ()
 executeIrradiationProgram (IrradiationProgram steps detection) env =
     getTime Monotonic >>= \startTime ->
-    mapM_ (executeStep env startTime detection) steps
+    mapM_ (executeStep env startTime detection) (initialAcquisitionStep : steps)
     where
+        initialAcquisitionStep :: ProgramStep   -- makes sure a spectrum gets acquired before the acquisition
+        initialAcquisitionStep = ProgramStep 0.0 1 []
+
         executeStep :: ProgramEnvironment -> TimeSpec -> [DetectionParams] -> ProgramStep -> IO ()
         executeStep env startTime detParams ps =
             forM_ (replicate (psNRepeats ps) ps) $ \step ->
