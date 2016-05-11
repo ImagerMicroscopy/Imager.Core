@@ -65,9 +65,13 @@ data ResponseMessage = StatusOK
                      | AcquiredSpectrum {
                          respAcqSpectrum   :: !(Vector Double)
                        , cachedWavelengths :: !Text
-                     }
+                       }
                      | Wavelengths !(Vector Double)
                      | Pong
+                     | AsyncAcquiredSpectra {
+                         respAsyncSpectra :: ![(Vector Double, Double)]
+                       , respAsyncCachedWavelengths :: !Text
+                       }
                      deriving (Generic)
 
 instance ToJSON ResponseMessage where
@@ -77,6 +81,9 @@ instance ToJSON ResponseMessage where
                                                 <> "wavelengths" .= w)
     toEncoding (Wavelengths v) = pairs ("responsetype" .= ("wavelengths" :: Text) <> "wavelengths" .= (T.decodeUtf8 . B64.encode $ byteStringFromVector v))
     toEncoding (Pong) = pairs ("responsetype" .= ("pong" :: Text))
+    toEncoding (AsyncAcquiredSpectra spectra w) = 
+        let vectorsAsByteStrings = map (\(v, t) -> (T.decodeUtf8 . B64.encode $ byteStringFromVector v, t)) spectra
+        in pairs ("responsetype" .= ("asyncspectra" :: Text) <> "spectra" .= vectorsAsByteStrings <> "wavelengths" .= w)
 
 instance FromJSON GPIOPin where
     parseJSON (String s) =
