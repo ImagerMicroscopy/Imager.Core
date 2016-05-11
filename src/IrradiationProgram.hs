@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns, DeriveGeneric, RecordWildCards #-}
+{-# LANGUAGE BangPatterns, RecordWildCards, OverloadedStrings #-}
 
 module IrradiationProgram where
 
@@ -32,7 +32,7 @@ data DetectionParams = DetectionParams {
                        }
 
 data IrradiationParams = IrradiationParams {
-                             ipLightSource :: !LightSource
+                             ipLightSourceName :: !Text
                            , ipLightSourceChannel :: !Text
                            , ipPower :: !Double
                          }
@@ -41,6 +41,33 @@ data ProgramEnvironment = ProgramEnvironment {
                               peSpectrometer :: (DeviceID, FeatureID)
                             , peSpectraMVar :: MVar ([[(V.Vector Double, Double)]])
                           }
+
+instance FromJSON IrradiationProgram where
+    parseJSON (Object v) =
+        IrradiationProgram <$> v .: "programsteps"
+                           <*> v .: "detection"
+    parseJSON invalid = fail "can't decode irradiation program"
+
+instance FromJSON ProgramStep where
+    parseJSON (Object v) =
+        ProgramStep <$> v .: "irradiationduration"
+                    <*> v .: "nrepeats"
+                    <*> v .: "irradiation"
+    parseJSON invalid = fail "can't decode program step"
+
+instance FromJSON DetectionParams where
+    parseJSON (Object v) =
+        DetectionParams <$> v .: "exposuretime"
+                        <*> v .: "nspectra"
+                        <*> v .: "irradiation"
+    parseJSON invalid = fail "can't decode detection params"
+
+instance FromJSON IrradiationParams where
+    parseJSON (Object v) =
+        IrradiationParams <$> v .: "lightsourcename"
+                          <*> v .: "lightsourcechannel"
+                          <*> v .: "lightsourcepower"
+    parseJSON invalid = fail "can't decode irradiation params"
 
 executeIrradiationProgram :: IrradiationProgram -> ProgramEnvironment -> IO ()
 executeIrradiationProgram (IrradiationProgram steps detection) env =
@@ -80,6 +107,6 @@ executeIrradiationProgram (IrradiationProgram steps detection) env =
         spectrometerFeatureID = snd (peSpectrometer env)
         
         enableLightSources :: [IrradiationParams] -> IO ()
-        enableLightSources = mapM_ (\(IrradiationParams source channel power) -> activateLightSource source channel power)
+        enableLightSources = mapM_ (\(IrradiationParams sourceName channel power) -> activateLightSource (lookupLightSourceByName sourceName) channel power)
         disableLightSources :: [IrradiationParams] -> IO ()
-        disableLightSources = mapM_ (\(IrradiationParams source _ _) -> deactivateLightSource source)
+        disableLightSources = mapM_ (\(IrradiationParams sourceName _ _) -> deactivateLightSource (lookupLightSourceByName sourceName))
