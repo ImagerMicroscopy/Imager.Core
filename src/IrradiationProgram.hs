@@ -8,8 +8,8 @@ import Control.Monad
 import Control.Monad.Trans.Except
 import Data.Aeson
 import Data.Text (Text)
-import Data.Time
 import qualified Data.Vector.Storable as V
+import System.Clock
 
 import OOSeaBreeze
 import LightSources
@@ -39,21 +39,24 @@ data IrradiationParams = IrradiationParams {
 
 data ProgramEnvironment = ProgramEnvironment {
                               peSpectrometer :: (DeviceID, FeatureID)
-                            , peSpectraMVar :: MVar ([[(V.Vector Double, UTCTime)]])
+                            , peSpectraMVar :: MVar ([[(V.Vector Double, Double)]])
                           }
 
 executeIrradiationProgram :: IrradiationProgram -> ProgramEnvironment -> IO ()
 executeIrradiationProgram (IrradiationProgram steps detection) env =
-    mapM_ (executeStep env detection) steps
+    getTime Monotonic >>= \startTime ->
+    mapM_ (executeStep env startTime detection) steps
     where
-        executeStep :: ProgramEnvironment -> [DetectionParams] -> ProgramStep -> IO ()
-        executeStep env detParams ps =
+        executeStep :: ProgramEnvironment -> TimeSpec -> [DetectionParams] -> ProgramStep -> IO ()
+        executeStep env startTime detParams ps =
             forM_ (replicate (psNRepeats ps) ps) $ \step ->
                 executeSingleIrradiationInStep detParams step >>= \newSpectra ->
                 modifyMVar_ (peSpectraMVar env) (\previousSpectra ->
-                    return (previousSpectra ++ [newSpectra]))
+                    return (previousSpectra ++ [map toSecondsFromStart newSpectra]))
+            where
+                toSecondsFromStart (vec, t) = (vec, (*) 1.0e-9 . fromIntegral . timeSpecAsNanoSecs $ diffTimeSpec t startTime)
         
-        executeSingleIrradiationInStep :: [DetectionParams] -> ProgramStep -> IO [(V.Vector Double, UTCTime)]
+        executeSingleIrradiationInStep :: [DetectionParams] -> ProgramStep -> IO [(V.Vector Double, TimeSpec)]
         executeSingleIrradiationInStep detParams ProgramStep{..} =
             enableLightSources psIrradiation >>
             threadDelay (floor $ psIrradiationDuration * 1.0e6) >>
@@ -61,13 +64,13 @@ executeIrradiationProgram (IrradiationProgram steps detection) env =
             disableLightSources psIrradiation >>
             return spectra
         
-        executeDetection :: DetectionParams -> IO (V.Vector Double, UTCTime)
+        executeDetection :: DetectionParams -> IO (V.Vector Double, TimeSpec)
         executeDetection DetectionParams{..} =
             enableLightSources [dpIrradiation] >>
             runExceptT (
                 ExceptT (setIntegrationTimeMicros spectrometerDeviceID spectrometerFeatureID (floor $ dpExposureTime * 1.0e6)) >>
                 ExceptT (measureAveragedSpectrum spectrometerDeviceID spectrometerFeatureID dpNSpectraToAverage)) >>= \spectrum ->
-            getCurrentTime >>= \timeStamp ->
+            getTime Monotonic >>= \timeStamp ->
             disableLightSources [dpIrradiation] >>
             case spectrum of
                 Left e -> error e

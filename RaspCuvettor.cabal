@@ -22,7 +22,7 @@ executable RaspCuvettor
                      , bytestring
                      , base64-bytestring
                      , transformers
-                     , time
+                     , clock
                      , vector
                      , SimpleJSONServer
                      , GPIO
