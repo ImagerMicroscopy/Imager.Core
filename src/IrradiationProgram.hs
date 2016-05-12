@@ -7,6 +7,8 @@ import Control.Exception
 import Control.Monad
 import Control.Monad.Trans.Except
 import Data.Aeson
+import Data.Either
+import Data.Maybe
 import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Vector.Storable as V
@@ -130,3 +132,28 @@ executeIrradiationProgram (IrradiationProgram steps detection) env =
         enableLightSources = mapM_ (\(IrradiationParams sourceName channel power) -> activateLightSource (lookupLightSourceByName sourceName) channel power)
         disableLightSources :: [IrradiationParams] -> IO ()
         disableLightSources = mapM_ (\(IrradiationParams sourceName _ _) -> deactivateLightSource (lookupLightSourceByName sourceName))
+
+validateIrradiationProgram :: IrradiationProgram -> Either String ()
+validateIrradiationProgram IrradiationProgram{..} =
+    if (any isLeft validationResults)
+        then head . filter isLeft $ validationResults
+        else Right ()
+    where
+        validationResults = map validateProgramStep ipSteps ++ map validateDetectionParams ipDetection
+        validateIrradiation :: IrradiationParams -> Either String ()
+        validateIrradiation IrradiationParams{..} =
+            if ((isJust $ lookupMaybeLightSourceByName ipLightSourceName) && (within ipPower 0.0 100.0))
+                then Right ()
+                else Left "invalid irradiation params"
+        validateDetectionParams :: DetectionParams -> Either String ()
+        validateDetectionParams DetectionParams{..} =
+            if ((within dpExposureTime 3.8e-3 10) && (within dpNSpectraToAverage 1 1000) && (isRight $ validateIrradiation dpIrradiation))
+                then Right ()
+                else Left "invalid detection params"
+        validateProgramStep :: ProgramStep -> Either String ()
+        validateProgramStep ProgramStep{..} =
+            if ((within psIrradiationDuration 0.0 3600) && (within psNRepeats 1 5000) && (all isRight . map validateIrradiation $ psIrradiation))
+                then Right ()
+                else Left "invalid program step"
+        within :: (Ord a) => a -> a -> a -> Bool
+        within a b c = (a >= b) && (a <= c)

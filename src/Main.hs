@@ -46,8 +46,8 @@ main =
     newEmptyMVar >>= \asyncSpectraMVar ->
     async (return ()) >>= \asyncProgramWorker ->
     wait asyncProgramWorker >>
-    return (Environment gpioPins availablePins maybeSpectrometer nonlinearityCorrFunc encodedWavelengths asyncSpectraMVar asyncProgramWorker) >>= \env ->
-    runServer 3200 messageHandler env serverSettings
+    let env = Environment gpioPins availablePins maybeSpectrometer nonlinearityCorrFunc encodedWavelengths asyncSpectraMVar asyncProgramWorker
+    in runServer 3200 messageHandler env serverSettings
     ))
     where
         fetchEncodedWavelengths :: Maybe (DeviceID, FeatureID) -> IO Text

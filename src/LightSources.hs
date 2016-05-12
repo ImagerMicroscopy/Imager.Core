@@ -10,14 +10,17 @@ import GPIO
 
 data LightSource = Digital !GPIOPin !GPIOHandles
 
+lightSourceMap :: [(Text, LightSource)]
+lightSourceMap = map (\(n, l) -> (T.toLower n, l)) undefined
+
 lookupLightSourceByName :: Text -> LightSource
 lookupLightSourceByName name =
-    case (lookup (T.toLower name) lightSourceMap) of
+    case (lookupMaybeLightSourceByName name) of
         Nothing -> error "invalid light source name"
         Just l  -> l
-    where
-        lightSourceMap :: [(Text, LightSource)]
-        lightSourceMap = map (\(n, l) -> (T.toLower n, l)) undefined
+
+lookupMaybeLightSourceByName :: Text -> Maybe LightSource
+lookupMaybeLightSourceByName name = lookup (T.toLower name) lightSourceMap
 
 activateLightSource :: LightSource -> Text -> Double -> IO ()
 activateLightSource source filterName power = undefined
