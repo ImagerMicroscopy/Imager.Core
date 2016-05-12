@@ -157,3 +157,8 @@ validateIrradiationProgram IrradiationProgram{..} =
                 else Left "invalid program step"
         within :: (Ord a) => a -> a -> a -> Bool
         within a b c = (a >= b) && (a <= c)
+
+nAcquisitionsInProgram :: IrradiationProgram -> Int
+nAcquisitionsInProgram IrradiationProgram{..} = sum (map nAcquisitionsInStep ipSteps) + 1
+    where
+        nAcquisitionsInStep step = psNRepeats step
