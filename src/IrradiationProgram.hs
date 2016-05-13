@@ -90,8 +90,9 @@ instance ToJSON IrradiationParams where
 
 executeIrradiationProgram :: IrradiationProgram -> ProgramEnvironment -> IO ()
 executeIrradiationProgram (IrradiationProgram steps detection) env =
-    getTime Monotonic >>= \startTime ->
-    mapM_ (executeStep env startTime detection) (initialAcquisitionStep : steps)
+    (getTime Monotonic >>= \startTime ->
+    mapM_ (executeStep env startTime detection) (initialAcquisitionStep : steps))
+        `finally` deactivateAllLightSources
     where
         initialAcquisitionStep :: ProgramStep   -- makes sure a spectrum gets acquired before the acquisition
         initialAcquisitionStep = ProgramStep 0.0 1 []
