@@ -102,6 +102,7 @@ executeIrradiationProgram (IrradiationProgram steps detection) env =
             forM_ (replicate (psNRepeats ps) ps) $ \step ->
                 executeSingleIrradiationInStep detParams step >>= \newSpectra ->
                 modifyMVar_ (peSpectraMVar env) (\previousSpectra ->
+                    when (length previousSpectra > 100) (error "too many async spectra stored") >>
                     return (previousSpectra ++ [map toSecondsFromStart newSpectra]))
             where
                 toSecondsFromStart (vec, t) = (vec, (*) 1.0e-9 . fromIntegral . timeSpecAsNanoSecs $ diffTimeSpec t startTime)
