@@ -116,15 +116,32 @@ performAction env (ExecuteIrradiationProgram prog) =
 
 performAction env FetchAsyncSpectra =
     modifyMVar spectraMVar (\s -> return ([], s)) >>= \newSpectra ->
+    asyncAcquisitionErrorMessage env >>= \asyncErrorMsg ->
     asyncAcquisitionRunning env >>= \asyncIsRunning ->
-    if (null newSpectra)
-      then let err = if asyncIsRunning then "no new spectra" else "no new spectra and no acquisition running"
-           in return (StatusError err, env)
-      else
-          return (AsyncAcquiredSpectra newSpectra wl, env)
+    return (specResponse asyncErrorMsg asyncIsRunning newSpectra, env)
     where
         spectraMVar = envAsyncSpectraMVar env
         wl = envEncodedSpectrometerWavelengths env
+        specResponse asyncErrorMsg asyncIsRunning newSpectra
+            | not (null asyncErrorMsg) = StatusError asyncErrorMsg
+            | asyncIsRunning           = if (null newSpectra) then StatusNoNewAsyncSpectra else AsyncAcquiredSpectra newSpectra wl
+            | otherwise                = if (null newSpectra) then (StatusError "no async acquisition running") else (AsyncAcquiredSpectra newSpectra wl)
+
+acquireSpectrum :: (DeviceID, FeatureID) -> Double -> Int -> IO (Either String (Vector Double))
+acquireSpectrum (deviceID, featureID) exposure nSpectra =
+    if ((exposure <= 0.0) || (exposure > 1.0) || (nSpectra < 1))
+        then return (Left "invalid number of spectra or exposure time")
+        else
+          runExceptT (
+              ExceptT (setIntegrationTimeMicros deviceID featureID integrationMicroseconds) >>
+              ExceptT (measureSpectrum deviceID featureID) >>   -- force a fresh acquisition
+              ExceptT (measureAveragedSpectrum deviceID featureID nSpectra))
+    where
+        integrationMicroseconds = floor (exposure * 1e6)
+
+acquireWavelengths :: (DeviceID, FeatureID) -> IO (Either String (Vector Double))
+acquireWavelengths (deviceID, featureID) =
+    getWavelengths deviceID featureID
 
 setPinLevelOrError :: Environment -> GPIOPin -> Level -> IO (ResponseMessage, Environment)
 setPinLevelOrError env pin level =
@@ -156,21 +173,15 @@ asyncAcquisitionRunning env =
     where
         worker = envAsyncProgramWorker env
 
-acquireSpectrum :: (DeviceID, FeatureID) -> Double -> Int -> IO (Either String (Vector Double))
-acquireSpectrum (deviceID, featureID) exposure nSpectra =
-    if ((exposure <= 0.0) || (exposure > 1.0) || (nSpectra < 1))
-        then return (Left "invalid number of spectra or exposure time")
-        else
-          runExceptT (
-              ExceptT (setIntegrationTimeMicros deviceID featureID integrationMicroseconds) >>
-              ExceptT (measureSpectrum deviceID featureID) >>   -- force a fresh acquisition
-              ExceptT (measureAveragedSpectrum deviceID featureID nSpectra))
+asyncAcquisitionErrorMessage :: Environment -> IO String
+asyncAcquisitionErrorMessage env =
+    poll worker >>= \status ->
+    case status of
+        Nothing        -> return ""
+        Just (Right _) -> return ""
+        Just (Left e) -> return $ displayException e
     where
-        integrationMicroseconds = floor (exposure * 1e6)
-
-acquireWavelengths :: (DeviceID, FeatureID) -> IO (Either String (Vector Double))
-acquireWavelengths (deviceID, featureID) =
-    getWavelengths deviceID featureID
+        worker = envAsyncProgramWorker env
 
 fetchAvailableSpectrometer :: IO (Maybe (DeviceID, FeatureID))
 fetchAvailableSpectrometer =

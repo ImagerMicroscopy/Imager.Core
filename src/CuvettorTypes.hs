@@ -75,6 +75,7 @@ instance FromJSON RequestMessage where
 
 data ResponseMessage = StatusOK
                      | StatusError !String
+                     | StatusNoNewAsyncSpectra
                      | AcquiredSpectrum {
                          respAcqSpectrum   :: !(Vector Double)
                        , cachedWavelengths :: !Text
@@ -90,6 +91,7 @@ data ResponseMessage = StatusOK
 instance ToJSON ResponseMessage where
     toEncoding StatusOK = pairs ("responsetype" .= ("status" :: Text) <> "status" .= ("ok" :: Text))
     toEncoding (StatusError s) = pairs ("responsetype" .= ("status" :: Text) <> "status" .= ("error"  :: Text) <> "error" .= s)
+    toEncoding StatusNoNewAsyncSpectra = pairs ("responsetype" .= ("status" :: Text) <> "status" .= ("nonewspectra" :: Text))
     toEncoding (AcquiredSpectrum v w) = pairs ("responsetype" .= ("spectrum" :: Text) <> "spectrum" .= (T.decodeUtf8 . B64.encode $ byteStringFromVector v)
                                                 <> "wavelengths" .= w)
     toEncoding (Wavelengths v) = pairs ("responsetype" .= ("wavelengths" :: Text) <> "wavelengths" .= (T.decodeUtf8 . B64.encode $ byteStringFromVector v))
