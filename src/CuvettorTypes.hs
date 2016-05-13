@@ -46,6 +46,7 @@ data RequestMessage = SetPinHigh !GPIOPin
                     | ExecuteIrradiationProgram {
                         execIrradiationProgram :: !IrradiationProgram
                       }
+                    | FetchAsyncSpectra
                     deriving (Generic)
 
 instance ToJSON RequestMessage where
@@ -55,6 +56,7 @@ instance ToJSON RequestMessage where
     toEncoding SendWavelengths = pairs ("action" .= ("sendwavelengths"  :: Text))
     toEncoding Ping = pairs ("action" .= ("ping" :: Text))
     toEncoding (ExecuteIrradiationProgram prog) = pairs ("action" .= ("executeirradiationprogram" :: Text) <> "program" .= prog)
+    toEncoding FetchAsyncSpectra = pairs ("action" .= ("fetchasyncspectra" :: Text))
 
 instance FromJSON RequestMessage where
     parseJSON (Object v) =
@@ -66,7 +68,8 @@ instance FromJSON RequestMessage where
             "sendwavelengths" -> return SendWavelengths
             "ping"      -> return Ping
             "executeirradiationprogram" -> ExecuteIrradiationProgram <$> v .: "program"
-            _                 -> fail $ "invalid action \"" ++ (T.unpack action) ++ "\""
+            "fetchasyncspectra" -> return FetchAsyncSpectra
+            _            -> fail $ "invalid action \"" ++ (T.unpack action) ++ "\""
     
     parseJSON _ = fail "expected a JSON object"
 
@@ -79,7 +82,7 @@ data ResponseMessage = StatusOK
                      | Wavelengths !(Vector Double)
                      | Pong
                      | AsyncAcquiredSpectra {
-                         respAsyncSpectra :: ![(Vector Double, Double)]
+                         respAsyncSpectra :: ![[(Vector Double, Double)]]
                        , respAsyncCachedWavelengths :: !Text
                        }
                      deriving (Generic)
@@ -92,7 +95,7 @@ instance ToJSON ResponseMessage where
     toEncoding (Wavelengths v) = pairs ("responsetype" .= ("wavelengths" :: Text) <> "wavelengths" .= (T.decodeUtf8 . B64.encode $ byteStringFromVector v))
     toEncoding (Pong) = pairs ("responsetype" .= ("pong" :: Text))
     toEncoding (AsyncAcquiredSpectra spectra w) = 
-        let vectorsAsByteStrings = map (\(v, t) -> (T.decodeUtf8 . B64.encode $ byteStringFromVector v, t)) spectra
+        let vectorsAsByteStrings = map (map (\(v, t) -> (T.decodeUtf8 . B64.encode $ byteStringFromVector v, t))) spectra
         in pairs ("responsetype" .= ("asyncspectra" :: Text) <> "spectra" .= vectorsAsByteStrings <> "wavelengths" .= w)
 
 instance FromJSON GPIOPin where

@@ -19,6 +19,7 @@ import qualified Data.Vector.Storable as V
 import GPIO
 import OOSeaBreeze
 import SimpleJSONServer
+import IrradiationProgram
 
 import CuvettorTypes
 
@@ -99,6 +100,32 @@ performAction env SendWavelengths =
 
 performAction env Ping = return (Pong, env)
 
+performAction env (ExecuteIrradiationProgram prog) =
+    runExceptT (
+        ExceptT (return $ ensureSpectrometerAvailable maybeSpectrometer) >>
+        ExceptT (ensureAsyncAcquisitionNotRunning env) >>
+        ExceptT (return $ validateIrradiationProgram prog)) >>= \validation ->
+    case validation of
+        Left err -> return (StatusError err, env)
+        Right _  -> newEmptyMVar >>= \spectraMVar ->
+                    async (executeIrradiationProgram prog (ProgramEnvironment (fromJust maybeSpectrometer) spectraMVar)) >>= \asyncWorker ->
+                    let newEnv = env {envAsyncSpectraMVar = spectraMVar, envAsyncProgramWorker = asyncWorker}
+                    in return (StatusOK, newEnv)
+    where
+        maybeSpectrometer = envSpectrometer env
+
+performAction env FetchAsyncSpectra =
+    modifyMVar spectraMVar (\s -> return ([], s)) >>= \newSpectra ->
+    asyncAcquisitionRunning env >>= \asyncIsRunning ->
+    if (null newSpectra)
+      then let err = if asyncIsRunning then "no new spectra" else "no new spectra and no acquisition running"
+           in return (StatusError err, env)
+      else
+          return (AsyncAcquiredSpectra newSpectra wl, env)
+    where
+        spectraMVar = envAsyncSpectraMVar env
+        wl = envEncodedSpectrometerWavelengths env
+
 setPinLevelOrError :: Environment -> GPIOPin -> Level -> IO (ResponseMessage, Environment)
 setPinLevelOrError env pin level =
     if (not havePin)
@@ -115,10 +142,17 @@ ensureSpectrometerAvailable (Just _) = Right ()
 
 ensureAsyncAcquisitionNotRunning :: Environment -> IO (Either String ())
 ensureAsyncAcquisitionNotRunning env =
+    asyncAcquisitionRunning env >>= \isRunning ->
+    if isRunning
+        then return (Left "async acquisition running")
+        else return (Right ())
+
+asyncAcquisitionRunning :: Environment -> IO Bool
+asyncAcquisitionRunning env =
     poll worker >>= \workerStatus ->
     case workerStatus of
-        Nothing -> return (Left "async acquisition running")
-        Just _  -> return (Right ())
+        Nothing -> return True
+        Just _  -> return False
     where
         worker = envAsyncProgramWorker env
 
