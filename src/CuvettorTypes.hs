@@ -47,6 +47,7 @@ data RequestMessage = SetPinHigh !GPIOPin
                         execIrradiationProgram :: !IrradiationProgram
                       }
                     | FetchAsyncSpectra
+                    | CancelAsyncAcquisition
                     deriving (Generic)
 
 instance ToJSON RequestMessage where
@@ -57,6 +58,7 @@ instance ToJSON RequestMessage where
     toEncoding Ping = pairs ("action" .= ("ping" :: Text))
     toEncoding (ExecuteIrradiationProgram prog) = pairs ("action" .= ("executeirradiationprogram" :: Text) <> "program" .= prog)
     toEncoding FetchAsyncSpectra = pairs ("action" .= ("fetchasyncspectra" :: Text))
+    toEncoding CancelAsyncAcquisition = pairs ("action" .= ("cancelasyncacquisition" :: Text))
 
 instance FromJSON RequestMessage where
     parseJSON (Object v) =

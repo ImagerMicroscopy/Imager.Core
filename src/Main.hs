@@ -127,6 +127,14 @@ performAction env FetchAsyncSpectra =
             | asyncIsRunning           = if (null newSpectra) then StatusNoNewAsyncSpectra else AsyncAcquiredSpectra newSpectra wl
             | otherwise                = if (null newSpectra) then (StatusError "no async acquisition running") else (AsyncAcquiredSpectra newSpectra wl)
 
+performAction env CancelAsyncAcquisition =
+    asyncAcquisitionRunning env >>= \asyncIsRunning ->
+    if (asyncIsRunning)
+      then cancel worker >> return (StatusOK, env)
+      else return (StatusError "no async acquisition running", env)
+    where
+        worker = envAsyncProgramWorker env
+
 acquireSpectrum :: (DeviceID, FeatureID) -> Double -> Int -> IO (Either String (Vector Double))
 acquireSpectrum (deviceID, featureID) exposure nSpectra =
     if ((exposure <= 0.0) || (exposure > 1.0) || (nSpectra < 1))
