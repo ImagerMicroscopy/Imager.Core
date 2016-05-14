@@ -9,7 +9,7 @@ import qualified Data.Text as T
 
 import GPIO
 
-data LightSource = Digital !GPIOPin !GPIOHandles
+data LightSource = GPIOLightSource !GPIOPin !GPIOHandles
 
 lightSourceMap :: [(Text, LightSource)]
 lightSourceMap = map (\(n, l) -> (T.toLower n, l)) undefined
@@ -27,11 +27,11 @@ lookupMaybeLightSourceByName :: Text -> Maybe LightSource
 lookupMaybeLightSourceByName name = lookup (T.toLower name) lightSourceMap
 
 activateLightSource :: LightSource -> Text -> Double -> IO ()
-activateLightSource (Digital pin handles) _ _ = setPinLevel handles pin High
+activateLightSource (GPIOLightSource pin handles) _ _ = setPinLevel handles pin High
 activateLightSource source filterName power = undefined
 
 deactivateLightSource :: LightSource -> IO ()
-deactivateLightSource (Digital pin handles) = setPinLevel handles pin Low
+deactivateLightSource (GPIOLightSource pin handles) = setPinLevel handles pin Low
 deactivateLightSource source = undefined
 
 deactivateAllLightSources :: IO ()
@@ -39,13 +39,13 @@ deactivateAllLightSources =
     mapM_ closeLightSource (filter lightSourceIsOpen allLightSources)
 
 openLightSource :: LightSource -> IO ()
-openLightSource (Digital _ _) = return ()
+openLightSource (GPIOLightSource _ _) = return ()
 openLightSource source = undefined
 
 closeLightSource :: LightSource -> IO ()
-closeLightSource (Digital _ _) = return ()
+closeLightSource (GPIOLightSource _ _) = return ()
 closeLightSource source = undefined
 
 lightSourceIsOpen :: LightSource -> Bool
-lightSourceIsOpen (Digital _ _) = True
+lightSourceIsOpen (GPIOLightSource _ _) = True
 lightSourceIsOpen source = undefined
