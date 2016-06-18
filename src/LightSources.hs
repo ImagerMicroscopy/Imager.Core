@@ -2,50 +2,75 @@
 
 module LightSources where
 
+import Control.Exception
 import Control.Monad
 import Data.List
+import Data.Maybe
 import Data.Text (Text)
 import qualified Data.Text as T
 
 import GPIO
 
-data LightSource = GPIOLightSource !GPIOPin !GPIOHandles
+data LightSourceDesc = GPIOLightSourceDesc {
+                           glsdName :: !Text
+                         , glsdPin :: !GPIOPin
+                       }
+                     | CoherentLightSourceDesc {
+                           clsdName :: !Text
+                         , clsdSerialPortName :: !String
+                       }
+                     deriving (Show)
 
-lightSourceMap :: [(Text, LightSource)]
-lightSourceMap = map (\(n, l) -> (T.toLower n, l)) undefined
+data LightSource = GPIOLightSource !Text !GPIOPin !GPIOHandles
+                 | CoherentLightSource !Text !Int -- needs to be serial port handle
 
-allLightSources :: [LightSource]
-allLightSources = map snd lightSourceMap
+availableLightSources :: [LightSourceDesc]
+availableLightSources = undefined
 
-lookupLightSourceByName :: Text -> LightSource
-lookupLightSourceByName name =
-    case (lookupMaybeLightSourceByName name) of
+gpioPinsNeededForLightSources :: [LightSourceDesc] -> [GPIOPin]
+gpioPinsNeededForLightSources = map extractPin . filter isGPIOLightSource
+    where
+        extractPin = glsdPin
+        isGPIOLightSource (GPIOLightSourceDesc _ _) = True
+        isGPIOLightSource _ = False
+
+withLightSources :: GPIOHandles -> [LightSourceDesc] -> ([LightSource] -> IO a) -> IO a
+withLightSources handles descs action =
+    bracket (openLightSources handles descs) closeLightSources action
+
+openLightSources :: GPIOHandles -> [LightSourceDesc] -> IO [LightSource]
+openLightSources gpioHandles descs = sequence $ map openLightSource descs
+    where
+        openLightSource (GPIOLightSourceDesc name pin) = return (GPIOLightSource name pin gpioHandles)
+        openLightSource _ = undefined
+
+closeLightSources :: [LightSource] -> IO ()
+closeLightSources = mapM_ closeLightSource
+    where
+        closeLightSource (GPIOLightSource _ _ _) = return ()
+        closeLightSource (CoherentLightSource _ _) = undefined
+
+lightSourceName :: LightSource -> Text
+lightSourceName (GPIOLightSource name _ _) = name
+lightSourceName (CoherentLightSource name _) = name
+
+lookupLightSource :: [LightSource] -> Text -> LightSource
+lookupLightSource sources name =
+    case (lookupMaybeLightSource sources name) of
         Nothing -> error "invalid light source name"
         Just l  -> l
 
-lookupMaybeLightSourceByName :: Text -> Maybe LightSource
-lookupMaybeLightSourceByName name = lookup (T.toLower name) lightSourceMap
+lookupMaybeLightSource :: [LightSource] -> Text -> Maybe LightSource
+lookupMaybeLightSource lightSources name =
+    listToMaybe . filter ((==) (T.toCaseFold name) . T.toCaseFold . lightSourceName) $ lightSources 
 
 activateLightSource :: LightSource -> Text -> Double -> IO ()
-activateLightSource (GPIOLightSource pin handles) _ _ = setPinLevel handles pin High
+activateLightSource (GPIOLightSource _ pin handles) _ _ = setPinLevel handles pin High
 activateLightSource source filterName power = undefined
 
 deactivateLightSource :: LightSource -> IO ()
-deactivateLightSource (GPIOLightSource pin handles) = setPinLevel handles pin Low
+deactivateLightSource (GPIOLightSource _ pin handles) = setPinLevel handles pin Low
 deactivateLightSource source = undefined
 
-deactivateAllLightSources :: IO ()
-deactivateAllLightSources =
-    mapM_ closeLightSource (filter lightSourceIsOpen allLightSources)
-
-openLightSource :: LightSource -> IO ()
-openLightSource (GPIOLightSource _ _) = return ()
-openLightSource source = undefined
-
-closeLightSource :: LightSource -> IO ()
-closeLightSource (GPIOLightSource _ _) = return ()
-closeLightSource source = undefined
-
-lightSourceIsOpen :: LightSource -> Bool
-lightSourceIsOpen (GPIOLightSource _ _) = True
-lightSourceIsOpen source = undefined
+deactivateAllLightSources :: [LightSource] -> IO ()
+deactivateAllLightSources sources = sequence (map deactivateLightSource sources) >> return ()

@@ -42,6 +42,7 @@ data IrradiationParams = IrradiationParams {
 
 data ProgramEnvironment = ProgramEnvironment {
                               peSpectrometer :: (DeviceID, FeatureID)
+                            , peLightSources :: [LightSource]
                             , peSpectraMVar :: MVar ([[(V.Vector Double, Double)]])
                           }
 
@@ -92,7 +93,7 @@ executeIrradiationProgram :: IrradiationProgram -> ProgramEnvironment -> IO ()
 executeIrradiationProgram (IrradiationProgram steps detection) env =
     (getTime Monotonic >>= \startTime ->
     mapM_ (executeStep env startTime detection) (initialAcquisitionStep : steps))
-        `finally` deactivateAllLightSources
+        `finally` (deactivateAllLightSources lightSources)
     where
         initialAcquisitionStep :: ProgramStep   -- makes sure a spectrum gets acquired before the acquisition
         initialAcquisitionStep = ProgramStep 0.0 1 []
@@ -131,12 +132,13 @@ executeIrradiationProgram (IrradiationProgram steps detection) env =
         spectrometerFeatureID = snd (peSpectrometer env)
         
         enableLightSources :: [IrradiationParams] -> IO ()
-        enableLightSources = mapM_ (\(IrradiationParams sourceName channel power) -> activateLightSource (lookupLightSourceByName sourceName) channel power)
+        enableLightSources = mapM_ (\(IrradiationParams sourceName channel power) -> activateLightSource (lookupLightSource lightSources sourceName) channel power)
         disableLightSources :: [IrradiationParams] -> IO ()
-        disableLightSources = mapM_ (\(IrradiationParams sourceName _ _) -> deactivateLightSource (lookupLightSourceByName sourceName))
+        disableLightSources = mapM_ (\(IrradiationParams sourceName _ _) -> deactivateLightSource (lookupLightSource lightSources sourceName))
+        lightSources = peLightSources env
 
-validateIrradiationProgram :: IrradiationProgram -> Either String ()
-validateIrradiationProgram IrradiationProgram{..} =
+validateIrradiationProgram :: [LightSource] -> IrradiationProgram -> Either String ()
+validateIrradiationProgram lightSources IrradiationProgram{..} =
     if (any isLeft validationResults)
         then head . filter isLeft $ validationResults
         else Right ()
@@ -144,7 +146,7 @@ validateIrradiationProgram IrradiationProgram{..} =
         validationResults = map validateProgramStep ipSteps ++ map validateDetectionParams ipDetection
         validateIrradiation :: IrradiationParams -> Either String ()
         validateIrradiation IrradiationParams{..} =
-            if ((isJust $ lookupMaybeLightSourceByName ipLightSourceName) && (within ipPower 0.0 100.0))
+            if ((isJust $ lookupMaybeLightSource lightSources ipLightSourceName) && (within ipPower 0.0 100.0))
                 then Right ()
                 else Left "invalid irradiation params"
         validateDetectionParams :: DetectionParams -> Either String ()

@@ -8,6 +8,7 @@ import Control.Exception
 import Control.Monad.Trans.Except
 import Data.Aeson
 import qualified Data.ByteString as SB
+import Data.List
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -20,6 +21,7 @@ import GPIO
 import OOSeaBreeze
 import SimpleJSONServer
 import IrradiationProgram
+import LightSources
 
 import CuvettorTypes
 
@@ -33,8 +35,11 @@ serverSettings = defaultSettings {ssHandlerTimeout = Just (round 2.5e6)}
 
 main :: IO ()
 main =
-    withGPIOPins (zip availablePins (repeat $ Output Low)) (\gpioPins ->
+    withGPIOPins (zip requiredGPIOPins (repeat $ Output Low)) (\gpioHandles ->
     putStrLn ("opened GPIO pins: " ++ concat (map show availablePins)) >>
+    
+    withLightSources gpioHandles availableLightSources (\lightSources ->
+    putStrLn ("opened light sources") >>
     
     withSeaBreeze (
     bracket fetchAvailableSpectrometer closeAvailableSpectrometer $ \maybeSpectrometer ->
@@ -47,10 +52,12 @@ main =
     newEmptyMVar >>= \asyncSpectraMVar ->
     async (return ()) >>= \asyncProgramWorker ->
     wait asyncProgramWorker >>
-    let env = Environment gpioPins availablePins maybeSpectrometer nonlinearityCorrFunc encodedWavelengths asyncSpectraMVar asyncProgramWorker
+    let env = Environment lightSources gpioHandles availablePins maybeSpectrometer nonlinearityCorrFunc encodedWavelengths asyncSpectraMVar asyncProgramWorker
     in runServer 3200 messageHandler env serverSettings
-    ))
+    )))
     where
+        requiredGPIOPins :: [GPIOPin]
+        requiredGPIOPins = nub (availablePins ++ (gpioPinsNeededForLightSources availableLightSources))
         fetchEncodedWavelengths :: Maybe (DeviceID, FeatureID) -> IO Text
         fetchEncodedWavelengths Nothing = return T.empty
         fetchEncodedWavelengths (Just (dID, fID)) =
@@ -104,15 +111,16 @@ performAction env (ExecuteIrradiationProgram prog) =
     runExceptT (
         ExceptT (return $ ensureSpectrometerAvailable maybeSpectrometer) >>
         ExceptT (ensureAsyncAcquisitionNotRunning env) >>
-        ExceptT (return $ validateIrradiationProgram prog)) >>= \validation ->
+        ExceptT (return $ validateIrradiationProgram lightSources prog)) >>= \validation ->
     case validation of
         Left err -> return (StatusError err, env)
         Right _  -> newEmptyMVar >>= \spectraMVar ->
-                    async (executeIrradiationProgram prog (ProgramEnvironment (fromJust maybeSpectrometer) spectraMVar)) >>= \asyncWorker ->
+                    async (executeIrradiationProgram prog (ProgramEnvironment (fromJust maybeSpectrometer) lightSources spectraMVar)) >>= \asyncWorker ->
                     let newEnv = env {envAsyncSpectraMVar = spectraMVar, envAsyncProgramWorker = asyncWorker}
                     in return (StatusOK, newEnv)
     where
         maybeSpectrometer = envSpectrometer env
+        lightSources = envLightSources env
 
 performAction env FetchAsyncSpectra =
     modifyMVar spectraMVar (\s -> return ([], s)) >>= \newSpectra ->

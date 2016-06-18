@@ -22,9 +22,11 @@ import System.IO.Unsafe
 import GPIO
 import OOSeaBreeze
 import IrradiationProgram
+import LightSources
 
 data Environment = Environment {
-                      envGPIOHandles :: !GPIOHandles
+                      envLightSources :: [LightSource]
+                    , envGPIOHandles :: !GPIOHandles
                     , envAvailablePins :: [GPIOPin]
                     , envSpectrometer :: !(Maybe (DeviceID, FeatureID))
                     , envSpectrometerNonlinearityCorrection :: Double -> Double
