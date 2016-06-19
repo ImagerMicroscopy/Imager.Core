@@ -24,7 +24,7 @@ data IrradiationProgram = IrradiationProgram {
 
 data ProgramStep = ProgramStep {
                        psIrradiationDuration :: !Double
-                     , psNRepeats :: !Int
+                     , psNTimesToPerform :: !Int
                      , psIrradiation :: [IrradiationParams]
                    }
 
@@ -59,12 +59,12 @@ instance ToJSON IrradiationProgram where
 instance FromJSON ProgramStep where
     parseJSON (Object v) =
         ProgramStep <$> v .: "irradiationduration"
-                    <*> v .: "nrepeats"
+                    <*> v .: "ntimestoperform"
                     <*> v .: "irradiation"
     parseJSON _ = fail "can't decode program step"
 instance ToJSON ProgramStep where
-    toEncoding (ProgramStep duration nRepeats irr) =
-        pairs ("irradiationduration" .= duration <> "nrepeats" .= nRepeats <> "irradiation" .= irr)
+    toEncoding (ProgramStep duration nTimesToPerform irr) =
+        pairs ("irradiationduration" .= duration <> "ntimestoperform" .= nTimesToPerform <> "irradiation" .= irr)
     toJSON _ = error "no toJSON"
 
 instance FromJSON DetectionParams where
@@ -100,7 +100,7 @@ executeIrradiationProgram (IrradiationProgram steps detection) env =
 
         executeStep :: ProgramEnvironment -> TimeSpec -> [DetectionParams] -> ProgramStep -> IO ()
         executeStep env startTime detParams ps =
-            forM_ (replicate (psNRepeats ps) ps) $ \step ->
+            forM_ (replicate (psNTimesToPerform ps) ps) $ \step ->
                 executeSingleIrradiationInStep detParams step >>= \newSpectra ->
                 modifyMVar_ (peSpectraMVar env) (\previousSpectra ->
                     when (length previousSpectra > 100) (error "too many async spectra stored") >>
@@ -156,7 +156,7 @@ validateIrradiationProgram lightSources IrradiationProgram{..} =
                 else Left "invalid detection params"
         validateProgramStep :: ProgramStep -> Either String ()
         validateProgramStep ProgramStep{..} =
-            if ((within psIrradiationDuration 0.0 3600) && (within psNRepeats 1 5000) && (all isRight . map validateIrradiation $ psIrradiation))
+            if ((within psIrradiationDuration 0.0 3600) && (within psNTimesToPerform 1 5000) && (all isRight . map validateIrradiation $ psIrradiation))
                 then Right ()
                 else Left "invalid program step"
         within :: (Ord a) => a -> a -> a -> Bool
@@ -165,4 +165,4 @@ validateIrradiationProgram lightSources IrradiationProgram{..} =
 nAcquisitionsInProgram :: IrradiationProgram -> Int
 nAcquisitionsInProgram IrradiationProgram{..} = sum (map nAcquisitionsInStep ipSteps) + 1
     where
-        nAcquisitionsInStep step = psNRepeats step
+        nAcquisitionsInStep step = psNTimesToPerform step
