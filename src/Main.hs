@@ -105,6 +105,8 @@ performAction env SendWavelengths =
     where
         maybeSpectrometer = envSpectrometer env
 
+performAction env ListLightSources = return (AvailableLightSources availableLightSources, env)
+
 performAction env Ping = return (Pong, env)
 
 performAction env (ExecuteIrradiationProgram prog) =

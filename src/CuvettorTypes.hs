@@ -44,6 +44,7 @@ data RequestMessage = SetPinHigh !GPIOPin
                       , nSpectra :: !Int
                       }
                     | SendWavelengths
+                    | ListLightSources
                     | Ping
                     | ExecuteIrradiationProgram {
                         execIrradiationProgram :: !IrradiationProgram
@@ -57,6 +58,7 @@ instance ToJSON RequestMessage where
     toEncoding (SetPinLow pin) = pairs ("action" .= ("setpinlow" :: Text) <> "pin" .= show pin)
     toEncoding (AcquireSpectrum e n) = pairs ("action" .= ("acquirespectrum"  :: Text) <> "exposuretime" .= e <> "nspectra" .= n)
     toEncoding SendWavelengths = pairs ("action" .= ("sendwavelengths"  :: Text))
+    toEncoding ListLightSources = pairs ("action" .= ("listlightsources" :: Text))
     toEncoding Ping = pairs ("action" .= ("ping" :: Text))
     toEncoding (ExecuteIrradiationProgram prog) = pairs ("action" .= ("executeirradiationprogram" :: Text) <> "program" .= prog)
     toEncoding FetchAsyncSpectra = pairs ("action" .= ("fetchasyncspectra" :: Text))
@@ -70,6 +72,7 @@ instance FromJSON RequestMessage where
             "setpinlow"  -> SetPinLow <$> v .: "pin"
             "acquirespectrum" -> AcquireSpectrum <$> v .: "exposuretime" <*> v .: "nspectra"
             "sendwavelengths" -> return SendWavelengths
+            "listlightsources" -> return ListLightSources
             "ping"      -> return Ping
             "executeirradiationprogram" -> ExecuteIrradiationProgram <$> v .: "program"
             "fetchasyncspectra" -> return FetchAsyncSpectra
@@ -85,6 +88,7 @@ data ResponseMessage = StatusOK
                        , cachedWavelengths :: !Text
                        }
                      | Wavelengths !(Vector Double)
+                     | AvailableLightSources ![LightSourceDesc]
                      | Pong
                      | AsyncAcquiredSpectra {
                          respAsyncSpectra :: ![[(Vector Double, Double)]]
@@ -99,6 +103,7 @@ instance ToJSON ResponseMessage where
     toEncoding (AcquiredSpectrum v w) = pairs ("responsetype" .= ("spectrum" :: Text) <> "spectrum" .= (T.decodeUtf8 . B64.encode $ byteStringFromVector v)
                                                 <> "wavelengths" .= w)
     toEncoding (Wavelengths v) = pairs ("responsetype" .= ("wavelengths" :: Text) <> "wavelengths" .= (T.decodeUtf8 . B64.encode $ byteStringFromVector v))
+    toEncoding (AvailableLightSources ls) = pairs ("responsetype" .= ("availablelightsources" :: Text) <> "lightsources" .= ls)
     toEncoding (Pong) = pairs ("responsetype" .= ("pong" :: Text))
     toEncoding (AsyncAcquiredSpectra spectra w) = 
         let vectorsAsByteStrings = map (map (\(v, t) -> (T.decodeUtf8 . B64.encode $ byteStringFromVector v, t))) spectra

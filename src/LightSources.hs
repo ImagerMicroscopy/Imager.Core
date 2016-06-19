@@ -1,9 +1,10 @@
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE BangPatterns, OverloadedStrings #-}
 
 module LightSources where
 
 import Control.Exception
 import Control.Monad
+import Data.Aeson
 import Data.List
 import Data.Maybe
 import Data.Text (Text)
@@ -23,6 +24,10 @@ data LightSourceDesc = GPIOLightSourceDesc {
 
 data LightSource = GPIOLightSource !Text !GPIOPin !GPIOHandles
                  | CoherentLightSource !Text !Int -- needs to be serial port handle
+
+instance ToJSON LightSourceDesc where
+    toJSON (GPIOLightSourceDesc name _) = object ["name" .= name]
+    toJSON (CoherentLightSourceDesc name _) = object ["name" .= name]
 
 availableLightSources :: [LightSourceDesc]
 availableLightSources = undefined
@@ -66,11 +71,11 @@ lookupMaybeLightSource lightSources name =
 
 activateLightSource :: LightSource -> Text -> Double -> IO ()
 activateLightSource (GPIOLightSource _ pin handles) _ _ = setPinLevel handles pin High
-activateLightSource source filterName power = undefined
+activateLightSource _ _ _ = undefined
 
 deactivateLightSource :: LightSource -> IO ()
 deactivateLightSource (GPIOLightSource _ pin handles) = setPinLevel handles pin Low
-deactivateLightSource source = undefined
+deactivateLightSource _ = undefined
 
 deactivateAllLightSources :: [LightSource] -> IO ()
 deactivateAllLightSources sources = sequence (map deactivateLightSource sources) >> return ()
