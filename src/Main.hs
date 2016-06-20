@@ -107,6 +107,28 @@ performAction env SendWavelengths =
 
 performAction env ListLightSources = return (AvailableLightSources availableLightSources, env)
 
+performAction env (ActivateLightSource name channel power) =
+    runExceptT (
+        ExceptT (ensureAsyncAcquisitionNotRunning env) >>
+        ExceptT (return $ lookupEitherLightSource lightSources name) >>= \lightSource ->
+        ExceptT (activateLightSource lightSource channel power)) >>= \result ->
+        case result of
+            Left err -> return (StatusError err, env)
+            Right _ -> return (StatusOK, env)
+    where
+        lightSources = envLightSources env
+
+performAction env (DeactivateLightSource name) =
+    runExceptT (
+        ExceptT (ensureAsyncAcquisitionNotRunning env) >>
+        ExceptT (return $ lookupEitherLightSource lightSources name) >>= \lightSource ->
+        ExceptT (deactivateLightSource lightSource)) >>= \result ->
+        case result of
+            Left err -> return (StatusError err, env)
+            Right _ -> return (StatusOK, env)
+    where
+        lightSources = envLightSources env
+
 performAction env Ping = return (Pong, env)
 
 performAction env (ExecuteIrradiationProgram prog) =

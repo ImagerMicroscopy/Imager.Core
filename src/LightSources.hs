@@ -4,6 +4,7 @@ module LightSources where
 
 import Control.Exception
 import Control.Monad
+import Control.Monad.Trans.Except
 import Data.Aeson
 import Data.List
 import Data.Maybe
@@ -30,7 +31,7 @@ instance ToJSON LightSourceDesc where
     toJSON (CoherentLightSourceDesc name _) = object ["name" .= name]
 
 availableLightSources :: [LightSourceDesc]
-availableLightSources = undefined
+availableLightSources = []
 
 gpioPinsNeededForLightSources :: [LightSourceDesc] -> [GPIOPin]
 gpioPinsNeededForLightSources = map extractPin . filter isGPIOLightSource
@@ -67,15 +68,25 @@ lookupLightSource sources name =
 
 lookupMaybeLightSource :: [LightSource] -> Text -> Maybe LightSource
 lookupMaybeLightSource lightSources name =
-    listToMaybe . filter ((==) (T.toCaseFold name) . T.toCaseFold . lightSourceName) $ lightSources 
+    listToMaybe . filter ((==) (T.toCaseFold name) . T.toCaseFold . lightSourceName) $ lightSources
 
-activateLightSource :: LightSource -> Text -> Double -> IO ()
-activateLightSource (GPIOLightSource _ pin handles) _ _ = setPinLevel handles pin High
+lookupEitherLightSource :: [LightSource] -> Text -> Either String LightSource
+lookupEitherLightSource lightSources name =
+    case (lookupMaybeLightSource lightSources name) of
+        Just l -> Right l
+        Nothing -> Left "no such light source"
+
+activateLightSource :: LightSource -> Text -> Double -> IO (Either String ())
+activateLightSource (GPIOLightSource _ pin handles) _ _ = setPinLevel handles pin High >> return (Right ())
 activateLightSource _ _ _ = undefined
 
-deactivateLightSource :: LightSource -> IO ()
-deactivateLightSource (GPIOLightSource _ pin handles) = setPinLevel handles pin Low
+deactivateLightSource :: LightSource -> IO (Either String ())
+deactivateLightSource (GPIOLightSource _ pin handles) = setPinLevel handles pin Low >> return (Right ())
 deactivateLightSource _ = undefined
 
-deactivateAllLightSources :: [LightSource] -> IO ()
-deactivateAllLightSources sources = sequence (map deactivateLightSource sources) >> return ()
+deactivateAllLightSources :: [LightSource] -> IO (Either String ())
+deactivateAllLightSources sources =
+    (runExceptT . sequence . map (ExceptT . deactivateLightSource) $ sources) >>= \result ->
+    case result of
+        Right _ -> return (Right ())
+        Left e -> return (Left e)

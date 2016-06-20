@@ -45,6 +45,12 @@ data RequestMessage = SetPinHigh !GPIOPin
                       }
                     | SendWavelengths
                     | ListLightSources
+                    | ActivateLightSource {
+                        reqActivateName :: !Text
+                      , reqActivateChannel :: !Text
+                      , reqActivatePower :: !Double
+                    }
+                    | DeactivateLightSource !Text
                     | Ping
                     | ExecuteIrradiationProgram {
                         execIrradiationProgram :: !IrradiationProgram
@@ -59,6 +65,8 @@ instance ToJSON RequestMessage where
     toEncoding (AcquireSpectrum e n) = pairs ("action" .= ("acquirespectrum"  :: Text) <> "exposuretime" .= e <> "nspectra" .= n)
     toEncoding SendWavelengths = pairs ("action" .= ("sendwavelengths"  :: Text))
     toEncoding ListLightSources = pairs ("action" .= ("listlightsources" :: Text))
+    toEncoding (ActivateLightSource name channel power) = pairs ("action" .= ("activatelightsource" :: Text) <> "name" .= name <> "channel" .= channel <> "power" .= power)
+    toEncoding (DeactivateLightSource name) = pairs ("action" .= ("deactivatelightsource" :: Text) <> "name" .= name)
     toEncoding Ping = pairs ("action" .= ("ping" :: Text))
     toEncoding (ExecuteIrradiationProgram prog) = pairs ("action" .= ("executeirradiationprogram" :: Text) <> "program" .= prog)
     toEncoding FetchAsyncSpectra = pairs ("action" .= ("fetchasyncspectra" :: Text))
@@ -73,6 +81,8 @@ instance FromJSON RequestMessage where
             "acquirespectrum" -> AcquireSpectrum <$> v .: "exposuretime" <*> v .: "nspectra"
             "sendwavelengths" -> return SendWavelengths
             "listlightsources" -> return ListLightSources
+            "activatelightsource" -> ActivateLightSource <$> v .: "name" <*> v .: "channel" <*> v .: "power"
+            "deactivatelightsource" -> DeactivateLightSource <$> v .: "name"
             "ping"      -> return Ping
             "executeirradiationprogram" -> ExecuteIrradiationProgram <$> v .: "program"
             "fetchasyncspectra" -> return FetchAsyncSpectra
