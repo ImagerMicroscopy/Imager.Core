@@ -49,7 +49,7 @@ main =
     putStrLn (if (isJust maybeSpectrometer) then "opened spectrometer" else "no spectrometer found") >>
     
     putStrLn ("running server") >>
-    newEmptyMVar >>= \asyncSpectraMVar ->
+    newMVar [] >>= \asyncSpectraMVar ->
     async (return ()) >>= \asyncProgramWorker ->
     wait asyncProgramWorker >>
     let env = Environment lightSources gpioHandles availablePins maybeSpectrometer nonlinearityCorrFunc encodedWavelengths asyncSpectraMVar asyncProgramWorker
@@ -138,7 +138,7 @@ performAction env (ExecuteIrradiationProgram prog) =
         ExceptT (return $ validateIrradiationProgram lightSources prog)) >>= \validation ->
     case validation of
         Left err -> return (StatusError err, env)
-        Right _  -> newEmptyMVar >>= \spectraMVar ->
+        Right _  -> newMVar [] >>= \spectraMVar ->
                     async (executeIrradiationProgram prog (ProgramEnvironment (fromJust maybeSpectrometer) lightSources spectraMVar)) >>= \asyncWorker ->
                     let newEnv = env {envAsyncSpectraMVar = spectraMVar, envAsyncProgramWorker = asyncWorker}
                     in return (StatusOK, newEnv)
@@ -157,7 +157,7 @@ performAction env FetchAsyncSpectra =
         specResponse asyncErrorMsg asyncIsRunning newSpectra
             | not (null asyncErrorMsg) = StatusError asyncErrorMsg
             | asyncIsRunning           = if (null newSpectra) then StatusNoNewAsyncSpectra else AsyncAcquiredSpectra newSpectra wl
-            | otherwise                = if (null newSpectra) then (StatusError "no async acquisition running") else (AsyncAcquiredSpectra newSpectra wl)
+            | otherwise                = if (null newSpectra) then StatusNoNewAsyncSpectraComing else (AsyncAcquiredSpectra newSpectra wl)
 
 performAction env CancelAsyncAcquisition =
     asyncAcquisitionRunning env >>= \asyncIsRunning ->
@@ -166,6 +166,10 @@ performAction env CancelAsyncAcquisition =
       else return (StatusError "no async acquisition running", env)
     where
         worker = envAsyncProgramWorker env
+
+performAction env IsAsyncAcquisitionRunning =
+    asyncAcquisitionRunning env >>= \asyncIsRunning ->
+    return (AsyncAcquisitionIsRunning asyncIsRunning, env)
 
 acquireSpectrum :: (DeviceID, FeatureID) -> Double -> Int -> IO (Either String (Vector Double))
 acquireSpectrum (deviceID, featureID) exposure nSpectra =

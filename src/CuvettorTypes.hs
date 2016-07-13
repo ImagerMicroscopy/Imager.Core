@@ -57,6 +57,7 @@ data RequestMessage = SetPinHigh !GPIOPin
                       }
                     | FetchAsyncSpectra
                     | CancelAsyncAcquisition
+                    | IsAsyncAcquisitionRunning
                     deriving (Generic)
 
 instance ToJSON RequestMessage where
@@ -71,6 +72,7 @@ instance ToJSON RequestMessage where
     toEncoding (ExecuteIrradiationProgram prog) = pairs ("action" .= ("executeirradiationprogram" :: Text) <> "program" .= prog)
     toEncoding FetchAsyncSpectra = pairs ("action" .= ("fetchasyncspectra" :: Text))
     toEncoding CancelAsyncAcquisition = pairs ("action" .= ("cancelasyncacquisition" :: Text))
+    toEncoding IsAsyncAcquisitionRunning = pairs ("action" .= ("isasyncacquisitionrunning" :: Text))
 
 instance FromJSON RequestMessage where
     parseJSON (Object v) =
@@ -86,6 +88,8 @@ instance FromJSON RequestMessage where
             "ping"      -> return Ping
             "executeirradiationprogram" -> ExecuteIrradiationProgram <$> v .: "program"
             "fetchasyncspectra" -> return FetchAsyncSpectra
+            "cancelasyncacquisition" -> return CancelAsyncAcquisition
+            "isasyncacquisitionrunning" -> return IsAsyncAcquisitionRunning
             _            -> fail $ "invalid action \"" ++ (T.unpack action) ++ "\""
     
     parseJSON _ = fail "expected a JSON object"
@@ -93,6 +97,7 @@ instance FromJSON RequestMessage where
 data ResponseMessage = StatusOK
                      | StatusError !String
                      | StatusNoNewAsyncSpectra
+                     | StatusNoNewAsyncSpectraComing
                      | AcquiredSpectrum {
                          respAcqSpectrum   :: !(Vector Double)
                        , cachedWavelengths :: !Text
@@ -104,12 +109,14 @@ data ResponseMessage = StatusOK
                          respAsyncSpectra :: ![[(Vector Double, Double)]]
                        , respAsyncCachedWavelengths :: !Text
                        }
+                     | AsyncAcquisitionIsRunning !Bool
                      deriving (Generic)
 
 instance ToJSON ResponseMessage where
     toEncoding StatusOK = pairs ("responsetype" .= ("status" :: Text) <> "status" .= ("ok" :: Text))
     toEncoding (StatusError s) = pairs ("responsetype" .= ("status" :: Text) <> "status" .= ("error"  :: Text) <> "error" .= s)
-    toEncoding StatusNoNewAsyncSpectra = pairs ("responsetype" .= ("status" :: Text) <> "status" .= ("nonewspectra" :: Text))
+    toEncoding StatusNoNewAsyncSpectra = pairs ("responsetype" .= ("asyncacquisitionspectrastatus" :: Text) <> "status" .= ("nonewspectra" :: Text))
+    toEncoding (StatusNoNewAsyncSpectraComing) = pairs ("responsetype" .= ("asyncacquisitionspectrastatus" :: Text) <> "status" .= ("nonewspectracoming" :: Text))
     toEncoding (AcquiredSpectrum v w) = pairs ("responsetype" .= ("spectrum" :: Text) <> "spectrum" .= (T.decodeUtf8 . B64.encode $ byteStringFromVector v)
                                                 <> "wavelengths" .= w)
     toEncoding (Wavelengths v) = pairs ("responsetype" .= ("wavelengths" :: Text) <> "wavelengths" .= (T.decodeUtf8 . B64.encode $ byteStringFromVector v))
@@ -118,6 +125,7 @@ instance ToJSON ResponseMessage where
     toEncoding (AsyncAcquiredSpectra spectra w) = 
         let vectorsAsByteStrings = map (map (\(v, t) -> (T.decodeUtf8 . B64.encode $ byteStringFromVector v, t))) spectra
         in pairs ("responsetype" .= ("asyncspectra" :: Text) <> "spectra" .= vectorsAsByteStrings <> "wavelengths" .= w)
+    toEncoding (AsyncAcquisitionIsRunning b) = pairs ("responsetype" .= ("asyncacquisitionstatus" :: Text) <> "running" .= b)
 
 instance FromJSON GPIOPin where
     parseJSON (String s) =

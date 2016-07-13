@@ -10,6 +10,8 @@ import Data.List
 import Data.Maybe
 import Data.Text (Text)
 import qualified Data.Text as T
+import System.Hardware.Serialport
+import System.IO
 
 import GPIO
 
@@ -21,17 +23,22 @@ data LightSourceDesc = GPIOLightSourceDesc {
                            clsdName :: !Text
                          , clsdSerialPortName :: !String
                        }
+                     | DummyLightSourceDesc {
+                           dlsdName :: !Text
+                       }
                      deriving (Show)
 
 data LightSource = GPIOLightSource !Text !GPIOPin !GPIOHandles
-                 | CoherentLightSource !Text !Int -- needs to be serial port handle
+                 | CoherentLightSource !Text !SerialPort
+                 | DummyLightSource !Text
 
 instance ToJSON LightSourceDesc where
     toJSON (GPIOLightSourceDesc name _) = object ["name" .= name, "channels" .= ([] :: [Text])]
     toJSON (CoherentLightSourceDesc name _) = object ["name" .= name, "channels" .= ([] :: [Text])]
+    toJSON (DummyLightSourceDesc name) = object ["name" .= name, "channels" .= ([] :: [Text])]
 
 availableLightSources :: [LightSourceDesc]
-availableLightSources = []
+availableLightSources = [DummyLightSourceDesc "dummy1", DummyLightSourceDesc "dummy2"]
 
 gpioPinsNeededForLightSources :: [LightSourceDesc] -> [GPIOPin]
 gpioPinsNeededForLightSources = map extractPin . filter isGPIOLightSource
@@ -48,17 +55,23 @@ openLightSources :: GPIOHandles -> [LightSourceDesc] -> IO [LightSource]
 openLightSources gpioHandles descs = sequence $ map openLightSource descs
     where
         openLightSource (GPIOLightSourceDesc name pin) = return (GPIOLightSource name pin gpioHandles)
-        openLightSource _ = undefined
+        openLightSource (CoherentLightSourceDesc name portName) =
+            let port = openSerial portName (defaultSerialSettings {commSpeed = CS19200})
+            in CoherentLightSource name <$> port
+        openLightSource (DummyLightSourceDesc name) = putStrLn ("opened light source " ++ T.unpack name) >> return (DummyLightSource name)
+        openLightSource _ = error "opening unknown type of light source"
 
 closeLightSources :: [LightSource] -> IO ()
 closeLightSources = mapM_ closeLightSource
     where
         closeLightSource (GPIOLightSource _ _ _) = return ()
+        closeLightSource (DummyLightSource name) = putStr ("closed light source " ++ T.unpack name) >> return ()
         closeLightSource (CoherentLightSource _ _) = undefined
 
 lightSourceName :: LightSource -> Text
 lightSourceName (GPIOLightSource name _ _) = name
 lightSourceName (CoherentLightSource name _) = name
+lightSourceName (DummyLightSource name) = name
 
 lookupLightSource :: [LightSource] -> Text -> LightSource
 lookupLightSource sources name =
@@ -78,10 +91,14 @@ lookupEitherLightSource lightSources name =
 
 activateLightSource :: LightSource -> Text -> Double -> IO (Either String ())
 activateLightSource (GPIOLightSource _ pin handles) _ _ = setPinLevel handles pin High >> return (Right ())
+activateLightSource (CoherentLightSource name port) = catch (send port "L=1\r" >> return (Right ())) (\e -> return (Left (displayException (e :: IOException))))
+activateLightSource (DummyLightSource name) c p = putStrLn ("activated " ++ T.unpack name ++ " at power " ++ show p ++ " with channel " ++ T.unpack c) >> return (Right ())
 activateLightSource _ _ _ = undefined
 
 deactivateLightSource :: LightSource -> IO (Either String ())
 deactivateLightSource (GPIOLightSource _ pin handles) = setPinLevel handles pin Low >> return (Right ())
+deactivateLightSource (CoherentLightSource name port) = catch (send port "L=0\r" >> return (Right ())) (\e -> return (Left (displayException (e :: IOException))))
+deactivateLightSource (DummyLightSource name) = putStrLn ("deactivated " ++ T.unpack name) >> return (Right ())
 deactivateLightSource _ = undefined
 
 deactivateAllLightSources :: [LightSource] -> IO (Either String ())

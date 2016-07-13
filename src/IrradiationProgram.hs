@@ -27,6 +27,7 @@ data ProgramStep = ProgramStep {
                      , psNTimesToPerform :: !Int
                      , psIrradiation :: [IrradiationParams]
                    }
+                   deriving (Show)
 
 data DetectionParams = DetectionParams {
                            dpExposureTime :: !Double
@@ -38,7 +39,8 @@ data IrradiationParams = IrradiationParams {
                              ipLightSourceName :: !Text
                            , ipLightSourceChannel :: !Text
                            , ipPower :: !Double
-                         }
+                         } 
+                         deriving (Show)
 
 data ProgramEnvironment = ProgramEnvironment {
                               peSpectrometer :: (DeviceID, FeatureID)
@@ -92,6 +94,7 @@ instance ToJSON IrradiationParams where
 executeIrradiationProgram :: IrradiationProgram -> ProgramEnvironment -> IO ()
 executeIrradiationProgram (IrradiationProgram steps detection) env =
     (getTime Monotonic >>= \startTime ->
+    putStrLn "will execute acquisition" >> putStrLn (show (initialAcquisitionStep : steps)) >>
     mapM_ (executeStep env startTime detection) (initialAcquisitionStep : steps))
         `finally` (deactivateAllLightSources lightSources)
     where
