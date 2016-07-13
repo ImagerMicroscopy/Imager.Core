@@ -27,8 +27,8 @@ data LightSource = GPIOLightSource !Text !GPIOPin !GPIOHandles
                  | CoherentLightSource !Text !Int -- needs to be serial port handle
 
 instance ToJSON LightSourceDesc where
-    toJSON (GPIOLightSourceDesc name _) = object ["name" .= name]
-    toJSON (CoherentLightSourceDesc name _) = object ["name" .= name]
+    toJSON (GPIOLightSourceDesc name _) = object ["name" .= name, "channels" .= ([] :: [Text])]
+    toJSON (CoherentLightSourceDesc name _) = object ["name" .= name, "channels" .= ([] :: [Text])]
 
 availableLightSources :: [LightSourceDesc]
 availableLightSources = []
