@@ -78,6 +78,9 @@ lightSourceName (GPIOLightSource name _ _ _) = name
 lightSourceName (CoherentLightSource name _) = name
 lightSourceName (DummyLightSource name) = name
 
+isKnownLightSource :: [LightSource] -> Text -> Bool
+isKnownLightSource lss n = isJust $ lookupMaybeLightSource lss n
+
 lookupLightSource :: [LightSource] -> Text -> LightSource
 lookupLightSource sources name =
     case (lookupMaybeLightSource sources name) of

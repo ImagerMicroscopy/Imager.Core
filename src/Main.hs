@@ -81,11 +81,11 @@ performAction :: Environment -> RequestMessage -> IO (ResponseMessage, Environme
 performAction env (SetPinHigh pin) = setPinLevelOrError env pin High
 performAction env (SetPinLow pin)  = setPinLevelOrError env pin Low
 
-performAction env (AcquireSpectrum exposure nSpectra) =
+performAction env (AcquireSpectrum params) =
     runExceptT (
         ExceptT (return $ ensureSpectrometerAvailable maybeSpectrometer) >>
         ExceptT (ensureAsyncAcquisitionNotRunning env) >>
-        ExceptT (acquireSpectrum (fromJust maybeSpectrometer) exposure nSpectra)) >>= \spectrum ->
+        ExceptT (executeDetection (fromJust maybeSpectrometer) lightsources params)) >>= \spectrum ->
     case spectrum of
         Left err -> return (StatusError err, env)
         Right v  -> return (AcquiredSpectrum (V.map nonlinearityCorrection v) wl, env)
@@ -93,6 +93,7 @@ performAction env (AcquireSpectrum exposure nSpectra) =
         maybeSpectrometer = envSpectrometer env
         wl = envEncodedSpectrometerWavelengths env
         nonlinearityCorrection = envSpectrometerNonlinearityCorrection env
+        lightsources = envLightSources env
 
 performAction env SendWavelengths =
     runExceptT (

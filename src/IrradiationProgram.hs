@@ -113,32 +113,47 @@ executeIrradiationProgram (IrradiationProgram steps detection) env =
         
         executeSingleIrradiationInStep :: [DetectionParams] -> ProgramStep -> IO [(V.Vector Double, TimeSpec)]
         executeSingleIrradiationInStep detParams ProgramStep{..} =
-            enableLightSources psIrradiation >>
-            threadDelay (floor $ psIrradiationDuration * 1.0e6) >>
-            mapM executeDetection detParams >>= \spectra ->
-            disableLightSources psIrradiation >>
-            return spectra
-        
-        executeDetection :: DetectionParams -> IO (V.Vector Double, TimeSpec)
-        executeDetection DetectionParams{..} =
-            enableLightSources [dpIrradiation] >>
             runExceptT (
-                ExceptT (setIntegrationTimeMicros spectrometerDeviceID spectrometerFeatureID (floor $ dpExposureTime * 1.0e6)) >>
-                ExceptT (measureAveragedSpectrum spectrometerDeviceID spectrometerFeatureID dpNSpectraToAverage)) >>= \spectrum ->
+                ExceptT (enableLightSources lightSources psIrradiation) >>
+                ExceptT (Right <$> threadDelay (floor $ psIrradiationDuration * 1.0e6)) >>
+                ExceptT (disableLightSources lightSources psIrradiation)) >>= \irrResult ->
+            case irrResult of
+                Left err -> error err
+                Right _ -> mapM executeStepDetection detParams
+
+        executeStepDetection :: DetectionParams -> IO (V.Vector Double, TimeSpec)
+        executeStepDetection params =
             getTime Monotonic >>= \timeStamp ->
-            disableLightSources [dpIrradiation] >>
-            case spectrum of
-                Left e -> error e
+            executeDetection (spectrometerDeviceID, spectrometerFeatureID) lightSources  params >>= \detResult ->
+            case detResult of
                 Right v -> return (v, timeStamp)
-        
+                Left err -> error err
+
+        lightSources = peLightSources env
         spectrometerDeviceID = fst (peSpectrometer env)
         spectrometerFeatureID = snd (peSpectrometer env)
         
-        enableLightSources :: [IrradiationParams] -> IO ()
-        enableLightSources = mapM_ (\(IrradiationParams sourceName channel power) -> activateLightSource (lookupLightSource lightSources sourceName) channel power)
-        disableLightSources :: [IrradiationParams] -> IO ()
-        disableLightSources = mapM_ (\(IrradiationParams sourceName _ _) -> deactivateLightSource (lookupLightSource lightSources sourceName))
-        lightSources = peLightSources env
+executeDetection :: (DeviceID, FeatureID) -> [LightSource] -> DetectionParams -> IO (Either String (V.Vector Double))
+executeDetection (dID, fID) lss DetectionParams{..} =
+    runExceptT (
+        ExceptT (enableLightSources lss [dpIrradiation]) >>
+        ExceptT (setIntegrationTimeMicros dID fID (floor $ dpExposureTime * 1.0e6)) >>
+        ExceptT (measureAveragedSpectrum dID fID dpNSpectraToAverage) >>= \spectrum ->
+        ExceptT (disableLightSources lss [dpIrradiation]) >>
+        ExceptT (return $ Right spectrum))
+
+enableLightSources :: [LightSource] -> [IrradiationParams] -> IO (Either String ())
+enableLightSources lss params
+    | allLightSourcesKnown = catch (Right <$> mapM_ (\(IrradiationParams sourceName channel power) -> activateLightSource (lookupLightSource lss sourceName) channel power) params)
+                                (\e -> return (Left (displayException (e :: IOException))))
+    | otherwise = return (Left "unknown light source")
+    where
+        allLightSourcesKnown = and $ map (isKnownLightSource lss . ipLightSourceName) params
+disableLightSources :: [LightSource] -> [IrradiationParams] -> IO (Either String ())
+disableLightSources lss params = catch (Right <$> mapM_ (\(IrradiationParams sourceName _ _) -> deactivateLightSource (lookupLightSource lss sourceName)) params)
+                                    (\e -> return (Left (displayException (e :: IOException))))
+    where
+        allLightSourcesKnown = and $ map (isKnownLightSource lss . ipLightSourceName) params
 
 validateIrradiationProgram :: [LightSource] -> IrradiationProgram -> Either String ()
 validateIrradiationProgram lightSources IrradiationProgram{..} =
