@@ -32,7 +32,7 @@ data ProgramStep = ProgramStep {
 data DetectionParams = DetectionParams {
                            dpExposureTime :: !Double
                          , dpNSpectraToAverage :: !Int
-                         , dpIrradiation :: !IrradiationParams
+                         , dpIrradiation :: [IrradiationParams]
                        }
 
 data IrradiationParams = IrradiationParams {
@@ -136,10 +136,10 @@ executeIrradiationProgram (IrradiationProgram steps detection) env =
 executeDetection :: (DeviceID, FeatureID) -> [LightSource] -> DetectionParams -> IO (Either String (V.Vector Double))
 executeDetection (dID, fID) lss DetectionParams{..} =
     runExceptT (
-        ExceptT (enableLightSources lss [dpIrradiation]) >>
+        ExceptT (enableLightSources lss dpIrradiation) >>
         ExceptT (setIntegrationTimeMicros dID fID (floor $ dpExposureTime * 1.0e6)) >>
         ExceptT (measureAveragedSpectrum dID fID dpNSpectraToAverage) >>= \spectrum ->
-        ExceptT (disableLightSources lss [dpIrradiation]) >>
+        ExceptT (disableLightSources lss dpIrradiation) >>
         ExceptT (return $ Right spectrum))
 
 enableLightSources :: [LightSource] -> [IrradiationParams] -> IO (Either String ())
@@ -169,12 +169,12 @@ validateIrradiationProgram lightSources IrradiationProgram{..} =
                 else Left "invalid irradiation params"
         validateDetectionParams :: DetectionParams -> Either String ()
         validateDetectionParams DetectionParams{..} =
-            if ((within dpExposureTime 3.8e-3 10) && (within dpNSpectraToAverage 1 1000) && (isRight $ validateIrradiation dpIrradiation))
+            if ((within dpExposureTime 3.8e-3 10) && (within dpNSpectraToAverage 1 1000) && (all isRight $ map validateIrradiation dpIrradiation))
                 then Right ()
                 else Left "invalid detection params"
         validateProgramStep :: ProgramStep -> Either String ()
         validateProgramStep ProgramStep{..} =
-            if ((within psIrradiationDuration 0.0 3600) && (within psNTimesToPerform 1 5000) && (all isRight . map validateIrradiation $ psIrradiation))
+            if ((within psIrradiationDuration 0.0 3600) && (within psNTimesToPerform 1 5000) && (all isRight $ map validateIrradiation psIrradiation))
                 then Right ()
                 else Left "invalid program step"
         within :: (Ord a) => a -> a -> a -> Bool
