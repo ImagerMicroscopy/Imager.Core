@@ -140,11 +140,12 @@ performAction env (ExecuteIrradiationProgram prog) =
     case validation of
         Left err -> return (StatusError err, env)
         Right _  -> newMVar [] >>= \spectraMVar ->
-                    async (executeIrradiationProgram prog (ProgramEnvironment (fromJust maybeSpectrometer) lightSources spectraMVar)) >>= \asyncWorker ->
+                    async (executeIrradiationProgram prog (ProgramEnvironment (fromJust maybeSpectrometer) nonLinearityCorrection lightSources spectraMVar)) >>= \asyncWorker ->
                     let newEnv = env {envAsyncSpectraMVar = spectraMVar, envAsyncProgramWorker = asyncWorker}
                     in return (StatusOK, newEnv)
     where
         maybeSpectrometer = envSpectrometer env
+        nonLinearityCorrection = envSpectrometerNonlinearityCorrection env
         lightSources = envLightSources env
 
 performAction env FetchAsyncSpectra =

@@ -44,6 +44,7 @@ data IrradiationParams = IrradiationParams {
 
 data ProgramEnvironment = ProgramEnvironment {
                               peSpectrometer :: (DeviceID, FeatureID)
+                            , peSpectrometerNonlinearityCorrection :: Double -> Double
                             , peLightSources :: [LightSource]
                             , peSpectraMVar :: MVar ([[(V.Vector Double, Double)]])
                           }
@@ -107,9 +108,11 @@ executeIrradiationProgram (IrradiationProgram steps detection) env =
                 executeSingleIrradiationInStep detParams step >>= \newSpectra ->
                 modifyMVar_ (peSpectraMVar env) (\previousSpectra ->
                     when (length previousSpectra > 100) (error "too many async spectra stored") >>
-                    return (previousSpectra ++ [map toSecondsFromStart newSpectra]))
+                    return (previousSpectra ++ [map (correctNonLinearity . toSecondsFromStart) newSpectra]))
             where
+                correctNonLinearity (vec, t) = (V.map correctionFunc vec, t)
                 toSecondsFromStart (vec, t) = (vec, (*) 1.0e-9 . fromIntegral . timeSpecAsNanoSecs $ diffTimeSpec t startTime)
+                correctionFunc = peSpectrometerNonlinearityCorrection env
         
         executeSingleIrradiationInStep :: [DetectionParams] -> ProgramStep -> IO [(V.Vector Double, TimeSpec)]
         executeSingleIrradiationInStep detParams ProgramStep{..} =
