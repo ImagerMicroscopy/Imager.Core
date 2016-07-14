@@ -2,6 +2,7 @@
 
 module LightSources where
 
+import Control.Concurrent
 import Control.Exception
 import Control.Monad
 import Control.Monad.Trans.Except
@@ -10,6 +11,7 @@ import Data.List
 import Data.Maybe
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import System.Hardware.Serialport
 import System.IO
 
@@ -18,6 +20,7 @@ import GPIO
 data LightSourceDesc = GPIOLightSourceDesc {
                            glsdName :: !Text
                          , glsdPin :: !GPIOPin
+                         , glsdWaitDelay :: !Double
                        }
                      | CoherentLightSourceDesc {
                            clsdName :: !Text
@@ -28,23 +31,25 @@ data LightSourceDesc = GPIOLightSourceDesc {
                        }
                      deriving (Show)
 
-data LightSource = GPIOLightSource !Text !GPIOPin !GPIOHandles
+data LightSource = GPIOLightSource !Text !GPIOPin !Double !GPIOHandles
                  | CoherentLightSource !Text !SerialPort
                  | DummyLightSource !Text
 
 instance ToJSON LightSourceDesc where
-    toJSON (GPIOLightSourceDesc name _) = object ["name" .= name, "channels" .= ([] :: [Text])]
+    toJSON (GPIOLightSourceDesc name _ _) = object ["name" .= name, "channels" .= ([] :: [Text])]
     toJSON (CoherentLightSourceDesc name _) = object ["name" .= name, "channels" .= ([] :: [Text])]
     toJSON (DummyLightSourceDesc name) = object ["name" .= name, "channels" .= ([] :: [Text])]
 
 availableLightSources :: [LightSourceDesc]
-availableLightSources = [DummyLightSourceDesc "dummy1", DummyLightSourceDesc "dummy2"]
+availableLightSources = [GPIOLightSourceDesc "561 nm" Pin3 0.01, GPIOLightSourceDesc "488 nm" Pin4 0.01,
+                         GPIOLightSourceDesc "fluorescence" Pin2 0.01, GPIOLightSourceDesc "DT-2-GS" Pin17 0.025]
+--availableLightSources = [DummyLightSourceDesc "dummy1", DummyLightSourceDesc "dummy2"]
 
 gpioPinsNeededForLightSources :: [LightSourceDesc] -> [GPIOPin]
 gpioPinsNeededForLightSources = map extractPin . filter isGPIOLightSource
     where
         extractPin = glsdPin
-        isGPIOLightSource (GPIOLightSourceDesc _ _) = True
+        isGPIOLightSource (GPIOLightSourceDesc _ _ _) = True
         isGPIOLightSource _ = False
 
 withLightSources :: GPIOHandles -> [LightSourceDesc] -> ([LightSource] -> IO a) -> IO a
@@ -54,7 +59,7 @@ withLightSources handles descs action =
 openLightSources :: GPIOHandles -> [LightSourceDesc] -> IO [LightSource]
 openLightSources gpioHandles descs = sequence $ map openLightSource descs
     where
-        openLightSource (GPIOLightSourceDesc name pin) = return (GPIOLightSource name pin gpioHandles)
+        openLightSource (GPIOLightSourceDesc name pin delay) = return (GPIOLightSource name pin delay gpioHandles)
         openLightSource (CoherentLightSourceDesc name portName) =
             let port = openSerial portName (defaultSerialSettings {commSpeed = CS19200})
             in CoherentLightSource name <$> port
@@ -64,12 +69,12 @@ openLightSources gpioHandles descs = sequence $ map openLightSource descs
 closeLightSources :: [LightSource] -> IO ()
 closeLightSources = mapM_ closeLightSource
     where
-        closeLightSource (GPIOLightSource _ _ _) = return ()
+        closeLightSource (GPIOLightSource _ _ _ _) = return ()
         closeLightSource (DummyLightSource name) = putStr ("closed light source " ++ T.unpack name) >> return ()
-        closeLightSource (CoherentLightSource _ _) = undefined
+        closeLightSource (CoherentLightSource _ port) = closeSerial port
 
 lightSourceName :: LightSource -> Text
-lightSourceName (GPIOLightSource name _ _) = name
+lightSourceName (GPIOLightSource name _ _ _) = name
 lightSourceName (CoherentLightSource name _) = name
 lightSourceName (DummyLightSource name) = name
 
@@ -90,16 +95,23 @@ lookupEitherLightSource lightSources name =
         Nothing -> Left "no such light source"
 
 activateLightSource :: LightSource -> Text -> Double -> IO (Either String ())
-activateLightSource (GPIOLightSource _ pin handles) _ _ = setPinLevel handles pin High >> return (Right ())
-activateLightSource (CoherentLightSource name port) = catch (send port "L=1\r" >> return (Right ())) (\e -> return (Left (displayException (e :: IOException))))
+activateLightSource (GPIOLightSource _ pin delay handles) _ _ = setPinLevel handles pin High >> threadDelay (floor $ 1e6 * delay) >> return (Right ())
+activateLightSource (CoherentLightSource name port) _ power =
+    catch ((++) "P=" <$> powermW >>= \pstr -> send port (T.encodeUtf8 $ T.pack (pstr ++ "\r" ++ "L=1\r")) >> return (Right ()))
+        (\e -> return (Left (displayException (e :: IOException))))
+    where
+        powermW :: IO String
+        powermW = flush port >> send port "?MINLP" >> T.unpack . T.decodeUtf8 <$> recv port 100 >>= return . fst . head . (reads :: String -> [(Double, String)]) >>= \minPower ->
+                  flush port >> send port "?MAXLP" >> T.unpack . T.decodeUtf8 <$> recv port 100 >>= return . fst . head . (reads :: String -> [(Double, String)]) >>= \maxPower ->
+                  return $ show (minPower + power * (maxPower - minPower) / 100.0)
 activateLightSource (DummyLightSource name) c p = putStrLn ("activated " ++ T.unpack name ++ " at power " ++ show p ++ " with channel " ++ T.unpack c) >> return (Right ())
-activateLightSource _ _ _ = undefined
+activateLightSource _ _ _ = error "activating unknown light source"
 
 deactivateLightSource :: LightSource -> IO (Either String ())
-deactivateLightSource (GPIOLightSource _ pin handles) = setPinLevel handles pin Low >> return (Right ())
+deactivateLightSource (GPIOLightSource _ pin delay handles) = setPinLevel handles pin Low >> threadDelay (floor $ 1e6 * delay) >> return (Right ())
 deactivateLightSource (CoherentLightSource name port) = catch (send port "L=0\r" >> return (Right ())) (\e -> return (Left (displayException (e :: IOException))))
 deactivateLightSource (DummyLightSource name) = putStrLn ("deactivated " ++ T.unpack name) >> return (Right ())
-deactivateLightSource _ = undefined
+deactivateLightSource _ = error "deactivating unknown light source"
 
 deactivateAllLightSources :: [LightSource] -> IO (Either String ())
 deactivateAllLightSources sources =
