@@ -7,11 +7,15 @@ import Control.Exception
 import Control.Monad
 import Control.Monad.Trans.Except
 import Data.Aeson
+import Data.ByteString (ByteString)
+import qualified Data.ByteString as B
 import Data.List
 import Data.Maybe
+import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+import Data.Word
 import System.Hardware.Serialport
 import System.IO
 
@@ -42,7 +46,8 @@ instance ToJSON LightSourceDesc where
 
 availableLightSources :: [LightSourceDesc]
 availableLightSources = [GPIOLightSourceDesc "561 nm" Pin3 0.01, GPIOLightSourceDesc "488 nm" Pin4 0.01,
-                         GPIOLightSourceDesc "fluorescence" Pin2 0.01, GPIOLightSourceDesc "DT-2-GS" Pin17 0.025]
+                         GPIOLightSourceDesc "fluorescence" Pin2 0.01, GPIOLightSourceDesc "DT-2-GS" Pin17 0.025,
+                         CoherentLightSourceDesc "405 nm" "/dev/ttyUSB0"]
 --availableLightSources = [DummyLightSourceDesc "dummy1", DummyLightSourceDesc "dummy2"]
 
 gpioPinsNeededForLightSources :: [LightSourceDesc] -> [GPIOPin]
@@ -100,13 +105,20 @@ lookupEitherLightSource lightSources name =
 activateLightSource :: LightSource -> Text -> Double -> IO (Either String ())
 activateLightSource (GPIOLightSource _ pin delay handles) _ _ = setPinLevel handles pin High >> threadDelay (floor $ 1e6 * delay) >> return (Right ())
 activateLightSource (CoherentLightSource name port) _ power =
-    catch ((++) "P=" <$> powermW >>= \pstr -> send port (T.encodeUtf8 $ T.pack (pstr ++ "\r" ++ "L=1\r")) >> return (Right ()))
+    catch ((++) "P=" <$> powermW >>= \pstr -> putStrLn ("will send " ++ pstr ++ "CRLF" ++ "L=1\r\n") >> send port (T.encodeUtf8 $ T.pack (pstr ++ "\r" ++ "L=1\r\n")) >> return (Right ()))
         (\e -> return (Left (displayException (e :: IOException))))
     where
         powermW :: IO String
-        powermW = flush port >> send port "?MINLP" >> T.unpack . T.decodeUtf8 <$> recv port 100 >>= return . fst . head . (reads :: String -> [(Double, String)]) >>= \minPower ->
-                  flush port >> send port "?MAXLP" >> T.unpack . T.decodeUtf8 <$> recv port 100 >>= return . fst . head . (reads :: String -> [(Double, String)]) >>= \maxPower ->
-                  return $ show (minPower + power * (maxPower - minPower) / 100.0)
+        powermW = minPowerQ >>= \minPower -> maxPowerQ >>= \maxPower ->
+                  (return . show) (floor (minPower + power / 100.0 * (maxPower - minPower)) :: Int)
+        minPowerQ = parseQuery "?MINLP\r"
+        maxPowerQ = parseQuery "?MAXLP\r"
+        parseQuery :: ByteString -> IO Double
+        parseQuery q = flush port >> putStrLn ("will send query " ++ T.unpack (T.decodeUtf8 q)) >> send port q >> putStrLn "sent!" >>
+                       T.unpack . T.decodeUtf8 <$> recvUntilTerminator port >>= \answer -> putStrLn ("received answer " ++ answer) >>
+                       (return . read . filter (`elem` ('.' : ['0' .. '9'])) $ answer)
+        recvUntilTerminator :: SerialPort -> IO ByteString
+        recvUntilTerminator port = readFromSerialUntilChar port 10
 activateLightSource (DummyLightSource name) c p = putStrLn ("activated " ++ T.unpack name ++ " at power " ++ show p ++ " with channel " ++ T.unpack c) >> return (Right ())
 activateLightSource _ _ _ = error "activating unknown light source"
 
@@ -122,3 +134,12 @@ deactivateAllLightSources sources =
     case result of
         Right _ -> return (Right ())
         Left e -> return (Left e)
+
+readFromSerialUntilChar :: SerialPort -> Word8 -> IO ByteString
+readFromSerialUntilChar port c = readUntil' port c B.empty
+    where
+        readUntil' :: SerialPort -> Word8 -> ByteString -> IO ByteString
+        readUntil' port c accum | (not $ B.null accum) && (B.last accum == c) = return accum
+                                | otherwise         = putStrLn "will call recv" >> recv port 100 >>= \msg ->
+                                                      putStrLn ("received " ++ show msg) >>
+                                                      readUntil' port c (accum <> msg)
