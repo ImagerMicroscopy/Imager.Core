@@ -105,26 +105,26 @@ lookupEitherLightSource lightSources name =
 activateLightSource :: LightSource -> Text -> Double -> IO (Either String ())
 activateLightSource (GPIOLightSource _ pin delay handles) _ _ = setPinLevel handles pin High >> threadDelay (floor $ 1e6 * delay) >> return (Right ())
 activateLightSource (CoherentLightSource name port) _ power =
-    catch ((++) "P=" <$> powermW >>= \pstr -> putStrLn ("will send " ++ pstr ++ "CRLF" ++ "L=1\r\n") >> send port (T.encodeUtf8 $ T.pack (pstr ++ "\r" ++ "L=1\r\n")) >> return (Right ()))
-        (\e -> return (Left (displayException (e :: IOException))))
+    catch (powerStr >>= sendAndReadResponse port >> sendAndReadResponse port "L=1\r" >> return (Right ()))
+          (\e -> return (Left (displayException (e :: IOException))))
     where
-        powermW :: IO String
-        powermW = minPowerQ >>= \minPower -> maxPowerQ >>= \maxPower ->
-                  (return . show) (floor (minPower + power / 100.0 * (maxPower - minPower)) :: Int)
+        powerStr :: IO ByteString
+        powerStr = minPowerQ >>= \minPower -> maxPowerQ >>= \maxPower ->
+                  let powerVal = floor (minPower + power / 100.0 * (maxPower - minPower)) :: Int
+                  in return ("P=" <> T.encodeUtf8 (T.pack $ show powerVal) <> "\r")
         minPowerQ = parseQuery "?MINLP\r"
         maxPowerQ = parseQuery "?MAXLP\r"
         parseQuery :: ByteString -> IO Double
-        parseQuery q = flush port >> putStrLn ("will send query " ++ T.unpack (T.decodeUtf8 q)) >> send port q >> putStrLn "sent!" >>
-                       T.unpack . T.decodeUtf8 <$> recvUntilTerminator port >>= \answer -> putStrLn ("received answer " ++ answer) >>
-                       (return . read . filter (`elem` ('.' : ['0' .. '9'])) $ answer)
-        recvUntilTerminator :: SerialPort -> IO ByteString
+        parseQuery q = sendAndReadResponse port q >>= return . read . filter (`elem` ('.' : ['0' .. '9'])) . T.unpack . T.decodeUtf8
+        sendAndReadResponse :: SerialPort -> ByteString -> IO ByteString
+        sendAndReadResponse prt msg = send port msg >> recvUntilTerminator port
         recvUntilTerminator port = readFromSerialUntilChar port 10
 activateLightSource (DummyLightSource name) c p = putStrLn ("activated " ++ T.unpack name ++ " at power " ++ show p ++ " with channel " ++ T.unpack c) >> return (Right ())
 activateLightSource _ _ _ = error "activating unknown light source"
 
 deactivateLightSource :: LightSource -> IO (Either String ())
 deactivateLightSource (GPIOLightSource _ pin delay handles) = setPinLevel handles pin Low >> threadDelay (floor $ 1e6 * delay) >> return (Right ())
-deactivateLightSource (CoherentLightSource name port) = catch (send port "L=0\r" >> return (Right ())) (\e -> return (Left (displayException (e :: IOException))))
+deactivateLightSource (CoherentLightSource name port) = catch (send port "L=0\r" >> readFromSerialUntilChar port 10 >> return (Right ())) (\e -> return (Left (displayException (e :: IOException))))
 deactivateLightSource (DummyLightSource name) = putStrLn ("deactivated " ++ T.unpack name) >> return (Right ())
 deactivateLightSource _ = error "deactivating unknown light source"
 
@@ -140,6 +140,5 @@ readFromSerialUntilChar port c = readUntil' port c B.empty
     where
         readUntil' :: SerialPort -> Word8 -> ByteString -> IO ByteString
         readUntil' port c accum | (not $ B.null accum) && (B.last accum == c) = return accum
-                                | otherwise         = putStrLn "will call recv" >> recv port 100 >>= \msg ->
-                                                      putStrLn ("received " ++ show msg) >>
+                                | otherwise         = recv port 100 >>= \msg ->
                                                       readUntil' port c (accum <> msg)
