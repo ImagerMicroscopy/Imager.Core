@@ -33,4 +33,5 @@ executable RaspCuvettor
                      , LightSources
                      , IrradiationProgram
                      , Detector
+                     , OODetector
   ghc-options:         -O2

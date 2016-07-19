@@ -1,0 +1,48 @@
+{-# LANGUAGE BangPatterns, InstanceSigs #-}
+
+module OODetector where
+
+import Control.Monad.Trans.Except
+import Data.ByteString (ByteString)
+import qualified Data.ByteString as B
+import Data.Vector.Storable (Vector)
+import qualified Data.Vector.Storable as V
+import Foreign
+
+import Detector
+import OOSeaBreeze
+
+data OODetector = OODetector {
+                      oodDeviceID :: !DeviceID
+                    , oodFeatureID :: !FeatureID
+                    , oodNonlinearityCorrection :: Double -> Double
+                }
+
+instance Detector OODetector where
+    acquireData :: OODetector -> ExposureTime -> Gain -> NMeasurementsToAverage -> IO (Either String AcquiredData)
+    acquireData (OODetector dID fID corrFunc) expTime _ nSpectra =
+        acquireSpectrum (dID, fID) expTime nSpectra >>= \spectrum ->
+        case spectrum of
+            Left e  -> return (Left e)
+            Right v -> return $ V.map corrFunc v >>=
+                       let nRows = V.length v
+                           nCols = 1
+                           bytes = byteStringFromVector v
+                           numType = FP64
+                       in return $ Right (AcquiredData nRows nCols bytes numType)
+
+acquireSpectrum :: (DeviceID, FeatureID) -> Double -> Int -> IO (Either String (Vector Double))
+acquireSpectrum (deviceID, featureID) exposure nSpectra =
+    if ((exposure <= 0.0) || (exposure > 1.0) || (nSpectra < 1))
+        then return (Left "invalid number of spectra or exposure time")
+        else
+          runExceptT (
+              ExceptT (setIntegrationTimeMicros deviceID featureID integrationMicroseconds) >>
+              ExceptT (measureSpectrum deviceID featureID) >>   -- force a fresh acquisition
+              ExceptT (measureAveragedSpectrum deviceID featureID nSpectra))
+    where
+        integrationMicroseconds = floor (exposure * 1e6)
+
+acquireWavelengths :: (DeviceID, FeatureID) -> IO (Either String (Vector Double))
+acquireWavelengths (deviceID, featureID) =
+    getWavelengths deviceID featureID

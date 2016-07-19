@@ -19,6 +19,7 @@ import qualified Data.Vector.Storable as V
 import Foreign
 import System.IO.Unsafe
 
+import Detector
 import GPIO
 import OOSeaBreeze
 import IrradiationProgram
@@ -96,14 +97,14 @@ data ResponseMessage = StatusOK
                      | StatusNoNewAsyncSpectra
                      | StatusNoNewAsyncSpectraComing
                      | AcquiredSpectrum {
-                         respAcqSpectrum   :: !(Vector Double)
+                         respAcqSpectrum   :: !ByteString
                        , cachedWavelengths :: !Text
                        }
                      | Wavelengths !(Vector Double)
                      | AvailableLightSources ![LightSourceDesc]
                      | Pong
                      | AsyncAcquiredSpectra {
-                         respAsyncSpectra :: ![[(Vector Double, Double)]]
+                         respAsyncSpectra :: ![[(ByteString, Double)]]
                        , respAsyncCachedWavelengths :: !Text
                        }
                      | AsyncAcquisitionIsRunning !Bool
@@ -114,9 +115,9 @@ instance ToJSON ResponseMessage where
     toEncoding (StatusError s) = pairs ("responsetype" .= ("status" :: Text) <> "status" .= ("error"  :: Text) <> "error" .= s)
     toEncoding StatusNoNewAsyncSpectra = pairs ("responsetype" .= ("asyncacquisitionspectrastatus" :: Text) <> "status" .= ("nonewspectra" :: Text))
     toEncoding (StatusNoNewAsyncSpectraComing) = pairs ("responsetype" .= ("asyncacquisitionspectrastatus" :: Text) <> "status" .= ("nonewspectracoming" :: Text))
-    toEncoding (AcquiredSpectrum v w) = pairs ("responsetype" .= ("spectrum" :: Text) <> "spectrum" .= (T.decodeUtf8 . B64.encode $ byteStringFromVector v)
+    toEncoding (AcquiredSpectrum v w) = pairs ("responsetype" .= ("spectrum" :: Text) <> "spectrum" .= (T.decodeUtf8 . B64.encode $ v)
                                                 <> "wavelengths" .= w)
-    toEncoding (Wavelengths v) = pairs ("responsetype" .= ("wavelengths" :: Text) <> "wavelengths" .= (T.decodeUtf8 . B64.encode $ byteStringFromVector v))
+    toEncoding (Wavelengths v) = pairs ("responsetype" .= ("wavelengths" :: Text) <> "wavelengths" .= (T.decodeUtf8 . B64.encode $ v))
     toEncoding (AvailableLightSources ls) = pairs ("responsetype" .= ("availablelightsources" :: Text) <> "lightsources" .= ls)
     toEncoding (Pong) = pairs ("responsetype" .= ("pong" :: Text))
     toEncoding (AsyncAcquiredSpectra spectra w) = 
@@ -148,13 +149,3 @@ instance ToJSON GPIOPin where
     toJSON Pin10 = "pin10"
     toJSON Pin11 = "pin11"
     toJSON Pin17 = "pin17"
-
-byteStringFromVector :: forall a . Storable a => Vector a -> SB.ByteString
-byteStringFromVector v = unsafePerformIO $
-    let sizeOfElem = sizeOf (undefined :: a)
-        nElems = V.length v
-        nBytes = nElems * sizeOfElem in
-    V.unsafeWith v $ \vecPtr ->
-    mallocBytes nBytes >>= \bsPtr ->
-    copyBytes (castPtr bsPtr) vecPtr nBytes >>
-    SB.unsafePackMallocCStringLen (bsPtr, nBytes)

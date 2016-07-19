@@ -17,6 +17,8 @@ import Data.Maybe
 import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
 
+import Detector
+import OODetector
 import GPIO
 import OOSeaBreeze
 import SimpleJSONServer
@@ -184,10 +186,6 @@ acquireSpectrum (deviceID, featureID) exposure nSpectra =
               ExceptT (measureAveragedSpectrum deviceID featureID nSpectra))
     where
         integrationMicroseconds = floor (exposure * 1e6)
-
-acquireWavelengths :: (DeviceID, FeatureID) -> IO (Either String (Vector Double))
-acquireWavelengths (deviceID, featureID) =
-    getWavelengths deviceID featureID
 
 setPinLevelOrError :: Environment -> GPIOPin -> Level -> IO (ResponseMessage, Environment)
 setPinLevelOrError env pin level =
