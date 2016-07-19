@@ -46,8 +46,8 @@ instance ToJSON LightSourceDesc where
 
 availableLightSources :: [LightSourceDesc]
 availableLightSources = [GPIOLightSourceDesc "561 nm" Pin3 0.01, GPIOLightSourceDesc "488 nm" Pin4 0.01,
-                         GPIOLightSourceDesc "fluorescence" Pin2 0.01, GPIOLightSourceDesc "DT-2-GS" Pin17 0.025,
-                         CoherentLightSourceDesc "405 nm" "/dev/ttyUSB0"]
+                         GPIOLightSourceDesc "fluorescence" Pin2 0.01, GPIOLightSourceDesc "DT-2-GS" Pin17 0.025]
+                         --CoherentLightSourceDesc "405 nm" "/dev/ttyUSB0"]
 --availableLightSources = [DummyLightSourceDesc "dummy1", DummyLightSourceDesc "dummy2"]
 
 gpioPinsNeededForLightSources :: [LightSourceDesc] -> [GPIOPin]
