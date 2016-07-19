@@ -32,4 +32,5 @@ executable RaspCuvettor
   other-modules:       CuvettorTypes
                      , LightSources
                      , IrradiationProgram
+                     , Detector
   ghc-options:         -O2
