@@ -20,19 +20,19 @@ import Foreign
 import System.IO.Unsafe
 
 import MiscUtils
+import Detector
 import GPIO
 import OOSeaBreeze
 import IrradiationProgram
 import LightSources
 
-data Environment = Environment {
+data Environment a = Environment {
                       envLightSources :: [LightSource]
                     , envGPIOHandles :: !GPIOHandles
                     , envAvailablePins :: [GPIOPin]
-                    , envSpectrometer :: !(Maybe (DeviceID, FeatureID))
-                    , envSpectrometerNonlinearityCorrection :: Double -> Double
+                    , envDetector :: a
                     , envEncodedSpectrometerWavelengths :: !Text
-                    , envAsyncSpectraMVar :: MVar ([[(V.Vector Double, Double)]])
+                    , envAsyncSpectraMVar :: MVar ([[(AcquiredData, Double)]])
                     , envAsyncProgramWorker :: Async ()
 }
 
@@ -41,7 +41,6 @@ type ExposureTime = Double
 data RequestMessage = SetPinHigh !GPIOPin
                     | SetPinLow !GPIOPin
                     | AcquireSpectrum !DetectionParams
-                    | SendWavelengths
                     | ListLightSources
                     | ActivateLightSource {
                         reqActivateName :: !Text
@@ -62,7 +61,6 @@ instance ToJSON RequestMessage where
     toEncoding (SetPinHigh pin) = pairs ("action" .= ("setpinhigh" :: Text) <> "pin" .= show pin)
     toEncoding (SetPinLow pin) = pairs ("action" .= ("setpinlow" :: Text) <> "pin" .= show pin)
     toEncoding (AcquireSpectrum p) = pairs ("action" .= ("acquirespectrum"  :: Text) <> "params" .= p)
-    toEncoding SendWavelengths = pairs ("action" .= ("sendwavelengths"  :: Text))
     toEncoding ListLightSources = pairs ("action" .= ("listlightsources" :: Text))
     toEncoding (ActivateLightSource name channel power) = pairs ("action" .= ("activatelightsource" :: Text) <> "name" .= name <> "channel" .= channel <> "power" .= power)
     toEncoding (DeactivateLightSource name) = pairs ("action" .= ("deactivatelightsource" :: Text) <> "name" .= name)
@@ -79,7 +77,6 @@ instance FromJSON RequestMessage where
             "setpinhigh" -> SetPinHigh <$> v .: "pin"
             "setpinlow"  -> SetPinLow <$> v .: "pin"
             "acquirespectrum" -> AcquireSpectrum <$> v .: "params"
-            "sendwavelengths" -> return SendWavelengths
             "listlightsources" -> return ListLightSources
             "activatelightsource" -> ActivateLightSource <$> v .: "name" <*> v .: "channel" <*> v .: "power"
             "deactivatelightsource" -> DeactivateLightSource <$> v .: "name"
@@ -100,7 +97,6 @@ data ResponseMessage = StatusOK
                          respAcqSpectrum   :: !SB.ByteString
                        , cachedWavelengths :: !Text
                        }
-                     | Wavelengths !(Vector Double)
                      | AvailableLightSources ![LightSourceDesc]
                      | Pong
                      | AsyncAcquiredSpectra {
@@ -120,7 +116,6 @@ instance ToJSON ResponseMessage where
     toEncoding (StatusNoNewAsyncSpectraComing) = pairs ("responsetype" .= ("asyncacquisitionspectrastatus" :: Text) <> "status" .= ("nonewspectracoming" :: Text))
     toEncoding (AcquiredSpectrum v w) = pairs ("responsetype" .= ("spectrum" :: Text) <> "spectrum" .= (T.decodeUtf8 . B64.encode $ v)
                                                 <> "wavelengths" .= w)
-    toEncoding (Wavelengths v) = pairs ("responsetype" .= ("wavelengths" :: Text) <> "wavelengths" .= (T.decodeUtf8 . B64.encode . byteStringFromVector $ v))
     toEncoding (AvailableLightSources ls) = pairs ("responsetype" .= ("availablelightsources" :: Text) <> "lightsources" .= ls)
     toEncoding (Pong) = pairs ("responsetype" .= ("pong" :: Text))
     toEncoding (AsyncAcquiredSpectra spectra w) = 

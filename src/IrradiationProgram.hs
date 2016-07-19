@@ -16,6 +16,7 @@ import System.Clock
 
 import OOSeaBreeze
 import LightSources
+import Detector
 
 data IrradiationProgram = IrradiationProgram {
                    ipSteps :: [ProgramStep]
@@ -42,12 +43,11 @@ data IrradiationParams = IrradiationParams {
                          } 
                          deriving (Show)
 
-data ProgramEnvironment = ProgramEnvironment {
-                              peSpectrometer :: (DeviceID, FeatureID)
-                            , peSpectrometerNonlinearityCorrection :: Double -> Double
-                            , peLightSources :: [LightSource]
-                            , peSpectraMVar :: MVar ([[(V.Vector Double, Double)]])
-                          }
+data ProgramEnvironment a = ProgramEnvironment {
+                                peDetector :: a
+                              , peLightSources :: [LightSource]
+                              , peSpectraMVar :: MVar ([[(AcquiredData, Double)]])
+                            }
 
 instance FromJSON IrradiationProgram where
     parseJSON (Object v) =
@@ -92,7 +92,7 @@ instance ToJSON IrradiationParams where
         pairs ("lightsourcename" .= lName <> "lightsourcechannel" .= channel <> "lightsourcepower" .= power)
     toJSON _ = error "no toJSON"
 
-executeIrradiationProgram :: IrradiationProgram -> ProgramEnvironment -> IO ()
+executeIrradiationProgram :: Detector a => IrradiationProgram -> ProgramEnvironment a -> IO ()
 executeIrradiationProgram (IrradiationProgram steps detection) env =
     (getTime Monotonic >>= \startTime ->
     putStrLn "will execute acquisition" >> putStrLn (show (initialAcquisitionStep : steps)) >>
@@ -102,19 +102,17 @@ executeIrradiationProgram (IrradiationProgram steps detection) env =
         initialAcquisitionStep :: ProgramStep   -- makes sure a spectrum gets acquired before the acquisition
         initialAcquisitionStep = ProgramStep 0.0 1 []
 
-        executeStep :: ProgramEnvironment -> TimeSpec -> [DetectionParams] -> ProgramStep -> IO ()
+        executeStep :: Detector a => ProgramEnvironment a -> TimeSpec -> [DetectionParams] -> ProgramStep -> IO ()
         executeStep env startTime detParams ps =
             forM_ (replicate (psNTimesToPerform ps) ps) $ \step ->
                 executeSingleIrradiationInStep detParams step >>= \newSpectra ->
                 modifyMVar_ (peSpectraMVar env) (\previousSpectra ->
                     when (length previousSpectra > 100) (error "too many async spectra stored") >>
-                    return (previousSpectra ++ [map (correctNonLinearity . toSecondsFromStart) newSpectra]))
+                    return (previousSpectra ++ [map toSecondsFromStart newSpectra]))
             where
-                correctNonLinearity (vec, t) = (V.map correctionFunc vec, t)
-                toSecondsFromStart (vec, t) = (vec, (*) 1.0e-9 . fromIntegral . timeSpecAsNanoSecs $ diffTimeSpec t startTime)
-                correctionFunc = peSpectrometerNonlinearityCorrection env
+                toSecondsFromStart (dat, t) = (dat, (*) 1.0e-9 . fromIntegral . timeSpecAsNanoSecs $ diffTimeSpec t startTime)
         
-        executeSingleIrradiationInStep :: [DetectionParams] -> ProgramStep -> IO [(V.Vector Double, TimeSpec)]
+        executeSingleIrradiationInStep :: [DetectionParams] -> ProgramStep -> IO [(AcquiredData, TimeSpec)]
         executeSingleIrradiationInStep detParams ProgramStep{..} =
             runExceptT (
                 ExceptT (enableLightSources lightSources psIrradiation) >>
@@ -124,26 +122,24 @@ executeIrradiationProgram (IrradiationProgram steps detection) env =
                 Left err -> error err
                 Right _ -> mapM executeStepDetection detParams
 
-        executeStepDetection :: DetectionParams -> IO (V.Vector Double, TimeSpec)
+        executeStepDetection :: DetectionParams -> IO (AcquiredData, TimeSpec)
         executeStepDetection params =
             getTime Monotonic >>= \timeStamp ->
-            executeDetection (spectrometerDeviceID, spectrometerFeatureID) lightSources  params >>= \detResult ->
+            executeDetection detector lightSources  params >>= \detResult ->
             case detResult of
                 Right v -> return (v, timeStamp)
                 Left err -> error err
 
         lightSources = peLightSources env
-        spectrometerDeviceID = fst (peSpectrometer env)
-        spectrometerFeatureID = snd (peSpectrometer env)
+        detector = peDetector env
         
-executeDetection :: (DeviceID, FeatureID) -> [LightSource] -> DetectionParams -> IO (Either String (V.Vector Double))
-executeDetection (dID, fID) lss DetectionParams{..} =
+executeDetection :: Detector a => a -> [LightSource] -> DetectionParams -> IO (Either String AcquiredData)
+executeDetection det lss DetectionParams{..} =
     runExceptT (
         ExceptT (enableLightSources lss dpIrradiation) >>
-        ExceptT (setIntegrationTimeMicros dID fID (floor $ dpExposureTime * 1.0e6)) >>
-        ExceptT (measureAveragedSpectrum dID fID dpNSpectraToAverage) >>= \spectrum ->
+        ExceptT (acquireData det dpExposureTime 1.0 dpNSpectraToAverage) >>= \acquiredData ->
         ExceptT (disableLightSources lss dpIrradiation) >>
-        ExceptT (return $ Right spectrum))
+        ExceptT (return $ Right acquiredData))
 
 enableLightSources :: [LightSource] -> [IrradiationParams] -> IO (Either String ())
 enableLightSources lss params

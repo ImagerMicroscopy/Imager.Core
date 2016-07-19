@@ -48,14 +48,14 @@ main =
     bracket fetchAvailableSpectrometer closeAvailableSpectrometer $ \maybeSpectrometer ->
     fetchEncodedWavelengths maybeSpectrometer >>= \encodedWavelengths ->
     nonlinearityCorrection maybeSpectrometer >>= \nonlinearityCorrFunc ->
-    
-    putStrLn (if (isJust maybeSpectrometer) then "opened spectrometer" else "no spectrometer found") >>
+    putStrLn (if (isJust maybeSpectrometer) then "opened spectrometer" else (error "no spectrometer found")) >>
     
     putStrLn ("running server") >>
     newMVar [] >>= \asyncSpectraMVar ->
     async (return ()) >>= \asyncProgramWorker ->
     wait asyncProgramWorker >>
-    let env = Environment lightSources gpioHandles availablePins maybeSpectrometer nonlinearityCorrFunc encodedWavelengths asyncSpectraMVar asyncProgramWorker
+    let (dID, fID) = fromJust maybeSpectrometer
+        env = Environment lightSources gpioHandles availablePins (OODetector dID fID nonlinearityCorrFunc) encodedWavelengths asyncSpectraMVar asyncProgramWorker
     in runServer 3200 messageHandler env serverSettings
     )))
     where
@@ -74,40 +74,27 @@ main =
             where
                 polyCorr x coeffs = sum $ zipWith3 (\x coeff order -> coeff * x^order) (repeat x) coeffs ([0 ..] :: [Int])
 
-messageHandler :: MessageHandler Environment
+messageHandler :: Detector a => MessageHandler (Environment a)
 messageHandler msg env =
     case (fromJSON msg) of
         Error _   -> return (ResponseJSON (object [("responsetype", "invalidquery")]), env)
         Success v -> performAction env v >>= \(resp, newEnv) -> return (ResponseLBS (encode resp), newEnv)
 
-performAction :: Environment -> RequestMessage -> IO (ResponseMessage, Environment)
+performAction :: Detector a => Environment a -> RequestMessage -> IO (ResponseMessage, Environment a)
 performAction env (SetPinHigh pin) = setPinLevelOrError env pin High
 performAction env (SetPinLow pin)  = setPinLevelOrError env pin Low
 
 performAction env (AcquireSpectrum params) =
     runExceptT (
-        ExceptT (return $ ensureSpectrometerAvailable maybeSpectrometer) >>
         ExceptT (ensureAsyncAcquisitionNotRunning env) >>
-        ExceptT (executeDetection (fromJust maybeSpectrometer) lightsources params)) >>= \spectrum ->
-    case spectrum of
+        ExceptT (executeDetection detector lightsources params)) >>= \acquiredData ->
+    case acquiredData of
         Left err -> return (StatusError err, env)
-        Right v  -> return (AcquiredSpectrum (byteStringFromVector $ V.map nonlinearityCorrection v) wl, env)
+        Right (AcquiredData _ _ bytes _)  -> return (AcquiredSpectrum bytes wl, env)
     where
-        maybeSpectrometer = envSpectrometer env
+        detector = envDetector env
         wl = envEncodedSpectrometerWavelengths env
-        nonlinearityCorrection = envSpectrometerNonlinearityCorrection env
         lightsources = envLightSources env
-
-performAction env SendWavelengths =
-    runExceptT (
-        ExceptT (return $ ensureSpectrometerAvailable maybeSpectrometer) >>
-        ExceptT (ensureAsyncAcquisitionNotRunning env) >>
-        ExceptT (acquireWavelengths (fromJust maybeSpectrometer))) >>= \wavelengths ->
-    case wavelengths of
-        Left err -> return (StatusError err, env)
-        Right v  -> return (Wavelengths v, env)
-    where
-        maybeSpectrometer = envSpectrometer env
 
 performAction env ListLightSources = return (AvailableLightSources availableLightSources, env)
 
@@ -137,26 +124,26 @@ performAction env Ping = return (Pong, env)
 
 performAction env (ExecuteIrradiationProgram prog) =
     runExceptT (
-        ExceptT (return $ ensureSpectrometerAvailable maybeSpectrometer) >>
         ExceptT (ensureAsyncAcquisitionNotRunning env) >>
         ExceptT (return $ validateIrradiationProgram lightSources prog)) >>= \validation ->
     case validation of
         Left err -> return (StatusError err, env)
         Right _  -> newMVar [] >>= \spectraMVar ->
-                    async (executeIrradiationProgram prog (ProgramEnvironment (fromJust maybeSpectrometer) nonLinearityCorrection lightSources spectraMVar)) >>= \asyncWorker ->
+                    async (executeIrradiationProgram prog (ProgramEnvironment detector lightSources spectraMVar)) >>= \asyncWorker ->
                     let newEnv = env {envAsyncSpectraMVar = spectraMVar, envAsyncProgramWorker = asyncWorker}
                     in return (StatusOK, newEnv)
     where
-        maybeSpectrometer = envSpectrometer env
-        nonLinearityCorrection = envSpectrometerNonlinearityCorrection env
+        detector = envDetector env
         lightSources = envLightSources env
 
 performAction env FetchAsyncSpectra =
     modifyMVar spectraMVar (\s -> return ([], s)) >>= \newSpectra ->
     asyncAcquisitionErrorMessage env >>= \asyncErrorMsg ->
     asyncAcquisitionRunning env >>= \asyncIsRunning ->
-    return (specResponse asyncErrorMsg asyncIsRunning newSpectra, env)
+    return (specResponse asyncErrorMsg asyncIsRunning (extractBytes newSpectra), env)
     where
+        extractBytes :: [[(AcquiredData, Double)]] -> [[(SB.ByteString, Double)]]
+        extractBytes = map (map (\(d, t) -> (acqData d, t)))
         spectraMVar = envAsyncSpectraMVar env
         wl = envEncodedSpectrometerWavelengths env
         specResponse asyncErrorMsg asyncIsRunning newSpectra
@@ -188,7 +175,7 @@ acquireSpectrum (deviceID, featureID) exposure nSpectra =
     where
         integrationMicroseconds = floor (exposure * 1e6)
 
-setPinLevelOrError :: Environment -> GPIOPin -> Level -> IO (ResponseMessage, Environment)
+setPinLevelOrError :: Environment a -> GPIOPin -> Level -> IO (ResponseMessage, Environment a)
 setPinLevelOrError env pin level =
     if (not havePin)
       then return (StatusError "pin not available", env)
@@ -198,18 +185,14 @@ setPinLevelOrError env pin level =
         havePin = pin `elem` (envAvailablePins env)
         gpioHandles = envGPIOHandles env
 
-ensureSpectrometerAvailable :: Maybe (DeviceID, FeatureID) -> Either String ()
-ensureSpectrometerAvailable Nothing = Left "no spectrometer available"
-ensureSpectrometerAvailable (Just _) = Right ()
-
-ensureAsyncAcquisitionNotRunning :: Environment -> IO (Either String ())
+ensureAsyncAcquisitionNotRunning :: Environment a -> IO (Either String ())
 ensureAsyncAcquisitionNotRunning env =
     asyncAcquisitionRunning env >>= \isRunning ->
     if isRunning
         then return (Left "async acquisition running")
         else return (Right ())
 
-asyncAcquisitionRunning :: Environment -> IO Bool
+asyncAcquisitionRunning :: Environment a -> IO Bool
 asyncAcquisitionRunning env =
     poll worker >>= \workerStatus ->
     case workerStatus of
@@ -218,7 +201,7 @@ asyncAcquisitionRunning env =
     where
         worker = envAsyncProgramWorker env
 
-asyncAcquisitionErrorMessage :: Environment -> IO String
+asyncAcquisitionErrorMessage :: Environment a -> IO String
 asyncAcquisitionErrorMessage env =
     poll worker >>= \status ->
     case status of
