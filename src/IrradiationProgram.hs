@@ -46,7 +46,7 @@ data IrradiationParams = IrradiationParams {
 data ProgramEnvironment a = ProgramEnvironment {
                                 peDetector :: a
                               , peLightSources :: [LightSource]
-                              , peSpectraMVar :: MVar ([[(AcquiredData, Double)]])
+                              , peDataMVar :: MVar ([[(AcquiredData, Double)]])
                             }
 
 instance FromJSON IrradiationProgram where
@@ -106,7 +106,7 @@ executeIrradiationProgram (IrradiationProgram steps detection) env =
         executeStep env startTime detParams ps =
             forM_ (replicate (psNTimesToPerform ps) ps) $ \step ->
                 executeSingleIrradiationInStep detParams step >>= \newSpectra ->
-                modifyMVar_ (peSpectraMVar env) (\previousSpectra ->
+                modifyMVar_ (peDataMVar env) (\previousSpectra ->
                     when (length previousSpectra > 100) (error "too many async spectra stored") >>
                     return (previousSpectra ++ [map toSecondsFromStart newSpectra]))
             where

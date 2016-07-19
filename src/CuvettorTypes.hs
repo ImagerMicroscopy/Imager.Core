@@ -32,7 +32,7 @@ data Environment a = Environment {
                     , envAvailablePins :: [GPIOPin]
                     , envDetector :: a
                     , envEncodedSpectrometerWavelengths :: !Text
-                    , envAsyncSpectraMVar :: MVar ([[(AcquiredData, Double)]])
+                    , envAsyncDataMVar :: MVar ([[(AcquiredData, Double)]])
                     , envAsyncProgramWorker :: Async ()
 }
 

@@ -130,7 +130,7 @@ performAction env (ExecuteIrradiationProgram prog) =
         Left err -> return (StatusError err, env)
         Right _  -> newMVar [] >>= \spectraMVar ->
                     async (executeIrradiationProgram prog (ProgramEnvironment detector lightSources spectraMVar)) >>= \asyncWorker ->
-                    let newEnv = env {envAsyncSpectraMVar = spectraMVar, envAsyncProgramWorker = asyncWorker}
+                    let newEnv = env {envAsyncDataMVar = spectraMVar, envAsyncProgramWorker = asyncWorker}
                     in return (StatusOK, newEnv)
     where
         detector = envDetector env
@@ -144,7 +144,7 @@ performAction env FetchAsyncSpectra =
     where
         extractBytes :: [[(AcquiredData, Double)]] -> [[(SB.ByteString, Double)]]
         extractBytes = map (map (\(d, t) -> (acqData d, t)))
-        spectraMVar = envAsyncSpectraMVar env
+        spectraMVar = envAsyncDataMVar env
         wl = envEncodedSpectrometerWavelengths env
         specResponse asyncErrorMsg asyncIsRunning newSpectra
             | not (null asyncErrorMsg) = StatusError asyncErrorMsg
