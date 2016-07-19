@@ -11,6 +11,7 @@ import Foreign
 
 import Detector
 import OOSeaBreeze
+import MiscUtils
 
 data OODetector = OODetector {
                       oodDeviceID :: !DeviceID
@@ -24,10 +25,10 @@ instance Detector OODetector where
         acquireSpectrum (dID, fID) expTime nSpectra >>= \spectrum ->
         case spectrum of
             Left e  -> return (Left e)
-            Right v -> return $ V.map corrFunc v >>=
-                       let nRows = V.length v
+            Right v -> return (V.map corrFunc v) >>= \corrected ->
+                       let nRows = V.length corrected
                            nCols = 1
-                           bytes = byteStringFromVector v
+                           bytes = byteStringFromVector corrected
                            numType = FP64
                        in return $ Right (AcquiredData nRows nCols bytes numType)
 

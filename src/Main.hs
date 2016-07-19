@@ -24,6 +24,7 @@ import OOSeaBreeze
 import SimpleJSONServer
 import IrradiationProgram
 import LightSources
+import MiscUtils
 
 import CuvettorTypes
 
@@ -90,7 +91,7 @@ performAction env (AcquireSpectrum params) =
         ExceptT (executeDetection (fromJust maybeSpectrometer) lightsources params)) >>= \spectrum ->
     case spectrum of
         Left err -> return (StatusError err, env)
-        Right v  -> return (AcquiredSpectrum (V.map nonlinearityCorrection v) wl, env)
+        Right v  -> return (AcquiredSpectrum (byteStringFromVector $ V.map nonlinearityCorrection v) wl, env)
     where
         maybeSpectrometer = envSpectrometer env
         wl = envEncodedSpectrometerWavelengths env
