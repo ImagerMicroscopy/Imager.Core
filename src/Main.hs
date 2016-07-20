@@ -18,9 +18,18 @@ import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
 
 import Detector
-import OODetector
-import GPIO
+#ifdef WITH_OCEANOPTICS
 import OOSeaBreeze
+import OODetector
+#endif
+#ifdef WITH_SCCAMERA
+import SCCamera
+import SCCameraDetector
+#endif
+#if !defined(WITH_OCEANOPTICS) && !defined(WITH_SCCAMERA)
+    #error "building without any detector support"
+#endif
+import GPIO
 import SimpleJSONServer
 import IrradiationProgram
 import LightSources
@@ -44,23 +53,36 @@ main =
     withLightSources gpioHandles availableLightSources (\lightSources ->
     putStrLn ("opened light sources") >>
     
-    withSeaBreeze (
-    bracket fetchAvailableSpectrometer closeAvailableSpectrometer $ \maybeSpectrometer ->
-    fetchEncodedWavelengths maybeSpectrometer >>= \encodedWavelengths ->
-    nonlinearityCorrection maybeSpectrometer >>= \nonlinearityCorrFunc ->
-    putStrLn (if (isJust maybeSpectrometer) then "opened spectrometer" else (error "no spectrometer found")) >>
-    
-    putStrLn ("running server") >>
     newMVar [] >>= \asyncSpectraMVar ->
     async (return ()) >>= \asyncProgramWorker ->
     wait asyncProgramWorker >>
+
+#ifdef WITH_OCEANOPTICS
+    (withSeaBreeze $
+    bracket fetchAvailableSpectrometer closeAvailableSpectrometer $ \maybeSpectrometer ->
+    fetchEncodedWavelengths maybeSpectrometer >>= \encodedWavelengths ->
+    nonlinearityCorrection maybeSpectrometer >>= \nonlinearityCorrFunc ->
+    putStrLn "opened spectrometer" >>
     let (dID, fID) = fromJust maybeSpectrometer
-        env = Environment lightSources gpioHandles availablePins (OODetector dID fID nonlinearityCorrFunc) encodedWavelengths asyncSpectraMVar asyncProgramWorker
-    in runServer 3200 messageHandler env serverSettings
+        detector = OODetector dID fID nonlinearityCorrFunc
+    in
+#endif
+#if WITH_SCCAMERA
+    (bracket initializeCameraDLL (\_ -> shutdownCameraDLL) $ \initStatus ->
+    when (isLeft initStatus) (error (fromLeft initStatus)) >>
+    listConnectedCameras >>= \camNames ->
+    when (null camNames) (error "no cameras found")
+    let camName = head camNames
+        encodedWavelengths = T.null
+    in
+#endif
+      let env = Environment lightSources gpioHandles availablePins detector encodedWavelengths asyncSpectraMVar asyncProgramWorker
+      in runServer 3200 messageHandler env serverSettings
     )))
     where
         requiredGPIOPins :: [GPIOPin]
         requiredGPIOPins = nub (availablePins ++ (gpioPinsNeededForLightSources availableLightSources))
+#ifdef WITH_OCEANOPTICS
         fetchEncodedWavelengths :: Maybe (DeviceID, FeatureID) -> IO Text
         fetchEncodedWavelengths Nothing = return T.empty
         fetchEncodedWavelengths (Just (dID, fID)) =
@@ -73,6 +95,7 @@ main =
             return (\x -> x / polyCorr x coeffs)
             where
                 polyCorr x coeffs = sum $ zipWith3 (\x coeff order -> coeff * x^order) (repeat x) coeffs ([0 ..] :: [Int])
+#endif
 
 messageHandler :: Detector a => MessageHandler (Environment a)
 messageHandler msg env =
