@@ -12,6 +12,15 @@ category:            Web
 build-type:          Simple
 cabal-version:       >=1.10
 
+Flag withoceanoptics {
+    Description:     Enable Ocean Optics support
+    Default:         True
+}
+Flag withsccamera {
+    Description:     Enable SCCamera support
+    Default:         True
+}
+
 executable RaspCuvettor
   hs-source-dirs:      src
   main-is:             Main.hs
@@ -28,13 +37,19 @@ executable RaspCuvettor
                      , vector
                      , SimpleJSONServer
                      , GPIO
-                     , hsOceanOptics
-                     , hsSCCamera
   other-modules:       CuvettorTypes
                      , LightSources
                      , IrradiationProgram
                      , Detector
-                     , OODetector
-                     , SCCamDetector
                      , MiscUtils
+  default-extensions:  CPP
   ghc-options:         -O2
+
+  if (flag(withoceanoptics))
+      build-depends:   hsOceanOptics
+      cpp-options:     -DWITH_OCEANOPTICS
+      other-modules:   OODetector
+  if (flag(withsccamera))
+      build-depends:   hsSCCamera
+      cpp-options:     -DWITH_SCCAMERA
+      other-modules:   SCCamDetector

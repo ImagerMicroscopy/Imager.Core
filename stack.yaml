@@ -7,17 +7,19 @@ resolver: nightly-2016-04-05
 packages:
 - '.'
 - location:
-    git: https://pdedecker@bitbucket.org/pdedecker/simplejsonserver.git 
+    git: https://pdedecker@bitbucket.org/pdedecker/simplejsonserver.git
     commit: c458b082dcb69d300c9d858dbb88addaffb9f194
 - location:
-    git: https://pdedecker@bitbucket.org/pdedecker/hsoceanoptics.git 
+    git: https://pdedecker@bitbucket.org/pdedecker/hsoceanoptics.git
     commit: bccdba4d66850bfcdc9ff4658b371589ad8692c4
 - location:
-    git: https://pdedecker@bitbucket.org/pdedecker/hsgpio.git 
+    git: https://pdedecker@bitbucket.org/pdedecker/hsgpio.git
     commit: e8e80cd5fd8048f6596c36c4663465f5aebaf2e7
+  extra-dep: true
 - location:
     git: https://pdedecker@bitbucket.org/pdedecker/hssccamera.git
     commit: 88ab45d0d958e32e4adcf7303378cca59dc863ec
+  extra-dep: true
 
 # Packages to be pulled from upstream that are not in the resolver (e.g., acme-missiles-0.3)
 extra-deps: []
