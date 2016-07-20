@@ -29,10 +29,12 @@ executable RaspCuvettor
                      , SimpleJSONServer
                      , GPIO
                      , hsOceanOptics
+                     , hsSCCamera
   other-modules:       CuvettorTypes
                      , LightSources
                      , IrradiationProgram
                      , Detector
                      , OODetector
+                     , SCCamDetector
                      , MiscUtils
   ghc-options:         -O2

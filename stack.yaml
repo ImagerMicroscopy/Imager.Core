@@ -15,6 +15,9 @@ packages:
 - location:
     git: https://pdedecker@bitbucket.org/pdedecker/hsgpio.git 
     commit: e8e80cd5fd8048f6596c36c4663465f5aebaf2e7
+- location:
+    git: https://pdedecker@bitbucket.org/pdedecker/hssccamera.git
+    commit: 88ab45d0d958e32e4adcf7303378cca59dc863ec
 
 # Packages to be pulled from upstream that are not in the resolver (e.g., acme-missiles-0.3)
 extra-deps: []
