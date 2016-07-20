@@ -51,3 +51,21 @@ acquireSpectrum (deviceID, featureID) exposure nSpectra =
 acquireWavelengths :: (DeviceID, FeatureID) -> IO (Either String (Vector Double))
 acquireWavelengths (deviceID, featureID) =
     getWavelengths deviceID featureID
+
+fetchAvailableSpectrometer :: IO (Maybe (DeviceID, FeatureID))
+fetchAvailableSpectrometer =
+    getDeviceIDs >>= \idList ->
+    if (not $ null idList)
+      then
+        runExceptT (
+            ExceptT (openDevice (head idList)) >>
+            ExceptT (getSpectrometerFeatures (head idList)) >>= \(featureID : _) ->
+            return (head idList, featureID)) >>= \result ->
+        case result of
+            Left _  -> return Nothing
+            Right v -> return $ Just v
+      else return Nothing
+
+closeAvailableSpectrometer :: Maybe (DeviceID, FeatureID) -> IO ()
+closeAvailableSpectrometer Nothing              = return ()
+closeAvailableSpectrometer (Just (deviceID, _)) = closeDevice deviceID >> return ()

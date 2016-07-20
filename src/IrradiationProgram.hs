@@ -14,7 +14,6 @@ import Data.Text (Text)
 import qualified Data.Vector.Storable as V
 import System.Clock
 
-import OOSeaBreeze
 import LightSources
 import Detector
 
@@ -40,7 +39,7 @@ data IrradiationParams = IrradiationParams {
                              ipLightSourceName :: !Text
                            , ipLightSourceChannel :: !Text
                            , ipPower :: !Double
-                         } 
+                         }
                          deriving (Show)
 
 data ProgramEnvironment a = ProgramEnvironment {
@@ -111,7 +110,7 @@ executeIrradiationProgram (IrradiationProgram steps detection) env =
                     return (previousSpectra ++ [map toSecondsFromStart newSpectra]))
             where
                 toSecondsFromStart (dat, t) = (dat, (*) 1.0e-9 . fromIntegral . timeSpecAsNanoSecs $ diffTimeSpec t startTime)
-        
+
         executeSingleIrradiationInStep :: [DetectionParams] -> ProgramStep -> IO [(AcquiredData, TimeSpec)]
         executeSingleIrradiationInStep detParams ProgramStep{..} =
             runExceptT (
@@ -132,7 +131,7 @@ executeIrradiationProgram (IrradiationProgram steps detection) env =
 
         lightSources = peLightSources env
         detector = peDetector env
-        
+
 executeDetection :: Detector a => a -> [LightSource] -> DetectionParams -> IO (Either String AcquiredData)
 executeDetection det lss DetectionParams{..} =
     runExceptT (

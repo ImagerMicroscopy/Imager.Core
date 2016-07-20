@@ -22,14 +22,14 @@ instance Detector SCCamDetector where
     acquireData :: SCCamDetector -> ExposureTime -> Gain -> NMeasurementsToAverage -> IO (Either String AcquiredData)
     acquireData (SCCamDetector camName) expTime emGain _ =
         runExceptT (
-            setExposureTime camName expTime >>
-            setEMGain camName emGain >>
-            acquireImages camName 1
+            ExceptT (setExposureTime camName expTime) >>
+            ExceptT (setEMGain camName emGain) >>
+            ExceptT (acquireImages camName 1)
         ) >>= \images ->
         case images of
             Left e  -> return (Left e)
             Right (MeasuredImages nRows nCols vec) ->
-                let bytes = byteStringFromVector Vector
+                let bytes = byteStringFromVector vec
                     numType = UINT16
                 in return $ Right (AcquiredData nRows nCols bytes numType)
     getGainRange :: SCCamDetector -> IO (Either String (Gain, Gain))

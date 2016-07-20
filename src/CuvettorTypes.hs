@@ -22,7 +22,6 @@ import System.IO.Unsafe
 import MiscUtils
 import Detector
 import GPIO
-import OOSeaBreeze
 import IrradiationProgram
 import LightSources
 
@@ -86,7 +85,7 @@ instance FromJSON RequestMessage where
             "cancelasyncacquisition" -> return CancelAsyncAcquisition
             "isasyncacquisitionrunning" -> return IsAsyncAcquisitionRunning
             _            -> fail $ "invalid action \"" ++ (T.unpack action) ++ "\""
-    
+
     parseJSON _ = fail "expected a JSON object"
 
 data ResponseMessage = StatusOK
@@ -118,7 +117,7 @@ instance ToJSON ResponseMessage where
                                                 <> "wavelengths" .= w)
     toEncoding (AvailableLightSources ls) = pairs ("responsetype" .= ("availablelightsources" :: Text) <> "lightsources" .= ls)
     toEncoding (Pong) = pairs ("responsetype" .= ("pong" :: Text))
-    toEncoding (AsyncAcquiredSpectra spectra w) = 
+    toEncoding (AsyncAcquiredSpectra spectra w) =
         let encodedByteStrings = map (map (\(v, t) -> (T.decodeUtf8 . B64.encode $ v, t))) spectra
         in pairs ("responsetype" .= ("asyncspectra" :: Text) <> "spectra" .= encodedByteStrings <> "wavelengths" .= w)
     toEncoding (AsyncAcquisitionIsRunning b) = pairs ("responsetype" .= ("asyncacquisitionstatus" :: Text) <> "running" .= b)

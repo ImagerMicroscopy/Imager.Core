@@ -21,3 +21,6 @@ byteStringFromVector v = unsafePerformIO $
     mallocBytes nBytes >>= \bsPtr ->
     copyBytes (castPtr bsPtr) vecPtr nBytes >>
     SB.unsafePackMallocCStringLen (bsPtr, nBytes)
+
+fromLeft :: Either a b -> a
+fromLeft (Left a) = a

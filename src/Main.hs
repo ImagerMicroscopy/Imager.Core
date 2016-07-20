@@ -5,9 +5,11 @@ module Main where
 import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Exception
+import Control.Monad
 import Control.Monad.Trans.Except
 import Data.Aeson
 import qualified Data.ByteString as SB
+import Data.Either
 import Data.List
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -24,10 +26,13 @@ import OODetector
 #endif
 #ifdef WITH_SCCAMERA
 import SCCamera
-import SCCameraDetector
+import SCCamDetector
 #endif
 #if !defined(WITH_OCEANOPTICS) && !defined(WITH_SCCAMERA)
     #error "building without any detector support"
+#endif
+#if defined(WITH_OCEANOPTICS) && defined(WITH_SCCAMERA)
+    #error "must build for either camera or spectrometer"
 #endif
 import GPIO
 import SimpleJSONServer
@@ -49,10 +54,10 @@ main :: IO ()
 main =
     withGPIOPins (zip requiredGPIOPins (repeat $ Output Low)) (\gpioHandles ->
     putStrLn ("opened GPIO pins: " ++ concat (map show availablePins)) >>
-    
+
     withLightSources gpioHandles availableLightSources (\lightSources ->
     putStrLn ("opened light sources") >>
-    
+
     newMVar [] >>= \asyncSpectraMVar ->
     async (return ()) >>= \asyncProgramWorker ->
     wait asyncProgramWorker >>
@@ -71,9 +76,10 @@ main =
     (bracket initializeCameraDLL (\_ -> shutdownCameraDLL) $ \initStatus ->
     when (isLeft initStatus) (error (fromLeft initStatus)) >>
     listConnectedCameras >>= \camNames ->
-    when (null camNames) (error "no cameras found")
+    when (null camNames) (error "no cameras found") >>
     let camName = head camNames
-        encodedWavelengths = T.null
+        encodedWavelengths = T.empty
+        detector = SCCamDetector camName
     in
 #endif
       let env = Environment lightSources gpioHandles availablePins detector encodedWavelengths asyncSpectraMVar asyncProgramWorker
@@ -90,7 +96,7 @@ main =
             return . T.decodeUtf8 . B64.encode . byteStringFromVector $ wLengths
         nonlinearityCorrection :: Maybe (DeviceID, FeatureID) -> IO (Double -> Double)
         nonlinearityCorrection Nothing = return id
-        nonlinearityCorrection (Just (dID, _)) = 
+        nonlinearityCorrection (Just (dID, _)) =
             V.toList <$> getNonlinearityCoeffs dID >>= \coeffs ->
             return (\x -> x / polyCorr x coeffs)
             where
@@ -186,18 +192,6 @@ performAction env IsAsyncAcquisitionRunning =
     asyncAcquisitionRunning env >>= \asyncIsRunning ->
     return (AsyncAcquisitionIsRunning asyncIsRunning, env)
 
-acquireSpectrum :: (DeviceID, FeatureID) -> Double -> Int -> IO (Either String (Vector Double))
-acquireSpectrum (deviceID, featureID) exposure nSpectra =
-    if ((exposure <= 0.0) || (exposure > 1.0) || (nSpectra < 1))
-        then return (Left "invalid number of spectra or exposure time")
-        else
-          runExceptT (
-              ExceptT (setIntegrationTimeMicros deviceID featureID integrationMicroseconds) >>
-              ExceptT (measureSpectrum deviceID featureID) >>   -- force a fresh acquisition
-              ExceptT (measureAveragedSpectrum deviceID featureID nSpectra))
-    where
-        integrationMicroseconds = floor (exposure * 1e6)
-
 setPinLevelOrError :: Environment a -> GPIOPin -> Level -> IO (ResponseMessage, Environment a)
 setPinLevelOrError env pin level =
     if (not havePin)
@@ -233,21 +227,3 @@ asyncAcquisitionErrorMessage env =
         Just (Left e) -> return $ displayException e
     where
         worker = envAsyncProgramWorker env
-
-fetchAvailableSpectrometer :: IO (Maybe (DeviceID, FeatureID))
-fetchAvailableSpectrometer =
-    getDeviceIDs >>= \idList ->
-    if (not $ null idList)
-      then
-        runExceptT (
-            ExceptT (openDevice (head idList)) >>
-            ExceptT (getSpectrometerFeatures (head idList)) >>= \(featureID : _) ->
-            return (head idList, featureID)) >>= \result ->
-        case result of
-            Left _  -> return Nothing
-            Right v -> return $ Just v
-      else return Nothing
-
-closeAvailableSpectrometer :: Maybe (DeviceID, FeatureID) -> IO ()
-closeAvailableSpectrometer Nothing              = return ()
-closeAvailableSpectrometer (Just (deviceID, _)) = closeDevice deviceID >> return ()
