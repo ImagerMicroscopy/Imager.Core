@@ -42,8 +42,8 @@ import MiscUtils
 
 import CuvettorTypes
 
-availablePins :: [GPIOPin]
-availablePins = [Pin2, Pin3, Pin4, Pin17]
+extraPins :: [GPIOPin]
+extraPins = []
 
 handlerTimeout :: Int
 handlerTimeout = 2 * 1000000
@@ -53,7 +53,7 @@ serverSettings = defaultSettings {ssHandlerTimeout = Just (round 2.5e6)}
 main :: IO ()
 main =
     withGPIOPins (zip requiredGPIOPins (repeat $ Output Low)) (\gpioHandles ->
-    putStrLn ("opened GPIO pins: " ++ concat (map show availablePins)) >>
+    putStrLn ("opened GPIO pins: " ++ concat (map show requiredGPIOPins)) >>
 
     withLightSources gpioHandles availableLightSources (\lightSources ->
     putStrLn ("opened light sources") >>
@@ -82,12 +82,12 @@ main =
         detector = SCCamDetector camName
     in
 #endif
-      let env = Environment lightSources gpioHandles availablePins detector encodedWavelengths asyncSpectraMVar asyncProgramWorker
+      let env = Environment lightSources gpioHandles extraPins detector encodedWavelengths asyncSpectraMVar asyncProgramWorker
       in runServer 3200 messageHandler env serverSettings
     )))
     where
         requiredGPIOPins :: [GPIOPin]
-        requiredGPIOPins = nub (availablePins ++ (gpioPinsNeededForLightSources availableLightSources))
+        requiredGPIOPins = nub (extraPins ++ (gpioPinsNeededForLightSources availableLightSources))
 #ifdef WITH_OCEANOPTICS
         fetchEncodedWavelengths :: Maybe (DeviceID, FeatureID) -> IO Text
         fetchEncodedWavelengths Nothing = return T.empty
