@@ -21,3 +21,5 @@ data AcquiredData = AcquiredData {
 
 class Detector a where
     acquireData :: a -> ExposureTime -> Gain -> NMeasurementsToAverage -> IO (Either String AcquiredData)
+    getGainRange :: a -> IO (Either String (ExposureTime, ExposureTime))
+    getExposureTimeRange :: a -> IO (Either String (ExposureTime, ExposureTime))

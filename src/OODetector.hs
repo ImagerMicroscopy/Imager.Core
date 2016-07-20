@@ -31,6 +31,10 @@ instance Detector OODetector where
                            bytes = byteStringFromVector corrected
                            numType = FP64
                        in return $ Right (AcquiredData nRows nCols bytes numType)
+    getGainRange :: OODetector -> IO (Either String (Gain, Gain))
+    getGainRange _ = return $ Right (1.0, 1.0)
+    getExposureTimeRange :: OODetector -> IO (Either String (ExposureTime, ExposureTime))
+    getExposureTimeRange _ = return $ Right (3.8e-3, 1.0)
 
 acquireSpectrum :: (DeviceID, FeatureID) -> Double -> Int -> IO (Either String (Vector Double))
 acquireSpectrum (deviceID, featureID) exposure nSpectra =
