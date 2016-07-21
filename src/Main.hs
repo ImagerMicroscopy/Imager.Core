@@ -119,7 +119,7 @@ performAction env (AcquireSpectrum params) =
         ExceptT (executeDetection detector lightsources params)) >>= \acquiredData ->
     case acquiredData of
         Left err -> return (StatusError err, env)
-        Right (AcquiredData _ _ bytes _)  -> return (AcquiredSpectrum bytes wl, env)
+        Right dat  -> return (AcquiredSpectrum dat wl, env)
     where
         detector = envDetector env
         wl = envEncodedSpectrometerWavelengths env
