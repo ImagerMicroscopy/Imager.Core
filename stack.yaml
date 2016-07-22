@@ -14,7 +14,7 @@ packages:
     commit: bccdba4d66850bfcdc9ff4658b371589ad8692c4
 - location:
     git: https://pdedecker@bitbucket.org/pdedecker/hsgpio.git
-    commit: 0149467835933eaa5e878add65fb76186d0b70eb
+    commit: d321999eeaf2add21068c6b58290ddbb9174cc97
   extra-dep: true
 - location:
     git: https://pdedecker@bitbucket.org/pdedecker/hssccamera.git

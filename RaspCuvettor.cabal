@@ -35,6 +35,7 @@ executable RaspCuvettor
                      , clock
                      , serialport
                      , vector
+                     , filepath
                      , SimpleJSONServer
                      , GPIO
   other-modules:       CuvettorTypes

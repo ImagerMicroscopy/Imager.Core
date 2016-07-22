@@ -10,6 +10,7 @@ import qualified Data.ByteString as SB
 import qualified Data.ByteString.Lazy as LB
 import qualified Data.ByteString.Unsafe as SB
 import qualified Data.ByteString.Base64 as B64
+import Data.Char
 import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -26,7 +27,8 @@ import IrradiationProgram
 import LightSources
 
 data Environment a = Environment {
-                      envLightSources :: [LightSource]
+                      envLightSourceDescs :: [LightSourceDesc]
+                    , envLightSources :: [LightSource]
                     , envGPIOHandles :: !GPIOHandles
                     , envAvailablePins :: [GPIOPin]
                     , envDetector :: a
@@ -143,12 +145,5 @@ instance FromJSON GPIOPin where
     parseJSON invalid = fail "can't decode gpio pin"
 
 instance ToJSON GPIOPin where
-    toJSON Pin2 = "pin2"
-    toJSON Pin3 = "pin3"
-    toJSON Pin4 = "pin4"
-    toJSON Pin7 = "pin7"
-    toJSON Pin8 = "pin8"
-    toJSON Pin9 = "pin9"
-    toJSON Pin10 = "pin10"
-    toJSON Pin11 = "pin11"
-    toJSON Pin17 = "pin17"
+    toJSON = toJSON . map toLower . show
+    toEncoding = toEncoding . map toLower . show

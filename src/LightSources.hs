@@ -16,6 +16,8 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Data.Word
+import System.Environment
+import System.FilePath
 import System.Hardware.Serialport
 import System.IO
 
@@ -33,7 +35,7 @@ data LightSourceDesc = GPIOLightSourceDesc {
                      | DummyLightSourceDesc {
                            dlsdName :: !Text
                        }
-                     deriving (Show)
+                     deriving (Show, Read)
 
 data LightSource = GPIOLightSource !Text !GPIOPin !Double !GPIOHandles
                  | CoherentLightSource !Text !SerialPort
@@ -44,9 +46,18 @@ instance ToJSON LightSourceDesc where
     toJSON (CoherentLightSourceDesc name _) = object ["name" .= name, "channels" .= ([] :: [Text])]
     toJSON (DummyLightSourceDesc name) = object ["name" .= name, "channels" .= ([] :: [Text])]
 
-availableLightSources :: [LightSourceDesc]
-availableLightSources = [GPIOLightSourceDesc "561 nm" Pin3 0.01, GPIOLightSourceDesc "488 nm" Pin4 0.01,
-                         GPIOLightSourceDesc "fluorescence" Pin2 0.01, GPIOLightSourceDesc "DT-2-GS" Pin17 0.025]
+readAvailableLightSources :: IO [LightSourceDesc]
+readAvailableLightSources =
+    getExecutablePath >>= \exePath ->
+    readFile (takeDirectory exePath </> confFilename) >>=
+    return . read
+    where
+      confFilename = "lightsources.txt"
+
+
+--availableLightSources :: [LightSourceDesc]
+--availableLightSources = [GPIOLightSourceDesc "561 nm" Pin3 0.01, GPIOLightSourceDesc "488 nm" Pin4 0.01,
+--                         GPIOLightSourceDesc "fluorescence" Pin2 0.01, GPIOLightSourceDesc "DT-2-GS" Pin17 0.025]
                          --CoherentLightSourceDesc "405 nm" "/dev/ttyUSB0"]
 --availableLightSources = [DummyLightSourceDesc "dummy1", DummyLightSourceDesc "dummy2"]
 

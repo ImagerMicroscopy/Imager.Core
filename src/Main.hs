@@ -52,6 +52,9 @@ serverSettings = defaultSettings {ssHandlerTimeout = Just (round 2.5e6)}
 
 main :: IO ()
 main =
+    readAvailableLightSources >>= \availableLightSources ->
+    return (nub (extraPins ++ (gpioPinsNeededForLightSources availableLightSources))) >>= \requiredGPIOPins ->
+
     withGPIOPins (zip requiredGPIOPins (repeat $ Output Low)) (\gpioHandles ->
     putStrLn ("opened GPIO pins: " ++ concat (map show requiredGPIOPins)) >>
 
@@ -82,12 +85,11 @@ main =
         detector = SCCamDetector camName
     in
 #endif
-      let env = Environment lightSources gpioHandles extraPins detector encodedWavelengths asyncSpectraMVar asyncProgramWorker
+      let env = Environment availableLightSources lightSources gpioHandles
+                extraPins detector encodedWavelengths asyncSpectraMVar asyncProgramWorker
       in runServer 3200 messageHandler env serverSettings
     )))
     where
-        requiredGPIOPins :: [GPIOPin]
-        requiredGPIOPins = nub (extraPins ++ (gpioPinsNeededForLightSources availableLightSources))
 #ifdef WITH_OCEANOPTICS
         fetchEncodedWavelengths :: Maybe (DeviceID, FeatureID) -> IO Text
         fetchEncodedWavelengths Nothing = return T.empty
@@ -125,7 +127,9 @@ performAction env (AcquireSpectrum params) =
         wl = envEncodedSpectrometerWavelengths env
         lightsources = envLightSources env
 
-performAction env ListLightSources = return (AvailableLightSources availableLightSources, env)
+performAction env ListLightSources = return (AvailableLightSources availableLightSourceDescs, env)
+    where
+      availableLightSourceDescs = envLightSourceDescs env
 
 performAction env (ActivateLightSource name channel power) =
     runExceptT (
