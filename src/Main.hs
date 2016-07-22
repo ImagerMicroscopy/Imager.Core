@@ -115,7 +115,7 @@ performAction :: Detector a => Environment a -> RequestMessage -> IO (ResponseMe
 performAction env (SetPinHigh pin) = setPinLevelOrError env pin High
 performAction env (SetPinLow pin)  = setPinLevelOrError env pin Low
 
-performAction env (AcquireSpectrum params) =
+performAction env (AcquireData params) =
     runExceptT (
         ExceptT (ensureAsyncAcquisitionNotRunning env) >>
         ExceptT (executeDetection detector lightsources params)) >>= \acquiredData ->

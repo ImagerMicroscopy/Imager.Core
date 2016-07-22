@@ -41,7 +41,7 @@ type ExposureTime = Double
 
 data RequestMessage = SetPinHigh !GPIOPin
                     | SetPinLow !GPIOPin
-                    | AcquireSpectrum !DetectionParams
+                    | AcquireData !DetectionParams
                     | ListLightSources
                     | ActivateLightSource {
                         reqActivateName :: !Text
@@ -61,7 +61,7 @@ data RequestMessage = SetPinHigh !GPIOPin
 instance ToJSON RequestMessage where
     toEncoding (SetPinHigh pin) = pairs ("action" .= ("setpinhigh" :: Text) <> "pin" .= show pin)
     toEncoding (SetPinLow pin) = pairs ("action" .= ("setpinlow" :: Text) <> "pin" .= show pin)
-    toEncoding (AcquireSpectrum p) = pairs ("action" .= ("acquirespectrum"  :: Text) <> "params" .= p)
+    toEncoding (AcquireData p) = pairs ("action" .= ("acquiredata"  :: Text) <> "params" .= p)
     toEncoding ListLightSources = pairs ("action" .= ("listlightsources" :: Text))
     toEncoding (ActivateLightSource name channel power) = pairs ("action" .= ("activatelightsource" :: Text) <> "name" .= name <> "channel" .= channel <> "power" .= power)
     toEncoding (DeactivateLightSource name) = pairs ("action" .= ("deactivatelightsource" :: Text) <> "name" .= name)
@@ -77,7 +77,7 @@ instance FromJSON RequestMessage where
         case (T.toLower action) of
             "setpinhigh" -> SetPinHigh <$> v .: "pin"
             "setpinlow"  -> SetPinLow <$> v .: "pin"
-            "acquirespectrum" -> AcquireSpectrum <$> v .: "params"
+            "acquiredata" -> AcquireData <$> v .: "params"
             "listlightsources" -> return ListLightSources
             "activatelightsource" -> ActivateLightSource <$> v .: "name" <*> v .: "channel" <*> v .: "power"
             "deactivatelightsource" -> DeactivateLightSource <$> v .: "name"
