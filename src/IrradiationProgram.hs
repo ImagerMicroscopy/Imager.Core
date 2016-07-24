@@ -102,14 +102,21 @@ executeIrradiationProgram (IrradiationProgram steps detection) env =
         initialAcquisitionStep = ProgramStep 0.0 1 []
 
         executeStep :: Detector a => ProgramEnvironment a -> TimeSpec -> [DetectionParams] -> ProgramStep -> IO ()
-        executeStep env startTime detParams ps =
-            forM_ (replicate (psNTimesToPerform ps) ps) $ \step ->
-                executeSingleIrradiationInStep detParams step >>= \newSpectra ->
-                modifyMVar_ (peDataMVar env) (\previousSpectra ->
-                    when (length previousSpectra > 100) (error "too many async spectra stored") >>
-                    return (previousSpectra ++ [map toSecondsFromStart newSpectra]))
+        executeStep env startTime detParams ps
+            | (irradiationDuration == 0.0) && (length detParams == 1) = -- no irradiation pause and 1 kind of detection - don't open and close shutters needlessly
+                  executeFastStep (head detParams) nTimesToPerform startTime dataMVar
+            | otherwise =
+                  executeSlowStep detParams ps startTime dataMVar
             where
-                toSecondsFromStart (dat, t) = (dat, (*) 1.0e-9 . fromIntegral . timeSpecAsNanoSecs $ diffTimeSpec t startTime)
+              irradiationDuration = psIrradiationDuration ps
+              nTimesToPerform = psNTimesToPerform ps
+              dataMVar = peDataMVar env
+
+        executeSlowStep :: [DetectionParams] -> ProgramStep -> TimeSpec -> MVar ([[(AcquiredData, Double)]]) -> IO ()
+        executeSlowStep detParams ps startTime dataMVar =
+          forM_ (replicate (psNTimesToPerform ps) ps) $ \step ->
+              executeSingleIrradiationInStep detParams step >>= \newSpectra ->
+              addDataToMVar dataMVar startTime newSpectra
 
         executeSingleIrradiationInStep :: [DetectionParams] -> ProgramStep -> IO [(AcquiredData, TimeSpec)]
         executeSingleIrradiationInStep detParams ProgramStep{..} =
@@ -129,6 +136,31 @@ executeIrradiationProgram (IrradiationProgram steps detection) env =
                 Right v -> return (v, timeStamp)
                 Left err -> error err
 
+        executeFastStep :: DetectionParams -> Int -> TimeSpec -> MVar ([[(AcquiredData, Double)]]) -> IO ()
+        executeFastStep detParams nTimesToPerform startTime dataMVar =
+            runExceptT (
+                ExceptT (enableLightSources lightSources (dpIrradiation detParams)) >>
+                ExceptT (
+                    forM_ [1 .. nTimesToPerform] (\_ ->
+                        acquireData detector (dpExposureTime detParams) 1.0 (dpNSpectraToAverage detParams) >>= \acqData ->
+                        case acqData of
+                          Left e -> error e
+                          Right dat ->
+                            getTime Monotonic >>= \timeStamp ->
+                            addDataToMVar dataMVar startTime [(dat, timeStamp)]) >>
+                    return (Right ())) >>
+                ExceptT (disableLightSources lightSources (dpIrradiation detParams))) >>= \result ->
+            case result of
+                Left e -> error e
+                Right _ -> return ()
+
+        addDataToMVar :: MVar ([[(AcquiredData, Double)]]) -> TimeSpec -> [(AcquiredData, TimeSpec)] -> IO ()
+        addDataToMVar mvar startTime newData =
+            modifyMVar_ mvar (\previousData ->
+                when (length previousData > 100) (error "too many async data stored") >>
+                return (previousData ++ [map toSecondsFromStart newData]))
+            where
+                toSecondsFromStart (dat, t) = (dat, (*) 1.0e-9 . fromIntegral . timeSpecAsNanoSecs $ diffTimeSpec t startTime)
         lightSources = peLightSources env
         detector = peDetector env
 
