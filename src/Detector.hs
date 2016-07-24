@@ -2,11 +2,15 @@
 
 module Detector where
 
+import Control.Concurrent
+import Control.Monad
 import Data.ByteString (ByteString)
+import System.Clock
 
 type ExposureTime = Double
 type Gain = Double
 type NMeasurementsToAverage = Int
+type NMeasurementsToPerform = Int
 
 data NumberType = UINT16
                 | FP64
@@ -21,5 +25,24 @@ data AcquiredData = AcquiredData {
 
 class Detector a where
     acquireData :: a -> ExposureTime -> Gain -> NMeasurementsToAverage -> IO (Either String AcquiredData)
+    acquireStreamingData :: a -> ExposureTime -> Gain -> NMeasurementsToAverage ->
+                            NMeasurementsToPerform -> TimeSpec -> MVar ([[(AcquiredData, Double)]]) -> IO ()
+    acquireStreamingData det expTime gain nMeasurementsToAverage nMeasurements startTime dataMVar =
+        forM_ [1 .. nMeasurements] (\_ ->
+            acquireData det expTime gain nMeasurementsToAverage >>= \dat ->
+            case dat of
+              Left e -> error e
+              Right acqData ->
+                getTime Monotonic >>= \timeStamp ->
+                addDataToMVar dataMVar startTime [(acqData, timeStamp)])
     getGainRange :: a -> IO (Either String (ExposureTime, ExposureTime))
     getExposureTimeRange :: a -> IO (Either String (ExposureTime, ExposureTime))
+
+
+addDataToMVar :: MVar ([[(AcquiredData, Double)]]) -> TimeSpec -> [(AcquiredData, TimeSpec)] -> IO ()
+addDataToMVar mvar startTime newData =
+    modifyMVar_ mvar (\previousData ->
+        when (length previousData > 100) (error "too many async data stored") >>
+        return (previousData ++ [map toSecondsFromStart newData]))
+    where
+        toSecondsFromStart (dat, t) = (dat, (*) 1.0e-9 . fromIntegral . timeSpecAsNanoSecs $ diffTimeSpec t startTime)

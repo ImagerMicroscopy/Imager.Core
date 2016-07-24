@@ -8,6 +8,7 @@ import qualified Data.ByteString as B
 import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
 import Foreign
+import System.Clock
 
 import Detector
 import OOSeaBreeze
@@ -21,8 +22,8 @@ data OODetector = OODetector {
 
 instance Detector OODetector where
     acquireData :: OODetector -> ExposureTime -> Gain -> NMeasurementsToAverage -> IO (Either String AcquiredData)
-    acquireData (OODetector dID fID corrFunc) expTime _ nSpectra =
-        acquireSpectrum (dID, fID) expTime nSpectra >>= \spectrum ->
+    acquireData (OODetector dID fID corrFunc) expTime _ nSpectraToAverage =
+        acquireSpectrum (dID, fID) expTime nSpectraToAverage >>= \spectrum ->
         case spectrum of
             Left e  -> return (Left e)
             Right v -> return (V.map corrFunc v) >>= \corrected ->

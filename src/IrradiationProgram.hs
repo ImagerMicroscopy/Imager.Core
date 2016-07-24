@@ -153,14 +153,6 @@ executeIrradiationProgram (IrradiationProgram steps detection) env =
             case result of
                 Left e -> error e
                 Right _ -> return ()
-
-        addDataToMVar :: MVar ([[(AcquiredData, Double)]]) -> TimeSpec -> [(AcquiredData, TimeSpec)] -> IO ()
-        addDataToMVar mvar startTime newData =
-            modifyMVar_ mvar (\previousData ->
-                when (length previousData > 100) (error "too many async data stored") >>
-                return (previousData ++ [map toSecondsFromStart newData]))
-            where
-                toSecondsFromStart (dat, t) = (dat, (*) 1.0e-9 . fromIntegral . timeSpecAsNanoSecs $ diffTimeSpec t startTime)
         lightSources = peLightSources env
         detector = peDetector env
 
