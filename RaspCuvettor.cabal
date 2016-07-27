@@ -31,6 +31,7 @@ executable RaspCuvettor
                      , text
                      , bytestring
                      , base64-bytestring
+                     , containers
                      , transformers
                      , clock
                      , serialport

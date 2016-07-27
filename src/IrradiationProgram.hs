@@ -10,6 +10,8 @@ import Data.Aeson
 import Data.Either
 import Data.Maybe
 import Data.Monoid
+import Data.Set (Set)
+import qualified Data.Set as S
 import Data.Text (Text)
 import qualified Data.Vector.Storable as V
 import System.Clock
@@ -92,12 +94,14 @@ instance ToJSON IrradiationParams where
     toJSON _ = error "no toJSON"
 
 executeIrradiationProgram :: Detector a => IrradiationProgram -> ProgramEnvironment a -> IO ()
-executeIrradiationProgram (IrradiationProgram steps detection) env =
+executeIrradiationProgram prog@(IrradiationProgram steps detection) env =
     (getTime Monotonic >>= \startTime ->
     putStrLn "will execute acquisition" >> putStrLn (show (initialAcquisitionStep : steps)) >>
     mapM_ (executeStep env startTime detection) (initialAcquisitionStep : steps))
-        `finally` (deactivateAllLightSources lightSources)
+        `finally` closeUsedLightsources
     where
+        closeUsedLightsources = mapM_ (\n -> deactivateLightSource (lookupLightSource lightSources n)) lightSourceNamesInProgram
+        lightSourceNamesInProgram = lightsourceNamesUsedInProgram prog
         initialAcquisitionStep :: ProgramStep   -- makes sure a spectrum gets acquired before the acquisition
         initialAcquisitionStep = ProgramStep 0.0 1 []
 
@@ -194,6 +198,14 @@ validateIrradiationProgram lightSources IrradiationProgram{..} =
                 else Left "invalid program step"
         within :: (Ord a) => a -> a -> a -> Bool
         within a b c = (a >= b) && (a <= c)
+
+lightsourceNamesUsedInProgram :: IrradiationProgram -> [Text]
+lightsourceNamesUsedInProgram (IrradiationProgram steps dets) = S.toList (mconcat (map lightSourceNamesInStep steps) <> mconcat (map lightSourceNamesInDetPars dets))
+  where
+    lightSourceNamesInStep :: ProgramStep -> Set Text
+    lightSourceNamesInStep step = foldr (\irr s -> S.insert (ipLightSourceName irr) s) S.empty (psIrradiation step)
+    lightSourceNamesInDetPars :: DetectionParams -> Set Text
+    lightSourceNamesInDetPars detPars = foldr (\irr s -> S.insert (ipLightSourceName irr) s) S.empty (dpIrradiation detPars)
 
 nAcquisitionsInProgram :: IrradiationProgram -> Int
 nAcquisitionsInProgram IrradiationProgram{..} = sum (map nAcquisitionsInStep ipSteps) + 1
