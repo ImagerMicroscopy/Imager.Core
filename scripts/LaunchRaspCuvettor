@@ -7,7 +7,7 @@ echo 17 > /sys/class/gpio/export
 cd /home/peter/Documents/Haskell/RaspCuvettor
 while :
 do
-    stack exec RaspCuvettor
+    stack build --flag RaspCuvettor:-withsccamera && stack exec RaspCuvettor
     sleep 5
 done
 
