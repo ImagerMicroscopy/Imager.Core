@@ -140,15 +140,8 @@ executeIrradiationProgram (IrradiationProgram steps detection) env =
         executeFastStep detParams nTimesToPerform startTime dataMVar =
             runExceptT (
                 ExceptT (enableLightSources lightSources (dpIrradiation detParams)) >>
-                ExceptT (
-                    forM_ [1 .. nTimesToPerform] (\_ ->
-                        acquireData detector (dpExposureTime detParams) 1.0 (dpNSpectraToAverage detParams) >>= \acqData ->
-                        case acqData of
-                          Left e -> error e
-                          Right dat ->
-                            getTime Monotonic >>= \timeStamp ->
-                            addDataToMVar dataMVar startTime [(dat, timeStamp)]) >>
-                    return (Right ())) >>
+                ExceptT (Right <$> acquireStreamingData detector (dpExposureTime detParams) 1.0
+                            (dpNSpectraToAverage detParams) nTimesToPerform startTime dataMVar) >>
                 ExceptT (disableLightSources lightSources (dpIrradiation detParams))) >>= \result ->
             case result of
                 Left e -> error e
