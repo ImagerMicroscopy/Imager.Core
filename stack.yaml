@@ -8,7 +8,7 @@ packages:
 - '.'
 - location:
     git: https://pdedecker@bitbucket.org/pdedecker/simplejsonserver.git
-    commit: c458b082dcb69d300c9d858dbb88addaffb9f194
+    commit: f358afb282f9d7ef55a6b4c6f30f8380b8ad8407
 - location:
     git: https://pdedecker@bitbucket.org/pdedecker/hsoceanoptics.git
     commit: bccdba4d66850bfcdc9ff4658b371589ad8692c4
