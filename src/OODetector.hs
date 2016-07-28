@@ -2,9 +2,11 @@
 
 module OODetector where
 
+import Control.Exception
 import Control.Monad.Trans.Except
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
+import Data.Maybe
 import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
 import Foreign
@@ -13,17 +15,21 @@ import System.Clock
 import Detector
 import OOSeaBreeze
 import MiscUtils
+import GPIO
 
 data OODetector = OODetector {
                       oodDeviceID :: !DeviceID
                     , oodFeatureID :: !FeatureID
+                    , oodTriggerParams :: Maybe (GPIOPin, GPIOHandles)
                     , oodNonlinearityCorrection :: Double -> Double
                 }
 
 instance Detector OODetector where
     acquireData :: OODetector -> ExposureTime -> Gain -> NMeasurementsToAverage -> IO (Either String AcquiredData)
-    acquireData (OODetector dID fID corrFunc) expTime _ nSpectraToAverage =
-        acquireSpectrum (dID, fID) expTime nSpectraToAverage >>= \spectrum ->
+    acquireData (OODetector dID fID maybeTrigg corrFunc) expTime _ nSpectraToAverage =
+        (if (isJust maybeTrigg)
+         then acquireTriggeredSpectrum (dID, fID) (fromJust maybeTrigg) expTime nSpectraToAverage
+         else acquireSpectrum (dID, fID) expTime nSpectraToAverage) >>= \spectrum ->
         case spectrum of
             Left e  -> return (Left e)
             Right v -> return (V.map corrFunc v) >>= \corrected ->
@@ -46,6 +52,15 @@ acquireSpectrum (deviceID, featureID) exposure nSpectra =
               ExceptT (setIntegrationTimeMicros deviceID featureID integrationMicroseconds) >>
               ExceptT (measureSpectrum deviceID featureID) >>   -- force a fresh acquisition
               ExceptT (measureAveragedSpectrum deviceID featureID nSpectra))
+    where
+        integrationMicroseconds = floor (exposure * 1e6)
+
+acquireTriggeredSpectrum :: (DeviceID, FeatureID) -> (GPIOPin, GPIOHandles) -> Double -> Int -> IO (Either String (Vector Double))
+acquireTriggeredSpectrum (dID, fID) (pin, pinH) exposure nSpectra =
+    setIntegrationTimeMicros dID fID integrationMicroseconds >>
+    (flip finally) (setPinLevel pinH pin Low) (
+        setPinLevel pinH pin High >>
+        measureAveragedSpectrum dID fID nSpectra)
     where
         integrationMicroseconds = floor (exposure * 1e6)
 

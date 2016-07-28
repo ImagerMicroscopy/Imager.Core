@@ -43,7 +43,12 @@ import MiscUtils
 import CuvettorTypes
 
 extraPins :: [GPIOPin]
-extraPins = []
+#ifdef WITH_OCEANOPTICS
+extraPins = [spectrometerTriggerPin]
+spectrometerTriggerPin = Pin11
+#else
+    extraPins = []
+#endif
 
 handlerTimeout :: Int
 handlerTimeout = 2 * 1000000
@@ -69,10 +74,11 @@ main =
     (withSeaBreeze $
     bracket fetchAvailableSpectrometer closeAvailableSpectrometer $ \maybeSpectrometer ->
     fetchEncodedWavelengths maybeSpectrometer >>= \encodedWavelengths ->
+    setTriggerMode maybeSpectrometer >>
     nonlinearityCorrection maybeSpectrometer >>= \nonlinearityCorrFunc ->
     putStrLn "opened spectrometer" >>
     let (dID, fID) = fromJust maybeSpectrometer
-        detector = OODetector dID fID nonlinearityCorrFunc
+        detector = OODetector dID fID (Just (spectrometerTriggerPin, gpioHandles)) nonlinearityCorrFunc
     in
 #endif
 #if WITH_SCCAMERA
@@ -96,6 +102,9 @@ main =
         fetchEncodedWavelengths (Just (dID, fID)) =
             getWavelengths dID fID >>= \(Right wLengths) ->
             return . T.decodeUtf8 . B64.encode . byteStringFromVector $ wLengths
+        setTriggerMode :: Maybe (dID, fID) -> IO ()
+        setTriggerMode Nothing = return ()
+        setTriggerMode (Just (dID, fID)) = return () --setTriggerMode fID dID TriggerExternalHardwareLevel
         nonlinearityCorrection :: Maybe (DeviceID, FeatureID) -> IO (Double -> Double)
         nonlinearityCorrection Nothing = return id
         nonlinearityCorrection (Just (dID, _)) =
