@@ -22,6 +22,7 @@ import System.Hardware.Serialport
 import System.IO
 
 import GPIO
+import MiscUtils
 
 data LightSourceDesc = GPIOLightSourceDesc {
                            glsdName :: !Text
@@ -54,6 +55,12 @@ readAvailableLightSources =
     where
       confFilename = "lightsources.txt"
 
+lightSourceAllowsMultipleChannels :: LightSource -> Bool
+lightSourceAllowsMultipleChannels _ = False
+
+lightSourceHasChannel :: LightSource -> Text -> Bool
+lightSourceHasChannel ls channel | channel == "" = True
+                                 | otherwise = False
 
 --availableLightSources :: [LightSourceDesc]
 --availableLightSources = [GPIOLightSourceDesc "561 nm" Pin3 0.01, GPIOLightSourceDesc "488 nm" Pin4 0.01,
@@ -113,25 +120,38 @@ lookupEitherLightSource lightSources name =
         Just l -> Right l
         Nothing -> Left "no such light source"
 
-activateLightSource :: LightSource -> Text -> Double -> IO (Either String ())
-activateLightSource (GPIOLightSource _ pin delay handles) _ _ = setPinLevel handles pin High >> threadDelay (floor $ 1e6 * delay) >> return (Right ())
-activateLightSource (CoherentLightSource name port) _ power =
-    catch (powerStr >>= sendAndReadResponse port >> sendAndReadResponse port "L=1\r" >> return (Right ()))
-          (\e -> return (Left (displayException (e :: IOException))))
-    where
-        powerStr :: IO ByteString
-        powerStr = minPowerQ >>= \minPower -> maxPowerQ >>= \maxPower ->
-                  let powerVal = floor (minPower + power / 100.0 * (maxPower - minPower)) :: Int
-                  in return ("P=" <> T.encodeUtf8 (T.pack $ show powerVal) <> "\r")
-        minPowerQ = parseQuery "?MINLP\r"
-        maxPowerQ = parseQuery "?MAXLP\r"
-        parseQuery :: ByteString -> IO Double
-        parseQuery q = sendAndReadResponse port q >>= return . read . filter (`elem` ('.' : ['0' .. '9'])) . T.unpack . T.decodeUtf8
-        sendAndReadResponse :: SerialPort -> ByteString -> IO ByteString
-        sendAndReadResponse prt msg = send port msg >> recvUntilTerminator port
-        recvUntilTerminator port = readFromSerialUntilChar port 10
-activateLightSource (DummyLightSource name) c p = putStrLn ("activated " ++ T.unpack name ++ " at power " ++ show p ++ " with channel " ++ T.unpack c) >> return (Right ())
-activateLightSource _ _ _ = error "activating unknown light source"
+validLightSourceChannelsAndPowers :: LightSource -> [Text] -> [Double] -> Bool
+validLightSourceChannelsAndPowers ls channels powers
+    | length channels /= length powers = False
+    | (length channels > 1) && (not (lightSourceAllowsMultipleChannels ls)) = False
+    | null channels = False
+    | not (all (\c -> lightSourceHasChannel ls c) channels) = False
+    | not (all (\p -> within p 0.0 100.0) powers) = False
+    | otherwise = True
+
+activateLightSource :: LightSource -> [Text] -> [Double] -> IO (Either String ())
+activateLightSource ls channels powers
+  | not (validLightSourceChannelsAndPowers ls channels powers) = error "invalid light source parameters"
+  | otherwise = activateLightSource' ls channels powers
+  where
+    activateLightSource' (GPIOLightSource _ pin delay handles) _ _ = setPinLevel handles pin High >> threadDelay (floor $ 1e6 * delay) >> return (Right ())
+    activateLightSource' (DummyLightSource name) [c] [p] = putStrLn ("activated " ++ T.unpack name ++ " at power " ++ show p ++ " with channel " ++ T.unpack c) >> return (Right ())
+    activateLightSource' (CoherentLightSource name port) _ [power] =
+        catch (powerStr >>= sendAndReadResponse port >> sendAndReadResponse port "L=1\r" >> return (Right ()))
+              (\e -> return (Left (displayException (e :: IOException))))
+        where
+            powerStr :: IO ByteString
+            powerStr = minPowerQ >>= \minPower -> maxPowerQ >>= \maxPower ->
+                      let powerVal = floor (minPower + power / 100.0 * (maxPower - minPower)) :: Int
+                      in return ("P=" <> T.encodeUtf8 (T.pack $ show powerVal) <> "\r")
+            minPowerQ = parseQuery "?MINLP\r"
+            maxPowerQ = parseQuery "?MAXLP\r"
+            parseQuery :: ByteString -> IO Double
+            parseQuery q = sendAndReadResponse port q >>= return . read . filter (`elem` ('.' : ['0' .. '9'])) . T.unpack . T.decodeUtf8
+            sendAndReadResponse :: SerialPort -> ByteString -> IO ByteString
+            sendAndReadResponse prt msg = send port msg >> recvUntilTerminator port
+            recvUntilTerminator port = readFromSerialUntilChar port 10
+    activateLightSource' _ _ _ = error "activating unknown light source"
 
 deactivateLightSource :: LightSource -> IO (Either String ())
 deactivateLightSource (GPIOLightSource _ pin delay handles) = setPinLevel handles pin Low >> threadDelay (floor $ 1e6 * delay) >> return (Right ())

@@ -24,3 +24,6 @@ byteStringFromVector v = unsafePerformIO $
 
 fromLeft :: Either a b -> a
 fromLeft (Left a) = a
+
+within :: (Ord a) => a -> a -> a -> Bool
+within a b c = (a >= b) && (a <= c)

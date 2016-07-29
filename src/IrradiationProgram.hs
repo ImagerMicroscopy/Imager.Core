@@ -13,11 +13,13 @@ import Data.Monoid
 import Data.Set (Set)
 import qualified Data.Set as S
 import Data.Text (Text)
+import qualified Data.Text as T
 import qualified Data.Vector.Storable as V
 import System.Clock
 
 import LightSources
 import Detector
+import MiscUtils
 
 data IrradiationProgram = IrradiationProgram {
                    ipSteps :: [ProgramStep]
@@ -39,8 +41,8 @@ data DetectionParams = DetectionParams {
 
 data IrradiationParams = IrradiationParams {
                              ipLightSourceName :: !Text
-                           , ipLightSourceChannel :: !Text
-                           , ipPower :: !Double
+                           , ipLightSourceChannel :: ![Text]
+                           , ipPower :: ![Double]
                          }
                          deriving (Show)
 
@@ -183,9 +185,11 @@ validateIrradiationProgram lightSources IrradiationProgram{..} =
         validationResults = map validateProgramStep ipSteps ++ map validateDetectionParams ipDetection
         validateIrradiation :: IrradiationParams -> Either String ()
         validateIrradiation IrradiationParams{..} =
-            if ((isJust $ lookupMaybeLightSource lightSources ipLightSourceName) && (within ipPower 0.0 100.0))
-                then Right ()
-                else Left "invalid irradiation params"
+            case (lookupMaybeLightSource lightSources ipLightSourceName) of
+              Nothing -> Left "invalid light source name"
+              Just ls -> if (validLightSourceChannelsAndPowers ls ipLightSourceChannel ipPower)
+                          then Right ()
+                          else Left ("invalid light source parameters for " ++ T.unpack ipLightSourceName)
         validateDetectionParams :: DetectionParams -> Either String ()
         validateDetectionParams DetectionParams{..} =
             if ((within dpExposureTime 3.8e-3 10) && (within dpNSpectraToAverage 1 1000) && (all isRight $ map validateIrradiation dpIrradiation))
@@ -196,8 +200,6 @@ validateIrradiationProgram lightSources IrradiationProgram{..} =
             if ((within psIrradiationDuration 0.0 3600) && (within psNTimesToPerform 1 5000) && (all isRight $ map validateIrradiation psIrradiation))
                 then Right ()
                 else Left "invalid program step"
-        within :: (Ord a) => a -> a -> a -> Bool
-        within a b c = (a >= b) && (a <= c)
 
 lightsourceNamesUsedInProgram :: IrradiationProgram -> [Text]
 lightsourceNamesUsedInProgram (IrradiationProgram steps dets) = S.toList (mconcat (map lightSourceNamesInStep steps) <> mconcat (map lightSourceNamesInDetPars dets))

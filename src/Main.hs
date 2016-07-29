@@ -140,11 +140,11 @@ performAction env ListLightSources = return (AvailableLightSources availableLigh
     where
       availableLightSourceDescs = envLightSourceDescs env
 
-performAction env (ActivateLightSource name channel power) =
+performAction env (ActivateLightSource name channels powers) =
     runExceptT (
         ExceptT (ensureAsyncAcquisitionNotRunning env) >>
         ExceptT (return $ lookupEitherLightSource lightSources name) >>= \lightSource ->
-        ExceptT (activateLightSource lightSource channel power)) >>= \result ->
+        ExceptT (activateLightSource lightSource channels powers)) >>= \result ->
         case result of
             Left err -> return (StatusError err, env)
             Right _ -> return (StatusOK, env)

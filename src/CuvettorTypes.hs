@@ -45,8 +45,8 @@ data RequestMessage = SetPinHigh !GPIOPin
                     | ListLightSources
                     | ActivateLightSource {
                         reqActivateName :: !Text
-                      , reqActivateChannel :: !Text
-                      , reqActivatePower :: !Double
+                      , reqActivateChannels :: ![Text]
+                      , reqActivatePowers :: ![Double]
                     }
                     | DeactivateLightSource !Text
                     | Ping
