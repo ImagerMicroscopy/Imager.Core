@@ -47,7 +47,7 @@ extraPins :: [GPIOPin]
 extraPins = [spectrometerTriggerPin]
 spectrometerTriggerPin = Pin11
 #else
-    extraPins = []
+extraPins = []
 #endif
 
 handlerTimeout :: Int
