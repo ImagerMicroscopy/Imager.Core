@@ -35,6 +35,7 @@ executable RaspCuvettor
                      , transformers
                      , clock
                      , serialport
+                     , parallel
                      , vector
                      , filepath
                      , SimpleJSONServer

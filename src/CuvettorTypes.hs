@@ -4,6 +4,7 @@ module CuvettorTypes where
 
 import Control.Concurrent
 import Control.Concurrent.Async
+import Control.Parallel.Strategies
 import GHC.Generics
 import Data.Aeson
 import qualified Data.ByteString as SB
@@ -121,7 +122,7 @@ instance ToJSON ResponseMessage where
     toEncoding (AvailableLightSources ls) = pairs ("responsetype" .= ("availablelightsources" :: Text) <> "lightsources" .= ls)
     toEncoding (Pong) = pairs ("responsetype" .= ("pong" :: Text))
     toEncoding (AsyncAcquiredSpectra spectra w) =
-        let encodedByteStrings = map (map (\(v, t) -> (T.decodeUtf8 . B64.encode $ v, t))) spectra
+        let encodedByteStrings = map (parMap rdeepseq (\(v, t) -> (T.decodeUtf8 . B64.encode $ v, t))) spectra
         in pairs ("responsetype" .= ("asyncspectra" :: Text) <> "spectra" .= encodedByteStrings <> "wavelengths" .= w)
     toEncoding (AsyncAcquisitionIsRunning b) = pairs ("responsetype" .= ("asyncacquisitionstatus" :: Text) <> "running" .= b)
 
