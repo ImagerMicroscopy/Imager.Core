@@ -102,7 +102,7 @@ data ResponseMessage = StatusOK
                      | AvailableLightSources ![LightSourceDesc]
                      | Pong
                      | AsyncAcquiredSpectra {
-                         respAsyncSpectra :: ![[(SB.ByteString, Double)]]
+                         respAsyncSpectra :: ![[(AcquiredData, Double)]]
                        , respAsyncCachedWavelengths :: !Text
                        }
                      | AsyncAcquisitionIsRunning !Bool
@@ -122,8 +122,7 @@ instance ToJSON ResponseMessage where
     toEncoding (AvailableLightSources ls) = pairs ("responsetype" .= ("availablelightsources" :: Text) <> "lightsources" .= ls)
     toEncoding (Pong) = pairs ("responsetype" .= ("pong" :: Text))
     toEncoding (AsyncAcquiredSpectra spectra w) =
-        let encodedByteStrings = map (parMap rdeepseq (\(v, t) -> (T.decodeUtf8 . B64.encode $ v, t))) spectra
-        in pairs ("responsetype" .= ("asyncspectra" :: Text) <> "spectra" .= encodedByteStrings <> "wavelengths" .= w)
+        pairs ("responsetype" .= ("asyncspectra" :: Text) <> "spectra" .= spectra <> "wavelengths" .= w)
     toEncoding (AsyncAcquisitionIsRunning b) = pairs ("responsetype" .= ("asyncacquisitionstatus" :: Text) <> "running" .= b)
 
 instance ToJSON AcquiredData where
