@@ -19,6 +19,7 @@ import qualified Data.Text.Encoding as T
 import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
 import Foreign
+import System.Clock
 import System.IO.Unsafe
 
 import MiscUtils
@@ -34,7 +35,7 @@ data Environment a = Environment {
                     , envAvailablePins :: [GPIOPin]
                     , envDetector :: a
                     , envEncodedSpectrometerWavelengths :: !Text
-                    , envAsyncDataMVar :: MVar ([[(AcquiredData, Double)]])
+                    , envAsyncDataMVar :: MVar [[AcquiredData]]
                     , envAsyncProgramWorker :: Async ()
 }
 
@@ -102,7 +103,7 @@ data ResponseMessage = StatusOK
                      | AvailableLightSources ![LightSourceDesc]
                      | Pong
                      | AsyncAcquiredSpectra {
-                         respAsyncSpectra :: ![[(AcquiredData, Double)]]
+                         respAsyncSpectra :: ![[AcquiredData]]
                        , respAsyncCachedWavelengths :: !Text
                        }
                      | AsyncAcquisitionIsRunning !Bool
@@ -126,9 +127,11 @@ instance ToJSON ResponseMessage where
     toEncoding (AsyncAcquisitionIsRunning b) = pairs ("responsetype" .= ("asyncacquisitionstatus" :: Text) <> "running" .= b)
 
 instance ToJSON AcquiredData where
-  toJSON (AcquiredData nRows nCols bytes numType) = object ["nrows" .= nRows, "ncols" .= nCols, "data" .= bytes, "numtype" .= (show numType)]
-  toEncoding (AcquiredData nRows nCols bytes numType) =
-      pairs ("nrows" .= nRows <> "ncols" .= nCols <> "data" .= bytes <> "numtype" .= (show numType))
+  toJSON (AcquiredData nRows nCols timeStamp bytes numType) =
+      object ["nrows" .= nRows, "ncols" .= nCols, "data" .= bytes, "timestamp" .= (timeStampAsFloat timeStamp), "numtype" .= (show numType)]
+  toEncoding (AcquiredData nRows nCols timeStamp bytes numType) =
+      pairs ("nrows" .= nRows <> "ncols" .= nCols <> "timestamp" .= (timeStampAsFloat timeStamp) <> "data" .= bytes <> "numtype" .= (show numType))
+timeStampAsFloat ts = ((*) 1.0e-9 . fromIntegral . nsec $ ts :: Double)
 
 instance FromJSON GPIOPin where
     parseJSON (String s) =

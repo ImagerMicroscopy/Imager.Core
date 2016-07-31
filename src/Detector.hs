@@ -19,6 +19,7 @@ data NumberType = UINT16
 data AcquiredData = AcquiredData {
                         acqNRows :: !Int
                       , acqNCols :: !Int
+                      , acqTimeStamp :: !TimeSpec
                       , acqData :: !ByteString
                       , acqNumType :: !NumberType
                   } deriving (Show)
@@ -26,23 +27,23 @@ data AcquiredData = AcquiredData {
 class Detector a where
     acquireData :: a -> ExposureTime -> Gain -> NMeasurementsToAverage -> IO (Either String AcquiredData)
     acquireStreamingData :: a -> ExposureTime -> Gain -> NMeasurementsToAverage ->
-                            NMeasurementsToPerform -> TimeSpec -> MVar ([[(AcquiredData, Double)]]) -> IO ()
+                            NMeasurementsToPerform -> TimeSpec -> MVar [[AcquiredData]] -> IO ()
     acquireStreamingData det expTime gain nMeasurementsToAverage nMeasurements startTime dataMVar =
         forM_ [1 .. nMeasurements] (\_ ->
             acquireData det expTime gain nMeasurementsToAverage >>= \dat ->
             case dat of
               Left e -> error e
-              Right acqData ->
-                getTime Monotonic >>= \timeStamp ->
-                addDataToMVar dataMVar startTime [(acqData, timeStamp)])
+              Right acqData -> addDataToMVar dataMVar startTime [acqData])
     getGainRange :: a -> IO (Either String (ExposureTime, ExposureTime))
     getExposureTimeRange :: a -> IO (Either String (ExposureTime, ExposureTime))
 
 
-addDataToMVar :: MVar ([[(AcquiredData, Double)]]) -> TimeSpec -> [(AcquiredData, TimeSpec)] -> IO ()
+addDataToMVar :: MVar [[AcquiredData]] -> TimeSpec -> [AcquiredData] -> IO ()
 addDataToMVar mvar startTime newData =
     modifyMVar_ mvar (\previousData ->
         when (length previousData > 100) (error "too many async data stored") >>
-        return (previousData ++ [map toSecondsFromStart newData]))
+        return (zipWith (:) (map toSecondsFromStart newData) previousData))
     where
-        toSecondsFromStart (dat, t) = (dat, (*) 1.0e-9 . fromIntegral . timeSpecAsNanoSecs $ diffTimeSpec t startTime)
+        toSecondsFromStart acqDat =
+            let t = acqTimeStamp acqDat
+            in acqDat {acqTimeStamp = diffTimeSpec t startTime}

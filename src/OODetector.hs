@@ -33,11 +33,12 @@ instance Detector OODetector where
         case spectrum of
             Left e  -> return (Left e)
             Right v -> return (V.map corrFunc v) >>= \corrected ->
+                       getTime Monotonic >>= \timeStamp ->
                        let nRows = V.length corrected
                            nCols = 1
                            bytes = byteStringFromVector corrected
                            numType = FP64
-                       in return $ Right (AcquiredData nRows nCols bytes numType)
+                       in return $ Right (AcquiredData nRows nCols timeStamp bytes numType)
     getGainRange :: OODetector -> IO (Either String (Gain, Gain))
     getGainRange _ = return $ Right (1.0, 1.0)
     getExposureTimeRange :: OODetector -> IO (Either String (ExposureTime, ExposureTime))

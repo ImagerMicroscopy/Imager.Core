@@ -49,7 +49,7 @@ data IrradiationParams = IrradiationParams {
 data ProgramEnvironment a = ProgramEnvironment {
                                 peDetector :: a
                               , peLightSources :: [LightSource]
-                              , peDataMVar :: MVar ([[(AcquiredData, Double)]])
+                              , peDataMVar :: MVar [[AcquiredData]]
                             }
 
 instance FromJSON IrradiationProgram where
@@ -118,13 +118,13 @@ executeIrradiationProgram prog@(IrradiationProgram steps detection) env =
               nTimesToPerform = psNTimesToPerform ps
               dataMVar = peDataMVar env
 
-        executeSlowStep :: [DetectionParams] -> ProgramStep -> TimeSpec -> MVar ([[(AcquiredData, Double)]]) -> IO ()
+        executeSlowStep :: [DetectionParams] -> ProgramStep -> TimeSpec -> MVar [[AcquiredData]] -> IO ()
         executeSlowStep detParams ps startTime dataMVar =
           forM_ (replicate (psNTimesToPerform ps) ps) $ \step ->
               executeSingleIrradiationInStep detParams step >>= \newSpectra ->
               addDataToMVar dataMVar startTime newSpectra
 
-        executeSingleIrradiationInStep :: [DetectionParams] -> ProgramStep -> IO [(AcquiredData, TimeSpec)]
+        executeSingleIrradiationInStep :: [DetectionParams] -> ProgramStep -> IO [AcquiredData]
         executeSingleIrradiationInStep detParams ProgramStep{..} =
             runExceptT (
                 ExceptT (enableLightSources lightSources psIrradiation) >>
@@ -134,15 +134,14 @@ executeIrradiationProgram prog@(IrradiationProgram steps detection) env =
                 Left err -> error err
                 Right _ -> mapM executeStepDetection detParams
 
-        executeStepDetection :: DetectionParams -> IO (AcquiredData, TimeSpec)
+        executeStepDetection :: DetectionParams -> IO AcquiredData
         executeStepDetection params =
-            getTime Monotonic >>= \timeStamp ->
-            executeDetection detector lightSources  params >>= \detResult ->
+            executeDetection detector lightSources params >>= \detResult ->
             case detResult of
-                Right v -> return (v, timeStamp)
+                Right dat -> return dat
                 Left err -> error err
 
-        executeFastStep :: DetectionParams -> Int -> TimeSpec -> MVar ([[(AcquiredData, Double)]]) -> IO ()
+        executeFastStep :: DetectionParams -> Int -> TimeSpec -> MVar [[AcquiredData]] -> IO ()
         executeFastStep detParams nTimesToPerform startTime dataMVar =
             runExceptT (
                 ExceptT (enableLightSources lightSources (dpIrradiation detParams)) >>

@@ -32,11 +32,12 @@ instance Detector SCCamDetector where
         case images of
             Left e  -> return (Left e)
             Right (MeasuredImages nRows nCols vec) ->
+            getTime Monotonic >>= \timeStamp ->
                 let bytes = byteStringFromVector vec
                     numType = UINT16
-                in return $ Right (AcquiredData nRows nCols bytes numType)
+                in return $ Right (AcquiredData nRows nCols timeStamp bytes numType)
     acquireStreamingData :: SCCamDetector -> ExposureTime -> Gain -> NMeasurementsToAverage ->
-                            NMeasurementsToPerform -> TimeSpec -> MVar ([[(AcquiredData, Double)]]) -> IO ()
+                            NMeasurementsToPerform -> TimeSpec -> MVar [[AcquiredData]] -> IO ()
     acquireStreamingData (SCCamDetector camName) expTime gain nMeasurementsToAverage nMeasurements startTime dataMVar =
         (flip finally) (abortAsyncAcquisition camName) (
             startAsyncAcquisition camName nImagesInBuffer >>= \status ->
@@ -62,13 +63,13 @@ instance Detector SCCamDetector where
                                  return . measuredImagesAsAcquiredData >>= \dat ->
                                  addDataToMVar dataMVar startTime [(dat, timeStamp)] >>
                                  fetchImages i (nImagesRemaining - 1) buffer dataMVar
-            measuredImagesAsAcquiredData :: MeasuredImages -> AcquiredData
-            measuredImagesAsAcquiredData (MeasuredImages nRows nCols vec) =
-                AcquiredData nRows nCols (byteStringFromVector vec) UINT16
+            measuredImagesAsAcquiredData :: MeasuredImages -> TimeSpec -> AcquiredData
+            measuredImagesAsAcquiredData (MeasuredImages nRows nCols vec) timeStamp =
+                AcquiredData nRows nCols timeStamp (byteStringFromVector vec) UINT16
                 where
                     nImages = V.length vec `div` (nRows * nCols)
             nImagesInBuffer = 20
     getGainRange :: SCCamDetector -> IO (Either String (Gain, Gain))
     getGainRange (SCCamDetector camName) = readEMGainRange camName
     getExposureTimeRange :: SCCamDetector -> IO (Either String (ExposureTime, ExposureTime))
-    getExposureTimeRange (SCCamDetector camName) = reaExposureTimeRange camName
+    getExposureTimeRange (SCCamDetector camName) = readExposureTimeRange camName

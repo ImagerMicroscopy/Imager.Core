@@ -182,7 +182,7 @@ performAction env FetchAsyncSpectra =
     modifyMVar spectraMVar (\s -> return ([], s)) >>= \newSpectra ->
     asyncAcquisitionErrorMessage env >>= \asyncErrorMsg ->
     asyncAcquisitionRunning env >>= \asyncIsRunning ->
-    return (specResponse asyncErrorMsg asyncIsRunning newSpectra, env)
+    return (specResponse asyncErrorMsg asyncIsRunning (map reverse newSpectra), env)
     where
         spectraMVar = envAsyncDataMVar env
         wl = envEncodedSpectrometerWavelengths env
