@@ -130,7 +130,7 @@ performAction env (AcquireData params) =
         ExceptT (executeDetection detector lightsources params)) >>= \acquiredData ->
     case acquiredData of
         Left err -> return (StatusError err, env)
-        Right dat  -> return (AcquiredSpectrum dat wl, env)
+        Right dat  -> return (AcquiredDataResponse dat wl, env)
     where
         detector = envDetector env
         wl = envEncodedSpectrometerWavelengths env
@@ -178,7 +178,7 @@ performAction env (ExecuteIrradiationProgram prog) =
         detector = envDetector env
         lightSources = envLightSources env
 
-performAction env FetchAsyncSpectra =
+performAction env FetchAsyncData =
     modifyMVar spectraMVar (\s -> return ([], s)) >>= \newSpectra ->
     asyncAcquisitionErrorMessage env >>= \asyncErrorMsg ->
     asyncAcquisitionRunning env >>= \asyncIsRunning ->
@@ -188,8 +188,8 @@ performAction env FetchAsyncSpectra =
         wl = envEncodedSpectrometerWavelengths env
         specResponse asyncErrorMsg asyncIsRunning newSpectra
             | not (null asyncErrorMsg) = StatusError asyncErrorMsg
-            | asyncIsRunning           = if (null newSpectra) then StatusNoNewAsyncSpectra else AsyncAcquiredSpectra newSpectra wl
-            | otherwise                = if (null newSpectra) then StatusNoNewAsyncSpectraComing else (AsyncAcquiredSpectra newSpectra wl)
+            | asyncIsRunning           = if (null newSpectra) then StatusNoNewAsyncData else AsyncAcquiredData newSpectra wl
+            | otherwise                = if (null newSpectra) then StatusNoNewAsyncDataComing else (AsyncAcquiredData newSpectra wl)
 
 performAction env CancelAsyncAcquisition =
     asyncAcquisitionRunning env >>= \asyncIsRunning ->

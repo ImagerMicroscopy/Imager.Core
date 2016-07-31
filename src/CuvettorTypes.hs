@@ -55,7 +55,7 @@ data RequestMessage = SetPinHigh !GPIOPin
                     | ExecuteIrradiationProgram {
                         execIrradiationProgram :: !IrradiationProgram
                       }
-                    | FetchAsyncSpectra
+                    | FetchAsyncData
                     | CancelAsyncAcquisition
                     | IsAsyncAcquisitionRunning
                     deriving (Generic)
@@ -69,7 +69,7 @@ instance ToJSON RequestMessage where
     toEncoding (DeactivateLightSource name) = pairs ("action" .= ("deactivatelightsource" :: Text) <> "name" .= name)
     toEncoding Ping = pairs ("action" .= ("ping" :: Text))
     toEncoding (ExecuteIrradiationProgram prog) = pairs ("action" .= ("executeirradiationprogram" :: Text) <> "program" .= prog)
-    toEncoding FetchAsyncSpectra = pairs ("action" .= ("fetchasyncspectra" :: Text))
+    toEncoding FetchAsyncData = pairs ("action" .= ("fetchasyncspectra" :: Text))
     toEncoding CancelAsyncAcquisition = pairs ("action" .= ("cancelasyncacquisition" :: Text))
     toEncoding IsAsyncAcquisitionRunning = pairs ("action" .= ("isasyncacquisitionrunning" :: Text))
 
@@ -85,7 +85,7 @@ instance FromJSON RequestMessage where
             "deactivatelightsource" -> DeactivateLightSource <$> v .: "name"
             "ping"      -> return Ping
             "executeirradiationprogram" -> ExecuteIrradiationProgram <$> v .: "program"
-            "fetchasyncspectra" -> return FetchAsyncSpectra
+            "fetchasyncspectra" -> return FetchAsyncData
             "cancelasyncacquisition" -> return CancelAsyncAcquisition
             "isasyncacquisitionrunning" -> return IsAsyncAcquisitionRunning
             _            -> fail $ "invalid action \"" ++ (T.unpack action) ++ "\""
@@ -94,15 +94,15 @@ instance FromJSON RequestMessage where
 
 data ResponseMessage = StatusOK
                      | StatusError !String
-                     | StatusNoNewAsyncSpectra
-                     | StatusNoNewAsyncSpectraComing
-                     | AcquiredSpectrum {
+                     | StatusNoNewAsyncData
+                     | StatusNoNewAsyncDataComing
+                     | AcquiredDataResponse {
                          respAcqSpectrum   :: !AcquiredData
                        , cachedWavelengths :: !Text
                        }
                      | AvailableLightSources ![LightSourceDesc]
                      | Pong
-                     | AsyncAcquiredSpectra {
+                     | AsyncAcquiredData {
                          respAsyncSpectra :: ![[AcquiredData]]
                        , respAsyncCachedWavelengths :: !Text
                        }
@@ -116,13 +116,13 @@ instance ToJSON SB.ByteString where
 instance ToJSON ResponseMessage where
     toEncoding StatusOK = pairs ("responsetype" .= ("status" :: Text) <> "status" .= ("ok" :: Text))
     toEncoding (StatusError s) = pairs ("responsetype" .= ("status" :: Text) <> "status" .= ("error"  :: Text) <> "error" .= s)
-    toEncoding StatusNoNewAsyncSpectra = pairs ("responsetype" .= ("asyncacquisitionspectrastatus" :: Text) <> "status" .= ("nonewspectra" :: Text))
-    toEncoding (StatusNoNewAsyncSpectraComing) = pairs ("responsetype" .= ("asyncacquisitionspectrastatus" :: Text) <> "status" .= ("nonewspectracoming" :: Text))
-    toEncoding (AcquiredSpectrum d w) = pairs ("responsetype" .= ("spectrum" :: Text) <> "spectrum" .= d
+    toEncoding StatusNoNewAsyncData = pairs ("responsetype" .= ("asyncacquisitionspectrastatus" :: Text) <> "status" .= ("nonewspectra" :: Text))
+    toEncoding (StatusNoNewAsyncDataComing) = pairs ("responsetype" .= ("asyncacquisitionspectrastatus" :: Text) <> "status" .= ("nonewspectracoming" :: Text))
+    toEncoding (AcquiredDataResponse d w) = pairs ("responsetype" .= ("spectrum" :: Text) <> "spectrum" .= d
                                                 <> "wavelengths" .= w)
     toEncoding (AvailableLightSources ls) = pairs ("responsetype" .= ("availablelightsources" :: Text) <> "lightsources" .= ls)
     toEncoding (Pong) = pairs ("responsetype" .= ("pong" :: Text))
-    toEncoding (AsyncAcquiredSpectra spectra w) =
+    toEncoding (AsyncAcquiredData spectra w) =
         pairs ("responsetype" .= ("asyncspectra" :: Text) <> "spectra" .= spectra <> "wavelengths" .= w)
     toEncoding (AsyncAcquisitionIsRunning b) = pairs ("responsetype" .= ("asyncacquisitionstatus" :: Text) <> "running" .= b)
 
