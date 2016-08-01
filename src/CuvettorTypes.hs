@@ -116,7 +116,7 @@ instance ToJSON ResponseMessage where
     toEncoding (StatusError s) = pairs ("responsetype" .= ("status" :: Text) <> "status" .= ("error"  :: Text) <> "error" .= s)
     toEncoding StatusNoNewAsyncData = pairs ("responsetype" .= ("asyncacquisitionspectrastatus" :: Text) <> "status" .= ("nonewspectra" :: Text))
     toEncoding (StatusNoNewAsyncDataComing) = pairs ("responsetype" .= ("asyncacquisitionspectrastatus" :: Text) <> "status" .= ("nonewspectracoming" :: Text))
-    toEncoding (AcquiredDataResponse d) = pairs ("responsetype" .= ("data" :: Text) <> "data" .= d)
+    toEncoding (AcquiredDataResponse d) = pairs ("responsetype" .= ("acquireddata" :: Text) <> "data" .= d)
     toEncoding (Wavelengths d) = pairs ("responsetype" .= ("wavelengths" :: Text) <> "wavelengths" .= d)
     toEncoding (AvailableLightSources ls) = pairs ("responsetype" .= ("availablelightsources" :: Text) <> "lightsources" .= ls)
     toEncoding (Pong) = pairs ("responsetype" .= ("pong" :: Text))
@@ -126,7 +126,7 @@ instance ToJSON ResponseMessage where
 
 instance ToJSON AcquiredData where
   toJSON (AcquiredData nRows nCols timeStamp bytes numType) =
-      object ["nrows" .= nRows, "ncols" .= nCols, "data" .= bytes, "timestamp" .= (timeStampAsFloat timeStamp), "numtype" .= (show numType)]
+      object ["nrows" .= nRows, "ncols" .= nCols, "data" .= bytes, "timestamp" .= (timeSpecAsDouble timeStamp), "numtype" .= (show numType)]
   toEncoding (AcquiredData nRows nCols timeStamp bytes numType) =
       pairs ("nrows" .= nRows <> "ncols" .= nCols <> "timestamp" .= (timeSpecAsDouble timeStamp) <> "data" .= bytes <> "numtype" .= (show numType))
 

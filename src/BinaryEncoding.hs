@@ -46,7 +46,7 @@ encodeAcquiredData :: [[AcquiredData]] -> [ByteString]
 encodeAcquiredData [] = [encodeHeader 22 0 0 0 (encodedNumType UINT16) []]
 encodeAcquiredData acqs = encodeHeader messageLength nRows nCols nDatasetsOfEachType numType timeStamps : acqBytes
   where
-      messageLength = 22 + (length acqs) * 8 + sum (map B.length acqBytes)
+      messageLength = 22 + (length concatenatedAcqs) * 8 + sum (map B.length acqBytes)
       concatenatedAcqs = concat acqs
       timeStamps = map (timeSpecAsDouble . acqTimeStamp) concatenatedAcqs
       nRows = acqNRows (head concatenatedAcqs)
