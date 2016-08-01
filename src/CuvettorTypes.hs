@@ -34,7 +34,7 @@ data Environment a = Environment {
                     , envGPIOHandles :: !GPIOHandles
                     , envAvailablePins :: [GPIOPin]
                     , envDetector :: a
-                    , envEncodedSpectrometerWavelengths :: !Text
+                    , envEncodedSpectrometerWavelengths :: !SB.ByteString
                     , envAsyncDataMVar :: MVar [[AcquiredData]]
                     , envAsyncProgramWorker :: Async ()
 }
@@ -44,6 +44,7 @@ type ExposureTime = Double
 data RequestMessage = SetPinHigh !GPIOPin
                     | SetPinLow !GPIOPin
                     | AcquireData !DetectionParams
+                    | ListWavelengths
                     | ListLightSources
                     | ActivateLightSource {
                         reqActivateName :: !Text
@@ -63,6 +64,7 @@ data RequestMessage = SetPinHigh !GPIOPin
 instance ToJSON RequestMessage where
     toEncoding (SetPinHigh pin) = pairs ("action" .= ("setpinhigh" :: Text) <> "pin" .= show pin)
     toEncoding (SetPinLow pin) = pairs ("action" .= ("setpinlow" :: Text) <> "pin" .= show pin)
+    toEncoding ListWavelengths = pairs ("action" .= ("listwavelengths" :: Text))
     toEncoding (AcquireData p) = pairs ("action" .= ("acquiredata"  :: Text) <> "params" .= p)
     toEncoding ListLightSources = pairs ("action" .= ("listlightsources" :: Text))
     toEncoding (ActivateLightSource name channel power) = pairs ("action" .= ("activatelightsource" :: Text) <> "name" .= name <> "channel" .= channel <> "power" .= power)
@@ -80,6 +82,7 @@ instance FromJSON RequestMessage where
             "setpinhigh" -> SetPinHigh <$> v .: "pin"
             "setpinlow"  -> SetPinLow <$> v .: "pin"
             "acquiredata" -> AcquireData <$> v .: "params"
+            "listwavelengths" -> return ListWavelengths
             "listlightsources" -> return ListLightSources
             "activatelightsource" -> ActivateLightSource <$> v .: "name" <*> v .: "channel" <*> v .: "power"
             "deactivatelightsource" -> DeactivateLightSource <$> v .: "name"
@@ -96,16 +99,11 @@ data ResponseMessage = StatusOK
                      | StatusError !String
                      | StatusNoNewAsyncData
                      | StatusNoNewAsyncDataComing
-                     | AcquiredDataResponse {
-                         respAcqSpectrum   :: !AcquiredData
-                       , cachedWavelengths :: !Text
-                       }
+                     | AcquiredDataResponse !AcquiredData
+                     | Wavelengths !AcquiredData
                      | AvailableLightSources ![LightSourceDesc]
                      | Pong
-                     | AsyncAcquiredData {
-                         respAsyncSpectra :: ![[AcquiredData]]
-                       , respAsyncCachedWavelengths :: !Text
-                       }
+                     | AsyncAcquiredData ![[AcquiredData]]
                      | AsyncAcquisitionIsRunning !Bool
                      deriving (Generic)
 
@@ -118,20 +116,19 @@ instance ToJSON ResponseMessage where
     toEncoding (StatusError s) = pairs ("responsetype" .= ("status" :: Text) <> "status" .= ("error"  :: Text) <> "error" .= s)
     toEncoding StatusNoNewAsyncData = pairs ("responsetype" .= ("asyncacquisitionspectrastatus" :: Text) <> "status" .= ("nonewspectra" :: Text))
     toEncoding (StatusNoNewAsyncDataComing) = pairs ("responsetype" .= ("asyncacquisitionspectrastatus" :: Text) <> "status" .= ("nonewspectracoming" :: Text))
-    toEncoding (AcquiredDataResponse d w) = pairs ("responsetype" .= ("spectrum" :: Text) <> "spectrum" .= d
-                                                <> "wavelengths" .= w)
+    toEncoding (AcquiredDataResponse d) = pairs ("responsetype" .= ("data" :: Text) <> "data" .= d)
+    toEncoding (Wavelengths d) = pairs ("responsetype" .= ("wavelengths" :: Text) <> "wavelengths" .= d)
     toEncoding (AvailableLightSources ls) = pairs ("responsetype" .= ("availablelightsources" :: Text) <> "lightsources" .= ls)
     toEncoding (Pong) = pairs ("responsetype" .= ("pong" :: Text))
-    toEncoding (AsyncAcquiredData spectra w) =
-        pairs ("responsetype" .= ("asyncspectra" :: Text) <> "spectra" .= spectra <> "wavelengths" .= w)
+    toEncoding (AsyncAcquiredData ds) =
+        pairs ("responsetype" .= ("asyncdata" :: Text) <> "data" .= ds)
     toEncoding (AsyncAcquisitionIsRunning b) = pairs ("responsetype" .= ("asyncacquisitionstatus" :: Text) <> "running" .= b)
 
 instance ToJSON AcquiredData where
   toJSON (AcquiredData nRows nCols timeStamp bytes numType) =
       object ["nrows" .= nRows, "ncols" .= nCols, "data" .= bytes, "timestamp" .= (timeStampAsFloat timeStamp), "numtype" .= (show numType)]
   toEncoding (AcquiredData nRows nCols timeStamp bytes numType) =
-      pairs ("nrows" .= nRows <> "ncols" .= nCols <> "timestamp" .= (timeStampAsFloat timeStamp) <> "data" .= bytes <> "numtype" .= (show numType))
-timeStampAsFloat ts = ((*) 1.0e-9 . fromIntegral . nsec $ ts :: Double)
+      pairs ("nrows" .= nRows <> "ncols" .= nCols <> "timestamp" .= (timeSpecAsDouble timeStamp) <> "data" .= bytes <> "numtype" .= (show numType))
 
 instance FromJSON GPIOPin where
     parseJSON (String s) =

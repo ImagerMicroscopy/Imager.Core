@@ -11,6 +11,7 @@ import Foreign.Ptr
 import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
 import System.IO.Unsafe
+import System.Clock
 
 byteStringFromVector :: forall a . Storable a => Vector a -> ByteString
 byteStringFromVector v = unsafePerformIO $
@@ -21,6 +22,9 @@ byteStringFromVector v = unsafePerformIO $
     mallocBytes nBytes >>= \bsPtr ->
     copyBytes (castPtr bsPtr) vecPtr nBytes >>
     SB.unsafePackMallocCStringLen (bsPtr, nBytes)
+
+timeSpecAsDouble :: TimeSpec -> Double
+timeSpecAsDouble ts = (*) 1.0e-9 . fromIntegral . nsec $ ts
 
 fromLeft :: Either a b -> a
 fromLeft (Left a) = a

@@ -18,8 +18,17 @@ import qualified Data.ByteString.Base64 as B64
 import Data.Maybe
 import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
+import System.Clock
 
+import CuvettorTypes
 import Detector
+import GPIO
+import SimpleJSONServer
+import IrradiationProgram
+import LightSources
+import MiscUtils
+import BinaryEncoding
+
 #ifdef WITH_OCEANOPTICS
 import OOSeaBreeze
 import OODetector
@@ -34,13 +43,6 @@ import SCCamDetector
 #if defined(WITH_OCEANOPTICS) && defined(WITH_SCCAMERA)
     #error "must build for either camera or spectrometer"
 #endif
-import GPIO
-import SimpleJSONServer
-import IrradiationProgram
-import LightSources
-import MiscUtils
-
-import CuvettorTypes
 
 extraPins :: [GPIOPin]
 #ifdef WITH_OCEANOPTICS
@@ -97,11 +99,11 @@ main =
     )))
     where
 #ifdef WITH_OCEANOPTICS
-        fetchEncodedWavelengths :: Maybe (DeviceID, FeatureID) -> IO Text
-        fetchEncodedWavelengths Nothing = return T.empty
+        fetchEncodedWavelengths :: Maybe (DeviceID, FeatureID) -> IO SB.ByteString
+        fetchEncodedWavelengths Nothing = return SB.empty
         fetchEncodedWavelengths (Just (dID, fID)) =
             getWavelengths dID fID >>= \(Right wLengths) ->
-            return . T.decodeUtf8 . B64.encode . byteStringFromVector $ wLengths
+            return (byteStringFromVector wLengths)
         setTriggerMode :: Maybe (dID, fID) -> IO ()
         setTriggerMode Nothing = return ()
         setTriggerMode (Just (dID, fID)) = return () --setTriggerMode fID dID TriggerExternalHardwareLevel
@@ -118,7 +120,10 @@ messageHandler :: Detector a => MessageHandler (Environment a)
 messageHandler msg env =
     case (fromJSON msg) of
         Error _   -> return (ResponseJSON (object [("responsetype", "invalidquery")]), env)
-        Success v -> performAction env v >>= \(resp, newEnv) -> return (ResponseLBS (encode resp), newEnv)
+        Success v -> performAction env v >>= \(resp, newEnv) ->
+            if (shouldBinaryEncode resp)
+            then return (ResponseBSList (binaryEncode resp), newEnv)
+            else return (ResponseLBS (encode resp), newEnv)
 
 performAction :: Detector a => Environment a -> RequestMessage -> IO (ResponseMessage, Environment a)
 performAction env (SetPinHigh pin) = setPinLevelOrError env pin High
@@ -130,11 +135,18 @@ performAction env (AcquireData params) =
         ExceptT (executeDetection detector lightsources params)) >>= \acquiredData ->
     case acquiredData of
         Left err -> return (StatusError err, env)
-        Right dat  -> return (AcquiredDataResponse dat wl, env)
+        Right dat  -> return (AcquiredDataResponse dat, env)
     where
         detector = envDetector env
-        wl = envEncodedSpectrometerWavelengths env
         lightsources = envLightSources env
+
+performAction env ListWavelengths =
+    getTime Monotonic >>= \timeStamp ->
+    return (Wavelengths (AcquiredData nWavelengths 1 timeStamp wavelengths numType), env)
+    where
+        wavelengths = envEncodedSpectrometerWavelengths env
+        nWavelengths = SB.length wavelengths `div` 8
+        numType = FP64
 
 performAction env ListLightSources = return (AvailableLightSources availableLightSourceDescs, env)
     where
@@ -179,17 +191,17 @@ performAction env (ExecuteIrradiationProgram prog) =
         lightSources = envLightSources env
 
 performAction env FetchAsyncData =
-    modifyMVar spectraMVar (\s -> return ([], s)) >>= \newSpectra ->
+    modifyMVar dataMVar (\s -> return ([], s)) >>= \newData ->
     asyncAcquisitionErrorMessage env >>= \asyncErrorMsg ->
     asyncAcquisitionRunning env >>= \asyncIsRunning ->
-    return (specResponse asyncErrorMsg asyncIsRunning (map reverse newSpectra), env)
+    return (dataResponse asyncErrorMsg asyncIsRunning (map reverse newData), env)
     where
-        spectraMVar = envAsyncDataMVar env
+        dataMVar = envAsyncDataMVar env
         wl = envEncodedSpectrometerWavelengths env
-        specResponse asyncErrorMsg asyncIsRunning newSpectra
+        dataResponse asyncErrorMsg asyncIsRunning newData
             | not (null asyncErrorMsg) = StatusError asyncErrorMsg
-            | asyncIsRunning           = if (null newSpectra) then StatusNoNewAsyncData else AsyncAcquiredData newSpectra wl
-            | otherwise                = if (null newSpectra) then StatusNoNewAsyncDataComing else (AsyncAcquiredData newSpectra wl)
+            | asyncIsRunning           = if (null newData) then StatusNoNewAsyncData else (AsyncAcquiredData newData)
+            | otherwise                = if (null newData) then StatusNoNewAsyncDataComing else (AsyncAcquiredData newData)
 
 performAction env CancelAsyncAcquisition =
     asyncAcquisitionRunning env >>= \asyncIsRunning ->
