@@ -89,7 +89,7 @@ main =
     listConnectedCameras >>= \camNames ->
     when (null camNames) (error "no cameras found") >>
     let camName = head camNames
-        encodedWavelengths = T.empty
+        encodedWavelengths = SB.empty
         detector = SCCamDetector camName
     in
 #endif
