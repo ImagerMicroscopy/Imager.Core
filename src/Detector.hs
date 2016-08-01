@@ -41,9 +41,12 @@ class Detector a where
 addDataToMVar :: MVar [[AcquiredData]] -> TimeSpec -> [AcquiredData] -> IO ()
 addDataToMVar mvar startTime newData =
     modifyMVar_ mvar (\previousData ->
-        when (length previousData > 100) (error "too many async data stored") >>
-        return (zipWith (:) (map toSecondsFromStart newData) previousData))
+        if (null previousData)
+        then return [[d] | d <- adjustedData]
+        else when (length previousData > 100) (error "too many async data stored") >>
+             return (zipWith (:) adjustedData previousData))
     where
+        adjustedData = map toSecondsFromStart newData
         toSecondsFromStart acqDat =
             let t = acqTimeStamp acqDat
             in acqDat {acqTimeStamp = diffTimeSpec t startTime}
