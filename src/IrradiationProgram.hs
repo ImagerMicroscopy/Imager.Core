@@ -186,9 +186,10 @@ validateIrradiationProgram lightSources IrradiationProgram{..} =
         validateIrradiation IrradiationParams{..} =
             case (lookupMaybeLightSource lightSources ipLightSourceName) of
               Nothing -> Left "invalid light source name"
-              Just ls -> if (validLightSourceChannelsAndPowers ls ipLightSourceChannel ipPower)
-                          then Right ()
-                          else Left ("invalid light source parameters for " ++ T.unpack ipLightSourceName)
+              Just ls -> let errMsg = validLightSourceChannelsAndPowers ls ipLightSourceChannel ipPower
+                         in if (T.null errMsg)
+                            then Right ()
+                            else Left ("invalid light source parameters for " ++ T.unpack ipLightSourceName ++ ": " ++ T.unpack errMsg)
         validateDetectionParams :: DetectionParams -> Either String ()
         validateDetectionParams DetectionParams{..} =
             if ((within dpExposureTime 3.8e-3 10) && (within dpNSpectraToAverage 1 1000) && (all isRight $ map validateIrradiation dpIrradiation))

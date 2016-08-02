@@ -120,18 +120,18 @@ lookupEitherLightSource lightSources name =
         Just l -> Right l
         Nothing -> Left "no such light source"
 
-validLightSourceChannelsAndPowers :: LightSource -> [Text] -> [Double] -> Bool
+validLightSourceChannelsAndPowers :: LightSource -> [Text] -> [Double] -> Text
 validLightSourceChannelsAndPowers ls channels powers
-    | length channels /= length powers = False
-    | (length channels > 1) && (not (lightSourceAllowsMultipleChannels ls)) = False
-    | null channels = False
-    | not (all (\c -> lightSourceHasChannel ls c) channels) = False
-    | not (all (\p -> within p 0.0 100.0) powers) = False
-    | otherwise = True
+    | length channels /= length powers = "must have same number of channels and powers"
+    | (length channels > 1) && (not (lightSourceAllowsMultipleChannels ls)) = "light source does not allow multiple channels"
+    | null channels = "channels cannot be empty"
+    | not (all (\c -> lightSourceHasChannel ls c) channels) = "invalid channel(s)"
+    | not (all (\p -> within p 0.0 100.0) powers) = "power outside valid range"
+    | otherwise = T.empty
 
 activateLightSource :: LightSource -> [Text] -> [Double] -> IO (Either String ())
 activateLightSource ls channels powers
-  | not (validLightSourceChannelsAndPowers ls channels powers) = error "invalid light source parameters"
+  | (not . T.null) (validLightSourceChannelsAndPowers ls channels powers) = error "invalid light source parameters"
   | otherwise = activateLightSource' ls channels powers
   where
     activateLightSource' (GPIOLightSource _ pin delay handles) _ _ = setPinLevel handles pin High >> threadDelay (floor $ 1e6 * delay) >> return (Right ())
