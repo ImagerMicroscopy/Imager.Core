@@ -1,20 +1,20 @@
 # For more information, see: http://docs.haskellstack.org/en/stable/yaml_configuration.html
 
 # Specifies the GHC version and set of packages available (e.g., lts-3.5, nightly-2015-09-21, ghc-7.10.2)
-resolver: nightly-2016-04-05
+resolver: lts-6.10
 
 # Local packages, usually specified by relative directory name
 packages:
 - '.'
 - location:
     git: https://pdedecker@bitbucket.org/pdedecker/simplejsonserver.git
-    commit: 98ba3f4f54a54f334066ef692b82393426ee9e24
+    commit: 62e9aad06dec471291d3746a1c653d024bb3310a
 - location:
     git: https://pdedecker@bitbucket.org/pdedecker/hsoceanoptics.git
-    commit: bccdba4d66850bfcdc9ff4658b371589ad8692c4
+    commit: fdb62af74f926e1caaa6d03c39c637fd541e4f4f
 - location:
     git: https://pdedecker@bitbucket.org/pdedecker/hsgpio.git
-    commit: d321999eeaf2add21068c6b58290ddbb9174cc97
+    commit: 1cab809bdb465d3aed06cb597a4c9aa34e16f5f0
   extra-dep: true
 - location:
     git: https://pdedecker@bitbucket.org/pdedecker/hssccamera.git
