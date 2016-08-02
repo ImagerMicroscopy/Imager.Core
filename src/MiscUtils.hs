@@ -24,7 +24,7 @@ byteStringFromVector v = unsafePerformIO $
     SB.unsafePackMallocCStringLen (bsPtr, nBytes)
 
 timeSpecAsDouble :: TimeSpec -> Double
-timeSpecAsDouble ts = (*) 1.0e-9 . fromIntegral . nsec $ ts
+timeSpecAsDouble ts = (*) 1.0e-9 . fromIntegral . toNanoSecs $ ts
 
 fromLeft :: Either a b -> a
 fromLeft (Left a) = a
