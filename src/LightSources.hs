@@ -43,9 +43,14 @@ data LightSource = GPIOLightSource !Text !GPIOPin !Double !GPIOHandles
                  | DummyLightSource !Text
 
 instance ToJSON LightSourceDesc where
-    toJSON (GPIOLightSourceDesc name _ _) = object ["name" .= name, "channels" .= ([] :: [Text])]
-    toJSON (CoherentLightSourceDesc name _) = object ["name" .= name, "channels" .= ([] :: [Text])]
-    toJSON (DummyLightSourceDesc name) = object ["name" .= name, "channels" .= ([] :: [Text])]
+    toJSON ls = object ["name" .= lsName ls, "channels" .= lightSourceDescChannels ls,
+                        "allowmultiplechannels" .= lightSourceDescAllowsMultipleChannels ls,
+                        "cancontrolpower" .= lightSourceDescCanControlPower ls]
+        where
+          lsName :: LightSourceDesc -> Text
+          lsName (GPIOLightSourceDesc name _ _) = name
+          lsName (CoherentLightSourceDesc name _) = name
+          lsName (DummyLightSourceDesc name) = name
 
 readAvailableLightSources :: IO [LightSourceDesc]
 readAvailableLightSources =
@@ -55,18 +60,23 @@ readAvailableLightSources =
     where
       confFilename = "lightsources.txt"
 
+lightSourceDescChannels :: LightSourceDesc -> [Text]
+lightSourceDescChannels _ = [""]
+
+lightSourceDescAllowsMultipleChannels :: LightSourceDesc -> Bool
+lightSourceDescAllowsMultipleChannels _ = False
+
+lightSourceDescCanControlPower :: LightSourceDesc -> Bool
+lightSourceDescCanControlPower (GPIOLightSourceDesc _ _ _) = False
+lightSourceDescCanControlPower (CoherentLightSourceDesc _ _) = True
+lightSourceDescCanControlPower (DummyLightSourceDesc _) = True
+
 lightSourceAllowsMultipleChannels :: LightSource -> Bool
 lightSourceAllowsMultipleChannels _ = False
 
 lightSourceHasChannel :: LightSource -> Text -> Bool
 lightSourceHasChannel ls channel | channel == "" = True
                                  | otherwise = False
-
---availableLightSources :: [LightSourceDesc]
---availableLightSources = [GPIOLightSourceDesc "561 nm" Pin3 0.01, GPIOLightSourceDesc "488 nm" Pin4 0.01,
---                         GPIOLightSourceDesc "fluorescence" Pin2 0.01, GPIOLightSourceDesc "DT-2-GS" Pin17 0.025]
-                         --CoherentLightSourceDesc "405 nm" "/dev/ttyUSB0"]
---availableLightSources = [DummyLightSourceDesc "dummy1", DummyLightSourceDesc "dummy2"]
 
 gpioPinsNeededForLightSources :: [LightSourceDesc] -> [GPIOPin]
 gpioPinsNeededForLightSources = map extractPin . filter isGPIOLightSource
