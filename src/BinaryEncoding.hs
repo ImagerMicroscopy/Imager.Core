@@ -51,7 +51,7 @@ encodeAcquiredData acqs = encodeHeader messageLength nRows nCols nDatasetsOfEach
       timeStamps = map (timeSpecAsDouble . acqTimeStamp) concatenatedAcqs
       nRows = acqNRows (head concatenatedAcqs)
       nCols = acqNCols (head concatenatedAcqs)
-      nDatasetsOfEachType = length (head acqs)
+      nDatasetsOfEachType = length concatenatedAcqs `div` length acqs
       numType = encodedNumType $ acqNumType (head concatenatedAcqs)
       acqBytes = map acqData concatenatedAcqs
 
