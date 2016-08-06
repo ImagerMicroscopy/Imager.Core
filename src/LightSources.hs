@@ -1,6 +1,19 @@
 {-# LANGUAGE BangPatterns, OverloadedStrings #-}
 
-module LightSources where
+module LightSources (
+    LightSourceDesc
+  , LightSource
+  , readAvailableLightSources
+  , withLightSources
+  , lookupLightSource
+  , activateLightSource
+  , deactivateLightSource
+  , isKnownLightSource
+  , lookupMaybeLightSource
+  , lookupEitherLightSource
+  , validLightSourceChannelsAndPowers
+  , gpioPinsNeededForLightSources
+) where
 
 import Control.Concurrent
 import Control.Exception
