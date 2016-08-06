@@ -1,6 +1,13 @@
 {-# LANGUAGE BangPatterns, RecordWildCards, OverloadedStrings #-}
 
-module IrradiationProgram where
+module IrradiationProgram (
+    IrradiationProgram
+  , DetectionParams
+  , ProgramEnvironment (..)
+  , executeIrradiationProgram
+  , validateIrradiationProgram
+  , executeDetection
+) where
 
 import Control.Concurrent
 import Control.Exception
