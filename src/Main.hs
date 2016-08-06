@@ -1,6 +1,8 @@
 {-# LANGUAGE OverloadedStrings, ScopedTypeVariables #-}
 
-module Main where
+module Main (
+    main
+) where
 
 import Control.Concurrent
 import Control.Concurrent.Async
