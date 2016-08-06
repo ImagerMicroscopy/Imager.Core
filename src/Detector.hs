@@ -1,6 +1,15 @@
 {-# LANGUAGE BangPatterns, ScopedTypeVariables #-}
 
-module Detector where
+module Detector (
+    AcquiredData (..)
+  , NumberType (..)
+  , Detector (..)
+  , ExposureTime
+  , Gain
+  , NMeasurementsToAverage
+  , NMeasurementsToPerform
+  , addDataToMVar
+) where
 
 import Control.Concurrent
 import Control.Monad
@@ -36,7 +45,6 @@ class Detector a where
               Right acqData -> addDataToMVar dataMVar startTime [acqData])
     getGainRange :: a -> IO (Either String (ExposureTime, ExposureTime))
     getExposureTimeRange :: a -> IO (Either String (ExposureTime, ExposureTime))
-
 
 addDataToMVar :: MVar [[AcquiredData]] -> TimeSpec -> [AcquiredData] -> IO ()
 addDataToMVar mvar startTime newData =
