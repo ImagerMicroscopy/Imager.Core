@@ -234,7 +234,10 @@ activateLumencorLightSource (LumencorLightSource _ port haveInitRef currFilterRe
 
 deactivateLightSource :: LightSource -> IO (Either String ())
 deactivateLightSource (GPIOLightSource _ pin delay handles) = setPinLevel handles pin Low >> threadDelay (floor $ 1e6 * delay) >> return (Right ())
-deactivateLightSource (CoherentLightSource name port) = catch (send port "L=0\r" >> readFromSerialUntilChar port 10 >> return (Right ())) (\e -> return (Left (displayException (e :: IOException))))
+deactivateLightSource (CoherentLightSource _ port) = catch (send port "L=0\r" >> readFromSerialUntilChar port 10 >> return (Right ())) (\e -> return (Left (displayException (e :: IOException))))
+deactivateLightSource (LumencorLightSource _ port _ currFilterRef) =
+    readIORef currFilterRef >>= \currFilter ->
+    send port (lumencorDisableMessage currFilter) >> return (Right ())
 deactivateLightSource (DummyLightSource name) = putStrLn ("deactivated " ++ T.unpack name) >> return (Right ())
 deactivateLightSource _ = error "deactivating unknown light source"
 
@@ -276,7 +279,7 @@ lumencorChannelIntensityMessage :: LumencorChannel -> Double -> ByteString
 lumencorChannelIntensityMessage ch p = runPut $
     mapM_ putWord8 [0x53, byte5, 0x03, byte3, byte2, byte1, 0x50]
     where
-        intensityByte = round ((1.0 - p / 100.0) * 255) -- 255 means no light`
+        intensityByte = round ((1.0 - p / 100.0) * 255) -- 255 means no light
         dacAndIntensity LCViolet = (0x18, 2^0)
         dacAndIntensity LCBlue = (0x1A, 2^0)
         dacAndIntensity LCCyan = (0x18, 2^1)
@@ -291,10 +294,10 @@ lumencorChannelIntensityMessage ch p = runPut $
 
 lumencorDisableMessage :: LumencorFilter -> ByteString
 lumencorDisableMessage filter = runPut $
-    mapM_ putWord8 [0x4F, 0xFF .&. filterSelectByte filter, 0x50]
+    mapM_ putWord8 [0x4F, filterSelectByte filter, 0x50]
     where
-        filterSelectByte LCGreenFilter = 2^4
-        filterSelectByte LCYellowFilter = 0
+        filterSelectByte LCGreenFilter = 0x7D
+        filterSelectByte LCYellowFilter = 0x6D
 
 readFromSerialUntilChar :: SerialPort -> Word8 -> IO ByteString
 readFromSerialUntilChar port c = readUntil' port c B.empty
