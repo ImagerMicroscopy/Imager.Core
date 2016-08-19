@@ -158,10 +158,22 @@ performAction env ListLightSources = return (AvailableLightSources availableLigh
       availableLightSourceDescs = envLightSourceDescs env
 
 performAction env GetDetectorLimits =
-    getDetectorLimits det >>= \limits ->
+    runExceptT (
+        ExceptT (ensureAsyncAcquisitionNotRunning env) >>
+        ExceptT (getDetectorLimits det)) >>= \limits ->
     case limits of
         Left err -> return (StatusError err, env)
         Right dl -> return (DetectorLimitsResponse dl, env)
+    where
+        det = envDetector env
+
+performAction env GetDetectorTemperature =
+    runExceptT (
+        ExceptT (ensureAsyncAcquisitionNotRunning env) >>
+        ExceptT (getDetectorTemperature det)) >>= \temp ->
+    case temp of
+        Left err -> return (StatusError err, env)
+        Right t -> return (DetectorTemperatureResponse t, env)
     where
         det = envDetector env
 

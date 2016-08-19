@@ -7,6 +7,7 @@ module Detector (
   , DetectorLimits (..)
   , ExposureTime
   , Gain
+  , Temperature
   , NMeasurementsToAverage
   , NMeasurementsToPerform
   , getDetectorLimits
@@ -21,6 +22,7 @@ import System.Clock
 
 type ExposureTime = Double
 type Gain = Double
+type Temperature = Double
 type NMeasurementsToAverage = Int
 type NMeasurementsToPerform = Int
 
@@ -55,6 +57,7 @@ class Detector a where
             case dat of
               Left e -> error e
               Right acqData -> addDataToMVar dataMVar startTime [acqData])
+    getDetectorTemperature :: a -> IO (Either String Temperature)
     getGainRange :: a -> IO (Either String (Gain, Gain))
     getExposureTimeRange :: a -> IO (Either String (ExposureTime, ExposureTime))
 
@@ -63,8 +66,7 @@ getDetectorLimits det =
     runExceptT (
         ExceptT (getGainRange det) >>= \(minGain, maxGain) ->
         ExceptT (getExposureTimeRange det) >>= \(minExpTime, maxExpTime) ->
-        ExceptT (return $ Right (DetectorLimits minExpTime maxExpTime minGain maxGain 1 100))
-    )
+        ExceptT (return $ Right (DetectorLimits minExpTime maxExpTime minGain maxGain 1 100)))
 
 addDataToMVar :: MVar [[AcquiredData]] -> TimeSpec -> [AcquiredData] -> IO ()
 addDataToMVar mvar startTime newData =

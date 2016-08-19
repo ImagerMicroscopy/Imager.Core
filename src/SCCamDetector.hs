@@ -68,6 +68,8 @@ instance Detector SCCamDetector where
             measuredImagesAsAcquiredData (MeasuredImages nRows nCols vec) timeStamp =
                 AcquiredData nRows nCols timeStamp (byteStringFromVector vec) UINT16
             nImagesInBuffer = 20
+    getDetectorTemperature :: SCCamDetector -> IO (Either String Temperature)
+    getDetectorTemperature (SCCamDetector camName) = readTemperature camName
 
     getGainRange :: SCCamDetector -> IO (Either String (Gain, Gain))
     getGainRange (SCCamDetector camName) = readEMGainRange camName

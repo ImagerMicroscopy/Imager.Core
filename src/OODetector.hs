@@ -39,6 +39,8 @@ instance Detector OODetector where
                            bytes = byteStringFromVector corrected
                            numType = FP64
                        in return $ Right (AcquiredData nRows nCols timeStamp bytes numType)
+    getDetectorTemperature :: OODetector -> IO (Either String Temperature)
+    getDetectorTemperature = return (Right 20.0)
     getGainRange :: OODetector -> IO (Either String (Gain, Gain))
     getGainRange _ = return $ Right (1.0, 1.0)
     getExposureTimeRange :: OODetector -> IO (Either String (ExposureTime, ExposureTime))

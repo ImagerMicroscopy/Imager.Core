@@ -47,6 +47,7 @@ data RequestMessage = SetPinHigh !GPIOPin
                     | ListWavelengths
                     | ListLightSources
                     | GetDetectorLimits
+                    | GetDetectorTemperature
                     | ActivateLightSource {
                         reqActivateName :: !Text
                       , reqActivateChannels :: ![Text]
@@ -69,6 +70,7 @@ instance ToJSON RequestMessage where
     toEncoding (AcquireData p) = pairs ("action" .= ("acquiredata"  :: Text) <> "params" .= p)
     toEncoding ListLightSources = pairs ("action" .= ("listlightsources" :: Text))
     toEncoding GetDetectorLimits = pairs ("action" .= ("getdetectorlimits" :: Text))
+    toEncoding GetDetectorTemperature = pairs ("action" .= ("getdetectortemperature" :: Text))
     toEncoding (ActivateLightSource name channel power) = pairs ("action" .= ("activatelightsource" :: Text) <> "name" .= name <> "channel" .= channel <> "power" .= power)
     toEncoding (DeactivateLightSource name) = pairs ("action" .= ("deactivatelightsource" :: Text) <> "name" .= name)
     toEncoding Ping = pairs ("action" .= ("ping" :: Text))
@@ -87,6 +89,7 @@ instance FromJSON RequestMessage where
             "listwavelengths" -> return ListWavelengths
             "listlightsources" -> return ListLightSources
             "getdetectorlimits" -> return GetDetectorLimits
+            "getdetectortemperature" -> return GetDetectorTemperature
             "activatelightsource" -> ActivateLightSource <$> v .: "name" <*> v .: "channel" <*> v .: "power"
             "deactivatelightsource" -> DeactivateLightSource <$> v .: "name"
             "ping"      -> return Ping
@@ -106,6 +109,7 @@ data ResponseMessage = StatusOK
                      | Wavelengths !AcquiredData
                      | AvailableLightSources ![LightSourceDesc]
                      | DetectorLimitsResponse !DetectorLimits
+                     | DetectorTemperatureResponse !Double
                      | Pong
                      | AsyncAcquiredData ![[AcquiredData]]
                      | AsyncAcquisitionIsRunning !Bool
@@ -124,6 +128,7 @@ instance ToJSON ResponseMessage where
     toEncoding (Wavelengths d) = pairs ("responsetype" .= ("wavelengths" :: Text) <> "wavelengths" .= d)
     toEncoding (AvailableLightSources ls) = pairs ("responsetype" .= ("availablelightsources" :: Text) <> "lightsources" .= ls)
     toEncoding (DetectorLimitsResponse dl) = pairs ("responsetype" .= ("detectorlimits" :: Text) <> "detectorlimits" .= dl)
+    toEncoding (DetectorTemperatureResponse t) = pairs ("responsetype" .= ("detectortemperature" :: Text) <> "detectortemperature" .= t)
     toEncoding (Pong) = pairs ("responsetype" .= ("pong" :: Text))
     toEncoding (AsyncAcquiredData ds) =
         pairs ("responsetype" .= ("asyncdata" :: Text) <> "data" .= ds)
