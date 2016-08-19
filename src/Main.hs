@@ -167,6 +167,16 @@ performAction env GetDetectorLimits =
     where
         det = envDetector env
 
+performAction env (SetDetectorTemperature t) =
+    runExceptT (
+        ExceptT (ensureAsyncAcquisitionNotRunning env) >>
+        ExceptT (setDetectorTemperature det t)) >>= \result ->
+    case result of
+        Left err -> return (StatusError err, env)
+        Right () -> return (StatusOK, env)
+    where
+        det = envDetector env
+
 performAction env GetDetectorTemperature =
     runExceptT (
         ExceptT (ensureAsyncAcquisitionNotRunning env) >>
@@ -174,6 +184,16 @@ performAction env GetDetectorTemperature =
     case temp of
         Left err -> return (StatusError err, env)
         Right t -> return (DetectorTemperatureResponse t, env)
+    where
+        det = envDetector env
+
+performAction env GetDetectorTemperatureSetpoint =
+    runExceptT (
+        ExceptT (ensureAsyncAcquisitionNotRunning env) >>
+        ExceptT (getDetectorTemperatureSetpoint det)) >>= \temp ->
+    case temp of
+        Left err -> return (StatusError err, env)
+        Right t -> return (DetectorTemperatureSetpointResponse t, env)
     where
         det = envDetector env
 

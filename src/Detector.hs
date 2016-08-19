@@ -57,7 +57,9 @@ class Detector a where
             case dat of
               Left e -> error e
               Right acqData -> addDataToMVar dataMVar startTime [acqData])
+    setDetectorTemperature :: a -> Temperature -> IO (Either String ())
     getDetectorTemperature :: a -> IO (Either String Temperature)
+    getDetectorTemperatureSetpoint :: a -> IO (Either String Temperature)
     getGainRange :: a -> IO (Either String (Gain, Gain))
     getExposureTimeRange :: a -> IO (Either String (ExposureTime, ExposureTime))
 
