@@ -91,7 +91,10 @@ lumencorChannelFromName "teal" = LCTeal
 lumencorChannelFromName "green" = LCGreen
 lumencorChannelFromName "yellow" = LCYellow
 lumencorChannelFromName "red" = LCRed
-lumencorChannelFromName c = error ("unknown channel" ++ c)
+lumencorChannelFromName c = error ("unknown channel" ++ T.unpack c)
+
+dummyLightSourceChannels :: [Text]
+dummyLightSourceChannels = ["ch1", "ch2"]
 
 readAvailableLightSources :: IO [LightSourceDesc]
 readAvailableLightSources =
@@ -103,10 +106,12 @@ readAvailableLightSources =
 
 lightSourceDescChannels :: LightSourceDesc -> [Text]
 lightSourceDescChannels (LumencorLightSourceDesc _ _) = lumencorChannels
+lightSourceDescChannels (DummyLightSourceDesc _) = dummyLightSourceChannels
 lightSourceDescChannels _ = [""]
 
 lightSourceDescAllowsMultipleChannels :: LightSourceDesc -> Bool
 lightSourceDescAllowsMultipleChannels (LumencorLightSourceDesc _ _) = True
+lightSourceDescAllowsMultipleChannels (DummyLightSourceDesc _) = True
 lightSourceDescAllowsMultipleChannels _ = False
 
 lightSourceDescCanControlPower :: LightSourceDesc -> Bool
@@ -117,10 +122,12 @@ lightSourceDescCanControlPower (DummyLightSourceDesc _) = True
 
 lightSourceAllowsMultipleChannels :: LightSource -> Bool
 lightSourceAllowsMultipleChannels (LumencorLightSource _ _ _ _) = True
+lightSourceAllowsMultipleChannels (DummyLightSource _) = True
 lightSourceAllowsMultipleChannels _ = False
 
 lightSourceHasChannel :: LightSource -> Text -> Bool
 lightSourceHasChannel (LumencorLightSource _ _ _ _) ch = ch `elem` lumencorChannels
+lightSourceHasChannel (DummyLightSource _) ch = ch `elem` dummyLightSourceChannels
 lightSourceHasChannel _ channel | channel == "" = True
                                 | otherwise = False
 
@@ -196,7 +203,7 @@ activateLightSource ls channels powers
   | otherwise = activateLightSource' ls channels powers
   where
     activateLightSource' (GPIOLightSource _ pin delay handles) _ _ = setPinLevel handles pin High >> threadDelay (floor $ 1e6 * delay) >> return (Right ())
-    activateLightSource' (DummyLightSource name) [c] [p] = putStrLn ("activated " ++ T.unpack name ++ " at power " ++ show p ++ " with channel " ++ T.unpack c) >> return (Right ())
+    activateLightSource' (DummyLightSource name) chs ps = putStrLn ("activated " ++ T.unpack name ++ " with channels " ++ show chs ++ " with powers " ++ show ps) >> return (Right ())
     activateLightSource' ls@(CoherentLightSource _ _) _ [power] = activateCoherentLightSource ls power
     activateLightSource' ls@(LumencorLightSource _ _ _ _) chs ps = activateLumencorLightSource ls (map lumencorChannelFromName chs) ps
     activateLightSource' _ _ _ = error "activating unknown light source"

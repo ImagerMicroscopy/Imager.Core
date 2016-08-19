@@ -4,15 +4,18 @@ module Detector (
     AcquiredData (..)
   , NumberType (..)
   , Detector (..)
+  , DetectorLimits (..)
   , ExposureTime
   , Gain
   , NMeasurementsToAverage
   , NMeasurementsToPerform
+  , getDetectorLimits
   , addDataToMVar
 ) where
 
 import Control.Concurrent
 import Control.Monad
+import Control.Monad.Trans.Except
 import Data.ByteString (ByteString)
 import System.Clock
 
@@ -33,6 +36,15 @@ data AcquiredData = AcquiredData {
                       , acqNumType :: !NumberType
                   } deriving (Show)
 
+data DetectorLimits = DetectorLimits {
+                          dlMinExposureTime :: !ExposureTime
+                        , dlMaxExposureTime :: !ExposureTime
+                        , dlMinGain :: !Gain
+                        , dlMaxGain :: !Gain
+                        , dlMinAveraging :: !Int
+                        , dlMaxAveraging :: !Int
+                    } deriving (Show)
+
 class Detector a where
     acquireData :: a -> ExposureTime -> Gain -> NMeasurementsToAverage -> IO (Either String AcquiredData)
     acquireStreamingData :: a -> ExposureTime -> Gain -> NMeasurementsToAverage ->
@@ -43,8 +55,16 @@ class Detector a where
             case dat of
               Left e -> error e
               Right acqData -> addDataToMVar dataMVar startTime [acqData])
-    getGainRange :: a -> IO (Either String (ExposureTime, ExposureTime))
+    getGainRange :: a -> IO (Either String (Gain, Gain))
     getExposureTimeRange :: a -> IO (Either String (ExposureTime, ExposureTime))
+
+getDetectorLimits :: (Detector a) => a -> IO (Either String DetectorLimits)
+getDetectorLimits det =
+    runExceptT (
+        ExceptT (getGainRange det) >>= \(minGain, maxGain) ->
+        ExceptT (getExposureTimeRange det) >>= \(minExpTime, maxExpTime) ->
+        ExceptT (return $ Right (DetectorLimits minExpTime maxExpTime minGain maxGain 1 100))
+    )
 
 addDataToMVar :: MVar [[AcquiredData]] -> TimeSpec -> [AcquiredData] -> IO ()
 addDataToMVar mvar startTime newData =

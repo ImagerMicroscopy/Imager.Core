@@ -157,6 +157,14 @@ performAction env ListLightSources = return (AvailableLightSources availableLigh
     where
       availableLightSourceDescs = envLightSourceDescs env
 
+performAction env GetDetectorLimits =
+    getDetectorLimits det >>= \limits ->
+    case limits of
+        Left err -> return (StatusError err, env)
+        Right dl -> return (DetectorLimitsResponse dl, env)
+    where
+        det = envDetector env
+
 performAction env (ActivateLightSource name channels powers) =
     runExceptT (
         ExceptT (ensureAsyncAcquisitionNotRunning env) >>

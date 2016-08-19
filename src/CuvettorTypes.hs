@@ -46,6 +46,7 @@ data RequestMessage = SetPinHigh !GPIOPin
                     | AcquireData !DetectionParams
                     | ListWavelengths
                     | ListLightSources
+                    | GetDetectorLimits
                     | ActivateLightSource {
                         reqActivateName :: !Text
                       , reqActivateChannels :: ![Text]
@@ -67,6 +68,7 @@ instance ToJSON RequestMessage where
     toEncoding ListWavelengths = pairs ("action" .= ("listwavelengths" :: Text))
     toEncoding (AcquireData p) = pairs ("action" .= ("acquiredata"  :: Text) <> "params" .= p)
     toEncoding ListLightSources = pairs ("action" .= ("listlightsources" :: Text))
+    toEncoding GetDetectorLimits = pairs ("action" .= ("getdetectorlimits" :: Text))
     toEncoding (ActivateLightSource name channel power) = pairs ("action" .= ("activatelightsource" :: Text) <> "name" .= name <> "channel" .= channel <> "power" .= power)
     toEncoding (DeactivateLightSource name) = pairs ("action" .= ("deactivatelightsource" :: Text) <> "name" .= name)
     toEncoding Ping = pairs ("action" .= ("ping" :: Text))
@@ -84,6 +86,7 @@ instance FromJSON RequestMessage where
             "acquiredata" -> AcquireData <$> v .: "params"
             "listwavelengths" -> return ListWavelengths
             "listlightsources" -> return ListLightSources
+            "getdetectorlimits" -> return GetDetectorLimits
             "activatelightsource" -> ActivateLightSource <$> v .: "name" <*> v .: "channel" <*> v .: "power"
             "deactivatelightsource" -> DeactivateLightSource <$> v .: "name"
             "ping"      -> return Ping
@@ -102,6 +105,7 @@ data ResponseMessage = StatusOK
                      | AcquiredDataResponse !AcquiredData
                      | Wavelengths !AcquiredData
                      | AvailableLightSources ![LightSourceDesc]
+                     | DetectorLimitsResponse !DetectorLimits
                      | Pong
                      | AsyncAcquiredData ![[AcquiredData]]
                      | AsyncAcquisitionIsRunning !Bool
@@ -119,6 +123,7 @@ instance ToJSON ResponseMessage where
     toEncoding (AcquiredDataResponse d) = pairs ("responsetype" .= ("acquireddata" :: Text) <> "data" .= d)
     toEncoding (Wavelengths d) = pairs ("responsetype" .= ("wavelengths" :: Text) <> "wavelengths" .= d)
     toEncoding (AvailableLightSources ls) = pairs ("responsetype" .= ("availablelightsources" :: Text) <> "lightsources" .= ls)
+    toEncoding (DetectorLimitsResponse dl) = pairs ("responsetype" .= ("detectorlimits" :: Text) <> "detectorlimits" .= dl)
     toEncoding (Pong) = pairs ("responsetype" .= ("pong" :: Text))
     toEncoding (AsyncAcquiredData ds) =
         pairs ("responsetype" .= ("asyncdata" :: Text) <> "data" .= ds)
@@ -129,6 +134,12 @@ instance ToJSON AcquiredData where
       object ["nrows" .= nRows, "ncols" .= nCols, "data" .= bytes, "timestamp" .= (timeSpecAsDouble timeStamp), "numtype" .= (show numType)]
   toEncoding (AcquiredData nRows nCols timeStamp bytes numType) =
       pairs ("nrows" .= nRows <> "ncols" .= nCols <> "timestamp" .= (timeSpecAsDouble timeStamp) <> "data" .= bytes <> "numtype" .= (show numType))
+
+instance ToJSON DetectorLimits where
+    toJSON (DetectorLimits minExpTime maxExpTime minGain maxGain minAveraging maxAveraging) =
+        object ["minexposuretime" .= minExpTime, "maxexposuretime" .= maxExpTime,
+                "mingain" .= minGain, "maxgain" .= maxGain,
+                "minaveraging" .= minAveraging, "maxaveraging" .= maxAveraging]
 
 instance FromJSON GPIOPin where
     parseJSON (String s) =
