@@ -95,7 +95,7 @@ main =
         detector = SCCamDetector camName
     in
 #endif
-      let env = Environment availableLightSources lightSources gpioHandles
+      let env = Environment lightSources gpioHandles
                 extraPins detector encodedWavelengths asyncSpectraMVar asyncProgramWorker
       in runServer 3200 messageHandler env serverSettings
     )))
@@ -153,9 +153,9 @@ performAction env ListWavelengths =
         nWavelengths = SB.length wavelengths `div` 8
         numType = FP64
 
-performAction env ListLightSources = return (AvailableLightSources availableLightSourceDescs, env)
+performAction env ListLightSources = return (AvailableLightSources lss, env)
     where
-      availableLightSourceDescs = envLightSourceDescs env
+      lss = envLightSources env
 
 performAction env GetDetectorLimits =
     runExceptT (

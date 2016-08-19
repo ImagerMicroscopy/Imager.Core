@@ -69,16 +69,10 @@ data LumencorChannel = LCViolet | LCBlue | LCCyan | LCTeal
 data LumencorFilter = LCGreenFilter | LCYellowFilter
                       deriving (Eq)
 
-instance ToJSON LightSourceDesc where
-    toJSON ls = object ["name" .= lsName ls, "channels" .= lightSourceDescChannels ls,
-                        "allowmultiplechannels" .= lightSourceDescAllowsMultipleChannels ls,
-                        "cancontrolpower" .= lightSourceDescCanControlPower ls]
-        where
-          lsName :: LightSourceDesc -> Text
-          lsName (GPIOLightSourceDesc name _ _) = name
-          lsName (CoherentLightSourceDesc name _) = name
-          lsName (LumencorLightSourceDesc name _) = name
-          lsName (DummyLightSourceDesc name) = name
+instance ToJSON LightSource where
+    toJSON ls = object ["name" .= lightSourceName ls, "channels" .= lightSourceChannels ls,
+                        "allowmultiplechannels" .= lightSourceAllowsMultipleChannels ls,
+                        "cancontrolpower" .= lightSourceCanControlPower ls]
 
 lumencorChannels :: [Text]
 lumencorChannels = ["violet", "blue", "cyan", "teal", "green", "yellow", "red"]
@@ -104,32 +98,28 @@ readAvailableLightSources =
     where
       confFilename = "lightsources.txt"
 
-lightSourceDescChannels :: LightSourceDesc -> [Text]
-lightSourceDescChannels (LumencorLightSourceDesc _ _) = lumencorChannels
-lightSourceDescChannels (DummyLightSourceDesc _) = dummyLightSourceChannels
-lightSourceDescChannels _ = [""]
-
-lightSourceDescAllowsMultipleChannels :: LightSourceDesc -> Bool
-lightSourceDescAllowsMultipleChannels (LumencorLightSourceDesc _ _) = True
-lightSourceDescAllowsMultipleChannels (DummyLightSourceDesc _) = True
-lightSourceDescAllowsMultipleChannels _ = False
-
-lightSourceDescCanControlPower :: LightSourceDesc -> Bool
-lightSourceDescCanControlPower (GPIOLightSourceDesc _ _ _) = False
-lightSourceDescCanControlPower (CoherentLightSourceDesc _ _) = True
-lightSourceDescCanControlPower (LumencorLightSourceDesc _ _) = True
-lightSourceDescCanControlPower (DummyLightSourceDesc _) = True
+lightSourceCanControlPower :: LightSource -> Bool
+lightSourceCanControlPower (GPIOLightSource _ _ _ _) = False
+lightSourceCanControlPower _ = True
 
 lightSourceAllowsMultipleChannels :: LightSource -> Bool
 lightSourceAllowsMultipleChannels (LumencorLightSource _ _ _ _) = True
 lightSourceAllowsMultipleChannels (DummyLightSource _) = True
 lightSourceAllowsMultipleChannels _ = False
 
+lightSourceName :: LightSource -> Text
+lightSourceName (GPIOLightSource name _ _ _) = name
+lightSourceName (CoherentLightSource name _) = name
+lightSourceName (LumencorLightSource name _ _ _) = name
+lightSourceName (DummyLightSource name) = name
+
+lightSourceChannels :: LightSource -> [Text]
+lightSourceChannels (LumencorLightSource _ _ _ _) = lumencorChannels
+lightSourceChannels (DummyLightSource _) = dummyLightSourceChannels
+lightSourceChannels _ = [""]
+
 lightSourceHasChannel :: LightSource -> Text -> Bool
-lightSourceHasChannel (LumencorLightSource _ _ _ _) ch = ch `elem` lumencorChannels
-lightSourceHasChannel (DummyLightSource _) ch = ch `elem` dummyLightSourceChannels
-lightSourceHasChannel _ channel | channel == "" = True
-                                | otherwise = False
+lightSourceHasChannel ls ch = ch `elem` (lightSourceChannels ls)
 
 gpioPinsNeededForLightSources :: [LightSourceDesc] -> [GPIOPin]
 gpioPinsNeededForLightSources = map extractPin . filter isGPIOLightSource
@@ -162,11 +152,6 @@ closeLightSources = mapM_ closeLightSource
         closeLightSource (CoherentLightSource _ port) = closeSerial port
         closeLightSource (LumencorLightSource _ port _ _) = closeSerial port
         closeLightSource (DummyLightSource name) = putStr ("closed light source " ++ T.unpack name) >> return ()
-
-lightSourceName :: LightSource -> Text
-lightSourceName (GPIOLightSource name _ _ _) = name
-lightSourceName (CoherentLightSource name _) = name
-lightSourceName (DummyLightSource name) = name
 
 isKnownLightSource :: [LightSource] -> Text -> Bool
 isKnownLightSource lss n = isJust $ lookupMaybeLightSource lss n

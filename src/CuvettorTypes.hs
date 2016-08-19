@@ -29,8 +29,7 @@ import IrradiationProgram
 import LightSources
 
 data Environment a = Environment {
-                      envLightSourceDescs :: [LightSourceDesc]
-                    , envLightSources :: [LightSource]
+                      envLightSources :: [LightSource]
                     , envGPIOHandles :: !GPIOHandles
                     , envAvailablePins :: [GPIOPin]
                     , envDetector :: a
@@ -113,7 +112,7 @@ data ResponseMessage = StatusOK
                      | StatusNoNewAsyncDataComing
                      | AcquiredDataResponse !AcquiredData
                      | Wavelengths !AcquiredData
-                     | AvailableLightSources ![LightSourceDesc]
+                     | AvailableLightSources ![LightSource]
                      | DetectorLimitsResponse !DetectorLimits
                      | DetectorTemperatureResponse !Double
                      | DetectorTemperatureSetpointResponse !Double
