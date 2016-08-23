@@ -140,7 +140,7 @@ openLightSources gpioHandles descs = sequence $ map openLightSource descs
             let port = openSerial portName (defaultSerialSettings {commSpeed = CS19200})
             in CoherentLightSource name <$> port
         openLightSource (LumencorLightSourceDesc name portName) =
-            let port = openSerial portName (defaultSerialSettings {commSpeed = CS115200})
+            let port = openSerial portName (defaultSerialSettings {commSpeed = CS9600})
             in LumencorLightSource name <$> port <*> newIORef False <*> newIORef LCGreenFilter
         openLightSource (DummyLightSourceDesc name) = putStrLn ("opened light source " ++ T.unpack name) >> return (DummyLightSource name)
         openLightSource _ = error "opening unknown type of light source"
@@ -215,7 +215,8 @@ activateLumencorLightSource (LumencorLightSource _ port haveInitRef currFilterRe
     readIORef haveInitRef >>= \haveInit ->
     when (not haveInit) (   -- init RS232 and arbitrarily select the green filter
         send port lumencorEnableRS232Message >>
-        changeFilter LCGreenFilter) >>
+        changeFilter LCGreenFilter >>
+        writeIORef haveInitRef True) >>
     readIORef currFilterRef >>= \currFilter ->
     when ((isJust filterForChannel) && (currFilter /= fromJust filterForChannel)) (
         changeFilter $ fromJust filterForChannel) >>
@@ -237,7 +238,8 @@ deactivateLightSource (GPIOLightSource _ pin delay handles) = setPinLevel handle
 deactivateLightSource (CoherentLightSource _ port) = catch (send port "L=0\r" >> readFromSerialUntilChar port 10 >> return (Right ())) (\e -> return (Left (displayException (e :: IOException))))
 deactivateLightSource (LumencorLightSource _ port _ currFilterRef) =
     readIORef currFilterRef >>= \currFilter ->
-    send port (lumencorDisableMessage currFilter) >> return (Right ())
+    send port (lumencorDisableMessage currFilter) >>
+    return (Right ())
 deactivateLightSource (DummyLightSource name) = putStrLn ("deactivated " ++ T.unpack name) >> return (Right ())
 deactivateLightSource _ = error "deactivating unknown light source"
 
@@ -260,7 +262,7 @@ lumencorEnableMessage channels filter = runPut $
     mapM_ putWord8 [0x4F, enableByte, 0x50]
     where
         enableByte :: Word8
-        enableByte = let channelsEnable = complement $  foldl' (\accum ch -> accum .|. (channelEnableByte ch)) 0 channels
+        enableByte = let channelsEnable = 0x7F .&. (complement $  foldl' (\accum ch -> accum .|. (channelEnableByte ch)) 0 channels)
                      in if (filter == LCGreenFilter)
                         then channelsEnable .|. 0x10
                         else channelsEnable .&. complement 0x10
@@ -296,8 +298,8 @@ lumencorDisableMessage :: LumencorFilter -> ByteString
 lumencorDisableMessage filter = runPut $
     mapM_ putWord8 [0x4F, filterSelectByte filter, 0x50]
     where
-        filterSelectByte LCGreenFilter = 0x7D
-        filterSelectByte LCYellowFilter = 0x6D
+        filterSelectByte LCGreenFilter = 0x7F
+        filterSelectByte LCYellowFilter = 0x6F
 
 readFromSerialUntilChar :: SerialPort -> Word8 -> IO ByteString
 readFromSerialUntilChar port c = readUntil' port c B.empty
