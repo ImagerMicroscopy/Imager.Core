@@ -122,13 +122,10 @@ messageHandler :: Detector a => MessageHandler (Environment a)
 messageHandler msg env =
     case (fromJSON msg) of
       Error _   -> return (ResponseJSON (object [("responsetype", "invalidquery")]), env)
-      Success v -> try (performAction env v) >>= \result ->
-        case result of
-          Left (exc :: SomeException) -> putStrLn (displayException exc) >> throwIO exc
-          Right (resp, newEnv) ->
-            if (shouldBinaryEncode resp)
-            then return (ResponseBSList (binaryEncode resp), newEnv)
-            else return (ResponseLBS (encode resp), newEnv)
+      Success v -> performAction env v >>= \(resp, newEnv) ->
+                   if (shouldBinaryEncode resp)
+                     then return (ResponseBSList (binaryEncode resp), newEnv)
+                     else return (ResponseLBS (encode resp), newEnv)
 
 performAction :: Detector a => Environment a -> RequestMessage -> IO (ResponseMessage, Environment a)
 performAction env (SetPinHigh pin) = setPinLevelOrError env pin High
