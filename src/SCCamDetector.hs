@@ -27,7 +27,10 @@ instance Detector SCCamDetector where
         runExceptT (
             ExceptT (setExposureTime camName expTime) >>
             ExceptT (setEMGain camName emGain) >>
-            ExceptT (acquireImages camName 1)
+            ExceptT (Right <$> (putStrLn "will grab image")) >>
+            ExceptT (acquireImages camName 1) >>= \im ->
+            ExceptT (Right <$> (putStrLn "grabbed image")) >>
+            ExceptT (return $ Right im)
         ) >>= \images ->
         case images of
             Left e  -> return (Left e)
