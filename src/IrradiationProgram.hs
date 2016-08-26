@@ -204,7 +204,7 @@ validateIrradiationProgram lightSources IrradiationProgram{..} =
                 else Left "invalid detection params"
         validateProgramStep :: ProgramStep -> Either String ()
         validateProgramStep ProgramStep{..} =
-            if ((within psIrradiationDuration 0.0 3600) && (within psNTimesToPerform 1 5000) && (all isRight $ map validateIrradiation psIrradiation))
+            if ((within psIrradiationDuration 0.0 3600) && (within psNTimesToPerform 1 100000) && (all isRight $ map validateIrradiation psIrradiation))
                 then Right ()
                 else Left "invalid program step"
 
