@@ -116,7 +116,7 @@ executeIrradiationProgram prog@(IrradiationProgram steps detection) env =
 
         executeStep :: Detector a => ProgramEnvironment a -> TimeSpec -> [DetectionParams] -> ProgramStep -> IO ()
         executeStep env startTime detParams ps
-            | (irradiationDuration == 0.0) && (length detParams == 1) = -- no irradiation pause and 1 kind of detection - don't open and close shutters needlessly
+            | (irradiationDuration == 0.0) && (length detParams == 1) && (nTimesToPerform > 1) = -- no irradiation pause and 1 kind of detection - don't open and close shutters needlessly
                   executeFastStep (head detParams) nTimesToPerform startTime dataMVar
             | otherwise =
                   executeSlowStep detParams ps startTime dataMVar

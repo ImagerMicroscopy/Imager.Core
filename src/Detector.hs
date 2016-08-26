@@ -75,7 +75,7 @@ addDataToMVar mvar startTime newData =
     modifyMVar_ mvar (\previousData ->
         if (null previousData)
         then return [[d] | d <- adjustedData]
-        else when (length previousData > 100) (error "too many async data stored") >>
+        else when (length previousData > 100) (putStrLn "aborting due to data overflow" >> error "too many async data stored") >>
              return (zipWith (:) adjustedData previousData))
     where
         adjustedData = map toSecondsFromStart newData
