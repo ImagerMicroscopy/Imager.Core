@@ -34,8 +34,9 @@ import qualified Data.Text.Encoding as T
 import Data.Word
 import System.Environment
 import System.FilePath
-import System.Hardware.Serialport
+import System.Hardware.Serialport hiding(timeout)
 import System.IO
+import System.Timeout
 
 import GPIO
 import MiscUtils
@@ -185,13 +186,17 @@ validLightSourceChannelsAndPowers ls channels powers
 activateLightSource :: LightSource -> [Text] -> [Double] -> IO (Either String ())
 activateLightSource ls channels powers
   | (not . T.null) (validLightSourceChannelsAndPowers ls channels powers) = error "invalid light source parameters"
-  | otherwise = activateLightSource' ls channels powers
+  | otherwise = timeout timeoutDuration (activateLightSource' ls channels powers) >>= \result ->
+                case result of
+                    Nothing -> return (Left ("timeout activating light source " ++ (T.unpack $ lightSourceName ls)))
+                    Just v -> return v
   where
     activateLightSource' (GPIOLightSource _ pin delay handles) _ _ = setPinLevel handles pin High >> threadDelay (floor $ 1e6 * delay) >> return (Right ())
     activateLightSource' (DummyLightSource name) chs ps = putStrLn ("activated " ++ T.unpack name ++ " with channels " ++ show chs ++ " with powers " ++ show ps) >> return (Right ())
     activateLightSource' ls@(CoherentLightSource _ _) _ [power] = activateCoherentLightSource ls power
     activateLightSource' ls@(LumencorLightSource _ _ _ _) chs ps = activateLumencorLightSource ls (map lumencorChannelFromName chs) ps
     activateLightSource' _ _ _ = error "activating unknown light source"
+    timeoutDuration = floor (2.0e6)
 
 activateCoherentLightSource :: LightSource -> Double -> IO (Either String ())
 activateCoherentLightSource (CoherentLightSource _ port) power =
