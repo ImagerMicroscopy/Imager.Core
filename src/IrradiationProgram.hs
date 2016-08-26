@@ -107,7 +107,8 @@ executeIrradiationProgram prog@(IrradiationProgram steps detection) env =
     (getTime Monotonic >>= \startTime ->
     putStrLn "will execute acquisition" >> putStrLn (show (initialAcquisitionStep : steps)) >>
     mapM_ (executeStep env startTime detection) (initialAcquisitionStep : steps))
-        `finally` closeUsedLightsources
+        `finally` closeUsedLightsources >>
+        putStrLn "acquisition finished"
     where
         closeUsedLightsources = mapM_ (\n -> deactivateLightSource (lookupLightSource lightSources n)) lightSourceNamesInProgram
         lightSourceNamesInProgram = lightsourceNamesUsedInProgram prog
