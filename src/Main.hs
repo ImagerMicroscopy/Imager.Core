@@ -30,6 +30,7 @@ import IrradiationProgram
 import LightSources
 import MiscUtils
 import BinaryEncoding
+import FilterWheel
 
 #ifdef WITH_OCEANOPTICS
 import OOSeaBreeze

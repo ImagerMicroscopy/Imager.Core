@@ -305,11 +305,3 @@ lumencorDisableMessage filter = runPut $
     where
         filterSelectByte LCGreenFilter = 0x7F
         filterSelectByte LCYellowFilter = 0x6F
-
-readFromSerialUntilChar :: SerialPort -> Word8 -> IO ByteString
-readFromSerialUntilChar port c = readUntil' port c B.empty
-    where
-        readUntil' :: SerialPort -> Word8 -> ByteString -> IO ByteString
-        readUntil' port c accum | (not $ B.null accum) && (B.last accum == c) = return accum
-                                | otherwise         = recv port 100 >>= \msg ->
-                                                      readUntil' port c (accum <> msg)

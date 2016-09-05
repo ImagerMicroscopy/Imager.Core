@@ -2,17 +2,24 @@
 
 module FilterWheel where
 
+import Control.Exception
 import Control.Monad
 import Control.Monad.Trans.Except
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
+import Data.Either
 import Data.IORef
 import Data.List
+import Data.Maybe
 import Data.Serialize
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+import System.Environment
+import System.FilePath
 import System.Hardware.Serialport
+
+import MiscUtils
 
 data FilterWheelDesc = ThorlabsFW103HDesc {
                            fw103DescName :: !Text
@@ -23,25 +30,37 @@ data FilterWheelDesc = ThorlabsFW103HDesc {
 
 data FilterWheel = ThorlabsFW103H !Text ![(Text, Int)] !SerialPort !(IORef Bool) !(IORef Int)
 
-data JogDirection = JogForward | JogBack
+data JogDirection = JogForward | JogBackward
                   deriving (Eq)
 
-openFilterWheels :: [FilterWheelDesc] -> IO [LightFilter]
-openFilterWheels = mapM_ openFilterWheel
+readAvailableFilterWheels :: IO [FilterWheelDesc]
+readAvailableFilterWheels =
+  getExecutablePath >>= \exePath ->
+  readFile (takeDirectory exePath </> confFilename) >>=
+  return . read
+  where
+    confFilename = "filterwheels.txt"
+
+withFilterWheels :: [FilterWheelDesc] -> ([FilterWheel] -> IO a) -> IO a
+withFilterWheels descs action =
+    bracket (openFilterWheels descs) closeFilterWheels action
+
+openFilterWheels :: [FilterWheelDesc] -> IO [FilterWheel]
+openFilterWheels = mapM openFilterWheel
   where
     openFilterWheel (ThorlabsFW103HDesc name portName chs) =
         let port = openSerial portName (defaultSerialSettings {commSpeed = CS115200})
         in ThorlabsFW103H name (validateChannels chs) <$> port <*> newIORef False <*> newIORef 0
-    validateChannels :: Text -> [(Int, Text)] -> [(Int, Text)]
-    validateChannels name chs | haveDuplicates chs = error ("duplicate channels for " ++ T.unpack name)
-                              | invalidFilterIndices chs = error ("invalid filter indices for " ++ T.unpack name)
-                              | invalidFilterNames chs = error ("invalid filter names for " ++ T.unpack name)
-                              | otherwise = chs
+    validateChannels :: [(Text, Int)] -> [(Text, Int)]
+    validateChannels chs | haveDuplicates chs = error ("duplicate channels in " ++ show chs)
+                         | invalidFilterIndices chs = error ("invalid filter indices in "  ++ show chs)
+                         | invalidFilterNames chs = error ("invalid filter names in " ++ show chs)
+                         | otherwise = chs
       where
         haveDuplicates chs = (nodups (map fst chs) && nodups (map snd chs))
         nodups xs = (nub xs) == xs
-        invalidFilterIndices = any (\(i, _) -> not (within i 0 5))
-        invalidFilterNames = any (\(_, n) -> T.null n)
+        invalidFilterIndices = any (\(_, i) -> not (within i 0 5))
+        invalidFilterNames = any (\(n, _) -> T.null n)
 
 closeFilterWheels :: [FilterWheel] -> IO ()
 closeFilterWheels = mapM_ closeFilterWheels
@@ -49,58 +68,68 @@ closeFilterWheels = mapM_ closeFilterWheels
     closeFilterWheels (ThorlabsFW103H _ _ port _ _) = closeSerial port
 
 filterWheelHasChannel :: FilterWheel -> Text -> Bool
-filterWheelHasChannel (ThorlabsFW103H _ chs _ _ _) c = c `elem` (map snd chs)
+filterWheelHasChannel (ThorlabsFW103H _ chs _ _ _) c = c `elem` (map fst chs)
 
 switchToChannel :: FilterWheel -> Text -> IO (Either String ())
-switchToChannel fn chName | not (filterWheelHasChannel fw chName) = error "no matching channel for filter wheel"
+switchToChannel fw chName | not (filterWheelHasChannel fw chName) = error "no matching channel for filter wheel"
                           | otherwise = switchToChannel' fw chName
   where
-    switchToChannel' fn (ThorlabsFW103H _ chs port haveInitRef currChannelRef) =
+    switchToChannel' :: FilterWheel -> Text -> IO (Either String ())
+    switchToChannel' (ThorlabsFW103H _ chs port haveInitRef currChannelRef) chName =
         runExceptT (
-            initFW103HIfNeeded >>
-
-        )
+            ExceptT (initFW103HIfNeeded port haveInitRef currChannelRef) >>
+            ExceptT moveToFilter)
         where
-          initFW103HIfNeeded =
-              readIORef haveInitRef >>= \haveInit
-              if (haveInit)
-              then return (Right ())
-              else
-                  sendReceiveFW103HMessage port (fw103HMessageWithParam (0x43, 0x04) 0) (0x44, 0x04) >>= \result ->
-                  case result of
-                    Left e -> return e
-                    Right _ -> writeIORef haveInitRef true >>
-                               writeIORef currChannelRef 0 >>
-                               return (Right ())
-          moveToFilter fn =
-              let filterIndex = fromJust (lookup fn chs)
-              in
+          moveToFilter :: IO (Either String ())
+          moveToFilter =
+              readIORef currChannelRef >>= \currChannel ->
+              let filterIndex = fromJust (lookup chName chs)
+                  moveMessages = fw103HJogMessages 6 currChannel filterIndex
+              in mapM (\bs -> sendReceiveFW103HMessage port bs (0x64, 0x04)) moveMessages >>= \responses ->
+              if (any isLeft responses)
+              then return (head $ filter isLeft responses)
+              else return (Right ())
+
+initFW103HIfNeeded :: SerialPort -> IORef Bool -> IORef Int -> IO (Either String ())
+initFW103HIfNeeded port haveInitRef currChannelRef =
+      readIORef haveInitRef >>= \haveInit ->
+      if (haveInit)
+      then return (Right ())
+      else
+          sendReceiveFW103HMessage port fw103HMoveHomeMessage (0x44, 0x04) >>= \result ->
+          case result of
+            Left e -> return (Left e)
+            Right _ -> writeIORef haveInitRef True >> writeIORef currChannelRef 0 >>
+                       return (Right ())
 
 sendReceiveFW103HMessage :: SerialPort -> ByteString -> (Int, Int) -> IO (Either String ())
 sendReceiveFW103HMessage port msg (resp1, resp2) =
     send port msg >>
     readAtLeastNBytesFromSerial port 6 >>= \response ->
-    if (B.take 2 response /= B.pack [resp1, resp2])
-    then return (Left ("unexpected response from FW103H: " ++ show response)))
+    if ((map fromIntegral . B.unpack . B.take 2) response /= [resp1, resp2])
+    then return (Left ("unexpected response from FW103H: " ++ show response))
     else return (Right ())
 
-fw103HJogMessage :: JogDirection -> IO ByteString
-fw103HJogMessage JogForward = B.pack [0x6A, 0x04, 0x01, 0x01, 0x50, 0x01]
-fw103HJogMessage JogBack    = B.pack [0x6A, 0x04, 0x01, 0x02, 0x50, 0x01]
+fw103HMoveHomeMessage :: ByteString
+fw103HMoveHomeMessage = fw103HMessage (0x43, 0x04)
 
-jogActions :: Int -> Int -> Int -> [IO (Either String ())]
-jogActions nFilters current target = 
+fw103HJogMessage :: JogDirection -> ByteString
+fw103HJogMessage JogForward  = B.pack [0x6A, 0x04, 0x01, 0x01, 0x50, 0x01]
+fw103HJogMessage JogBackward = B.pack [0x6A, 0x04, 0x01, 0x02, 0x50, 0x01]
+
+fw103HJogMessages :: Int -> Int -> Int -> [ByteString]
+fw103HJogMessages nFilters current target
+    | nJogStepsForward <= nJogStepsBackward = replicate nJogStepsForward (fw103HJogMessage JogForward)
+    | otherwise                             = replicate nJogStepsBackward (fw103HJogMessage JogBackward)
     where
-        nJogStepsForward :: Int -> Int -> Int -> Int
-        nJogStepsForward nFilters current target | target >= current = target - current
-                                                 | otherwise = (nFilters - current) + target
-        nJogStepsBackward :: Int -> Int -> Int -> Int
-        nJogStepsBackward nFilters current target | target <= current = current - target
-                                                  | otherwise = current + (nFilters - target)
+        nJogStepsForward | target >= current = target - current
+                         | otherwise = (nFilters - current) + target
+        nJogStepsBackward | target <= current = current - target
+                          | otherwise = current + (nFilters - target)
 
 fw103HMessage :: (Int, Int) -> ByteString
 fw103HMessage mID = fw103HMessageWithParam mID 0
 
 fw103HMessageWithParam :: (Int, Int) -> Int -> ByteString
-fw103HMessage (mID1, mID2) mParam = runPut $
+fw103HMessageWithParam (mID1, mID2) mParam = runPut $
     mapM_ putWord8 [fromIntegral mID1, fromIntegral mID2, fromIntegral mParam, 0, 0x50, 0x01]

@@ -43,6 +43,7 @@ executable RaspCuvettor
                      , GPIO
   other-modules:       CuvettorTypes
                      , BinaryEncoding
+                     , FilterWheel
                      , LightSources
                      , IrradiationProgram
                      , Detector

@@ -5,6 +5,7 @@ module MiscUtils where
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Unsafe as SB
+import Data.Monoid
 import Data.Word
 import Foreign.Storable
 import Foreign.Marshal
@@ -37,13 +38,13 @@ readFromSerialUntilChar port c = readUntil' port c B.empty
                                                       readUntil' port c (accum <> msg)
 
 readAtLeastNBytesFromSerial :: SerialPort -> Int -> IO ByteString
-readAtLeastNBytesFromSerial p n = readBytes p n B.empty
+readAtLeastNBytesFromSerial port n = readBytes port n B.empty
   where
     readBytes p n accum = recv port 100 >>= \newBytes ->
-                    let accum' = B.concat accum newBytes
+                    let accum' = accum <> newBytes
                     in if (B.length accum' >= n)
                        then return accum'
-                       else readBytes p n accum'
+                       else readBytes port n accum'
 
 fromLeft :: Either a b -> a
 fromLeft (Left a) = a
