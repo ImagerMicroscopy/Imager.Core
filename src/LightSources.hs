@@ -1,7 +1,7 @@
 {-# LANGUAGE BangPatterns, OverloadedStrings #-}
 
 module LightSources (
-    LightSourceDesc
+    LightSourceDesc(..)
   , LightSource
   , readAvailableLightSources
   , withLightSources
