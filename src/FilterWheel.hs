@@ -136,11 +136,15 @@ initFW103HIfNeeded port haveInitRef currChannelRef =
 
 sendReceiveFW103HMessage :: SerialPort -> ByteString -> (Int, Int) -> IO (Either String ())
 sendReceiveFW103HMessage port msg (resp1, resp2) =
-    send port msg >>
-    readAtLeastNBytesFromSerial port 6 >>= \response ->
-    if ((map fromIntegral . B.unpack . B.take 2) response /= [resp1, resp2])
-    then return (Left ("unexpected response from FW103H: " ++ show response))
-    else return (Right ())
+    timeout (floor 2.0e6) (
+        send port msg >>
+        readAtLeastNBytesFromSerial port 6 >>= \response ->
+        if ((map fromIntegral . B.unpack . B.take 2) response /= [resp1, resp2])
+            then return (Left ("unexpected response from FW103H: " ++ show response))
+            else return (Right ())) >>= \result ->
+    case result of
+        Nothing -> return (Left "error communication with FW103H")
+        Just v -> return v
 
 fw103HMoveHomeMessage :: ByteString
 fw103HMoveHomeMessage = fw103HMessage (0x43, 0x04)
