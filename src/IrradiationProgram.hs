@@ -6,6 +6,7 @@ module IrradiationProgram (
   , ProgramEnvironment (..)
   , executeIrradiationProgram
   , validateIrradiationProgram
+  , validateDetectionParams
   , executeDetection
 ) where
 
@@ -15,6 +16,7 @@ import Control.Monad
 import Control.Monad.Trans.Except
 import Data.Aeson
 import Data.Either
+import Data.List
 import Data.Maybe
 import Data.Monoid
 import Data.Set (Set)
@@ -24,6 +26,7 @@ import qualified Data.Text as T
 import qualified Data.Vector.Storable as V
 import System.Clock
 
+import FilterWheel
 import LightSources
 import Detector
 import MiscUtils
@@ -44,6 +47,7 @@ data DetectionParams = DetectionParams {
                            dpExposureTime :: !Double
                          , dpNSpectraToAverage :: !Int
                          , dpIrradiation :: [IrradiationParams]
+                         , dpFilterParams :: [FilterParams]
                        }
 
 data IrradiationParams = IrradiationParams {
@@ -53,9 +57,15 @@ data IrradiationParams = IrradiationParams {
                          }
                          deriving (Show)
 
+data FilterParams = FilterParams {
+                        fpFilterWheelName :: !Text
+                      , fpFilterName :: !Text
+                    } deriving (Show)
+
 data ProgramEnvironment a = ProgramEnvironment {
                                 peDetector :: a
                               , peLightSources :: [LightSource]
+                              , peFilterWheels :: [FilterWheel]
                               , peDataMVar :: MVar [[AcquiredData]]
                             }
 
@@ -85,10 +95,11 @@ instance FromJSON DetectionParams where
         DetectionParams <$> v .: "exposuretime"
                         <*> v .: "nspectra"
                         <*> v .: "irradiation"
+                        <*> v .: "filters"
     parseJSON _ = fail "can't decode detection params"
 instance ToJSON DetectionParams where
-    toEncoding (DetectionParams expTime nSpectra irr) =
-        pairs ("exposuretime" .= expTime <> "nspectra" .= nSpectra <> "irradiation" .= irr)
+    toEncoding (DetectionParams expTime nSpectra irr filters) =
+        pairs ("exposuretime" .= expTime <> "nspectra" .= nSpectra <> "irradiation" .= irr <> "filters" .= filters)
     toJSON _ = error "no toJSON"
 
 instance FromJSON IrradiationParams where
@@ -100,6 +111,16 @@ instance FromJSON IrradiationParams where
 instance ToJSON IrradiationParams where
     toEncoding (IrradiationParams lName channel power) =
         pairs ("lightsourcename" .= lName <> "lightsourcechannel" .= channel <> "lightsourcepower" .= power)
+    toJSON _ = error "no toJSON"
+
+instance FromJSON FilterParams where
+    parseJSON (Object v) =
+        FilterParams <$> v .: "filterwheelname"
+                          <*> v .: "filtername"
+    parseJSON _ = fail "can't decode irradiation params"
+instance ToJSON FilterParams where
+    toEncoding (FilterParams filterWheelName filterName) =
+        pairs ("filterwheelname" .= filterWheelName <> "filtername" .= filterName)
     toJSON _ = error "no toJSON"
 
 executeIrradiationProgram :: Detector a => IrradiationProgram -> ProgramEnvironment a -> IO ()
@@ -144,7 +165,7 @@ executeIrradiationProgram prog@(IrradiationProgram steps detection) env =
 
         executeStepDetection :: DetectionParams -> IO AcquiredData
         executeStepDetection params =
-            executeDetection detector lightSources params >>= \detResult ->
+            executeDetection detector lightSources filterWheels params >>= \detResult ->
             case detResult of
                 Right dat -> return dat
                 Left err -> error err
@@ -152,6 +173,7 @@ executeIrradiationProgram prog@(IrradiationProgram steps detection) env =
         executeFastStep :: DetectionParams -> Int -> TimeSpec -> MVar [[AcquiredData]] -> IO ()
         executeFastStep detParams nTimesToPerform startTime dataMVar =
             runExceptT (
+                ExceptT (switchToFilters filterWheels (dpFilterParams detParams)) >>
                 ExceptT (enableLightSources lightSources (dpIrradiation detParams)) >>
                 ExceptT (Right <$> acquireStreamingData detector (dpExposureTime detParams) 1.0
                             (dpNSpectraToAverage detParams) nTimesToPerform startTime dataMVar) >>
@@ -160,11 +182,13 @@ executeIrradiationProgram prog@(IrradiationProgram steps detection) env =
                 Left e -> error e
                 Right _ -> return ()
         lightSources = peLightSources env
+        filterWheels = peFilterWheels env
         detector = peDetector env
 
-executeDetection :: Detector a => a -> [LightSource] -> DetectionParams -> IO (Either String AcquiredData)
-executeDetection det lss DetectionParams{..} =
+executeDetection :: Detector a => a -> [LightSource] -> [FilterWheel] -> DetectionParams -> IO (Either String AcquiredData)
+executeDetection det lss fws DetectionParams{..} =
     runExceptT (
+        ExceptT (switchToFilters fws dpFilterParams) >>
         ExceptT (enableLightSources lss dpIrradiation) >>
         ExceptT (acquireData det dpExposureTime 1.0 dpNSpectraToAverage) >>= \acquiredData ->
         ExceptT (disableLightSources lss dpIrradiation) >>
@@ -183,31 +207,54 @@ disableLightSources lss params = catch (Right <$> mapM_ (\(IrradiationParams sou
     where
         allLightSourcesKnown = and $ map (isKnownLightSource lss . ipLightSourceName) params
 
-validateIrradiationProgram :: [LightSource] -> IrradiationProgram -> Either String ()
-validateIrradiationProgram lightSources IrradiationProgram{..} =
+switchToFilters :: [FilterWheel] -> [FilterParams] -> IO (Either String ())
+switchToFilters fws fps =
+    mapM (\(FilterParams fwName fw) -> switchToFilter fws fwName fw) fps >>= \results ->
+    if (any isLeft results)
+    then return (head . filter isLeft $ results)
+    else return (Right ())
+
+validateIrradiationProgram :: [LightSource] -> [FilterWheel] -> IrradiationProgram -> Either String ()
+validateIrradiationProgram lightSources filterWheels IrradiationProgram{..} =
     if (any isLeft validationResults)
         then head . filter isLeft $ validationResults
         else Right ()
     where
-        validationResults = map validateProgramStep ipSteps ++ map validateDetectionParams ipDetection
-        validateIrradiation :: IrradiationParams -> Either String ()
-        validateIrradiation IrradiationParams{..} =
-            case (lookupMaybeLightSource lightSources ipLightSourceName) of
-              Nothing -> Left "invalid light source name"
-              Just ls -> let errMsg = validLightSourceChannelsAndPowers ls ipLightSourceChannel ipPower
-                         in if (T.null errMsg)
-                            then Right ()
-                            else Left ("invalid light source parameters for " ++ T.unpack ipLightSourceName ++ ": " ++ T.unpack errMsg)
-        validateDetectionParams :: DetectionParams -> Either String ()
-        validateDetectionParams DetectionParams{..} =
-            if ((within dpExposureTime 3.8e-3 10) && (within dpNSpectraToAverage 1 1000) && (all isRight $ map validateIrradiation dpIrradiation))
-                then Right ()
-                else Left "invalid detection params"
+        validationResults = map validateProgramStep ipSteps ++ map (validateDetectionParams lightSources filterWheels) ipDetection
         validateProgramStep :: ProgramStep -> Either String ()
         validateProgramStep ProgramStep{..} =
-            if ((within psIrradiationDuration 0.0 3600) && (within psNTimesToPerform 1 100000) && (all isRight $ map validateIrradiation psIrradiation))
+            if ((within psIrradiationDuration 0.0 3600) && (within psNTimesToPerform 1 100000) && (all isRight $ map (validateIrradiation lightSources) psIrradiation))
                 then Right ()
                 else Left "invalid program step"
+
+validateIrradiation :: [LightSource] -> IrradiationParams -> Either String ()
+validateIrradiation lightSources IrradiationParams{..} =
+    case (lookupMaybeLightSource lightSources ipLightSourceName) of
+      Nothing -> Left "invalid light source name"
+      Just ls -> let errMsg = validLightSourceChannelsAndPowers ls ipLightSourceChannel ipPower
+                 in if (T.null errMsg)
+                    then Right ()
+                    else Left ("invalid light source parameters for " ++ T.unpack ipLightSourceName ++ ": " ++ T.unpack errMsg)
+validateDetectionParams :: [LightSource] -> [FilterWheel] -> DetectionParams -> Either String ()
+validateDetectionParams lightSources filterWheels DetectionParams{..} =
+    if ((within dpExposureTime 3.8e-3 10) && (within dpNSpectraToAverage 1 1000) && (all isRight $ map (validateIrradiation lightSources) dpIrradiation)
+        && isRight validFilters)
+        then Right ()
+        else Left "invalid detection params"
+    where
+        filterParams = dpFilterParams
+        validFilters :: Either String ()
+        validFilters = if (noEmptyFilterWheelNames && noEmptyFilterNames && noDupFilterWheels && all filterExists filterParams)
+                       then Right ()
+                       else Left "invalid filter params"
+        noEmptyFilterWheelNames = all (not . T.null) (map fpFilterWheelName filterParams)
+        noEmptyFilterNames = all (not . T.null) (map fpFilterName filterParams)
+        noDupFilterWheels = nodups (map fpFilterWheelName filterParams)
+        filterExists (FilterParams fwName fName) =
+            case (lookup fwName (map (\f -> (filterWheelName f, filterWheelChannels f)) filterWheels)) of
+                Nothing -> False
+                Just (availableFilters) -> fName `elem` availableFilters
+        nodups xs = xs == nub xs
 
 lightsourceNamesUsedInProgram :: IrradiationProgram -> [Text]
 lightsourceNamesUsedInProgram (IrradiationProgram steps dets) = S.toList (mconcat (map lightSourceNamesInStep steps) <> mconcat (map lightSourceNamesInDetPars dets))

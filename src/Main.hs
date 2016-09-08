@@ -65,11 +65,16 @@ main =
     readAvailableLightSources >>= \availableLightSources ->
     return (nub (extraPins ++ (gpioPinsNeededForLightSources availableLightSources))) >>= \requiredGPIOPins ->
 
+    readAvailableFilterWheels >>= \availableFilterWheels ->
+
     withGPIOPins (zip requiredGPIOPins (repeat $ Output Low)) (\gpioHandles ->
     putStrLn ("opened GPIO pins: " ++ concat (map show requiredGPIOPins)) >>
 
     withLightSources gpioHandles availableLightSources (\lightSources ->
     putStrLn ("opened light sources") >>
+
+    withFilterWheels availableFilterWheels (\filterWheels ->
+    putStrLn ("opened filter wheels") >>
 
     newMVar [] >>= \asyncSpectraMVar ->
     async (return ()) >>= \asyncProgramWorker ->
@@ -97,10 +102,10 @@ main =
         detector = SCCamDetector camName
     in
 #endif
-      let env = Environment lightSources gpioHandles
+      let env = Environment lightSources filterWheels gpioHandles
                 extraPins detector encodedWavelengths asyncSpectraMVar asyncProgramWorker
       in runServer 3200 messageHandler env serverSettings
-    )))
+    ))))
     where
 #ifdef WITH_OCEANOPTICS
         fetchEncodedWavelengths :: Maybe (DeviceID, FeatureID) -> IO SB.ByteString
@@ -136,13 +141,15 @@ performAction env (SetPinLow pin)  = setPinLevelOrError env pin Low
 performAction env (AcquireData params) =
     runExceptT (
         ExceptT (ensureAsyncAcquisitionNotRunning env) >>
-        ExceptT (executeDetection detector lightsources params)) >>= \acquiredData ->
+        ExceptT (return $ validateDetectionParams lightsources filterWheels params) >>
+        ExceptT (executeDetection detector lightsources filterWheels params)) >>= \acquiredData ->
     case acquiredData of
         Left err -> return (StatusError err, env)
         Right dat  -> return (AcquiredDataResponse dat, env)
     where
         detector = envDetector env
         lightsources = envLightSources env
+        filterWheels = envFilterWheels env
 
 performAction env ListWavelengths =
     getTime Monotonic >>= \timeStamp ->
@@ -155,6 +162,10 @@ performAction env ListWavelengths =
 performAction env ListLightSources = return (AvailableLightSources lss, env)
     where
       lss = envLightSources env
+
+performAction env ListFilterWheels = putStrLn "sending filter wheels" >> print (map filterWheelName fws) >> return (AvailableFilterWheels fws, env)
+    where
+        fws = envFilterWheels env
 
 performAction env GetDetectorLimits =
     runExceptT (
@@ -223,16 +234,17 @@ performAction env Ping = return (Pong, env)
 performAction env (ExecuteIrradiationProgram prog) =
     runExceptT (
         ExceptT (ensureAsyncAcquisitionNotRunning env) >>
-        ExceptT (return $ validateIrradiationProgram lightSources prog)) >>= \validation ->
+        ExceptT (return $ validateIrradiationProgram lightSources filterWheels prog)) >>= \validation ->
     case validation of
         Left err -> return (StatusError err, env)
         Right _  -> newMVar [] >>= \spectraMVar ->
-                    async (executeIrradiationProgram prog (ProgramEnvironment detector lightSources spectraMVar)) >>= \asyncWorker ->
+                    async (executeIrradiationProgram prog (ProgramEnvironment detector lightSources filterWheels spectraMVar)) >>= \asyncWorker ->
                     let newEnv = env {envAsyncDataMVar = spectraMVar, envAsyncProgramWorker = asyncWorker}
                     in return (StatusOK, newEnv)
     where
         detector = envDetector env
         lightSources = envLightSources env
+        filterWheels = envFilterWheels env
 
 performAction env FetchAsyncData =
     modifyMVar dataMVar (\s -> return ([], s)) >>= \newData ->

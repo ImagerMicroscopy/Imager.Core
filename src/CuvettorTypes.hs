@@ -27,9 +27,11 @@ import Detector
 import GPIO
 import IrradiationProgram
 import LightSources
+import FilterWheel
 
 data Environment a = Environment {
                       envLightSources :: [LightSource]
+                    , envFilterWheels :: [FilterWheel]
                     , envGPIOHandles :: !GPIOHandles
                     , envAvailablePins :: [GPIOPin]
                     , envDetector :: a
@@ -45,6 +47,7 @@ data RequestMessage = SetPinHigh !GPIOPin
                     | AcquireData !DetectionParams
                     | ListWavelengths
                     | ListLightSources
+                    | ListFilterWheels
                     | GetDetectorLimits
                     | SetDetectorTemperature !Double
                     | GetDetectorTemperature
@@ -70,6 +73,7 @@ instance ToJSON RequestMessage where
     toEncoding ListWavelengths = pairs ("action" .= ("listwavelengths" :: Text))
     toEncoding (AcquireData p) = pairs ("action" .= ("acquiredata"  :: Text) <> "params" .= p)
     toEncoding ListLightSources = pairs ("action" .= ("listlightsources" :: Text))
+    toEncoding ListFilterWheels = pairs ("action" .= ("listfilterwheels" :: Text))
     toEncoding GetDetectorLimits = pairs ("action" .= ("getdetectorlimits" :: Text))
     toEncoding (SetDetectorTemperature t) = pairs ("action" .= ("setdetectortemperature" :: Text) <> "temperature" .= t)
     toEncoding GetDetectorTemperature = pairs ("action" .= ("getdetectortemperature" :: Text))
@@ -91,6 +95,7 @@ instance FromJSON RequestMessage where
             "acquiredata" -> AcquireData <$> v .: "params"
             "listwavelengths" -> return ListWavelengths
             "listlightsources" -> return ListLightSources
+            "listfilterwheels" -> return ListFilterWheels
             "getdetectorlimits" -> return GetDetectorLimits
             "setdetectortemperature" -> SetDetectorTemperature <$> v .: "temperature"
             "getdetectortemperature" -> return GetDetectorTemperature
@@ -113,6 +118,7 @@ data ResponseMessage = StatusOK
                      | AcquiredDataResponse !AcquiredData
                      | Wavelengths !AcquiredData
                      | AvailableLightSources ![LightSource]
+                     | AvailableFilterWheels ![FilterWheel]
                      | DetectorLimitsResponse !DetectorLimits
                      | DetectorTemperatureResponse !Double
                      | DetectorTemperatureSetpointResponse !Double
@@ -133,6 +139,7 @@ instance ToJSON ResponseMessage where
     toEncoding (AcquiredDataResponse d) = pairs ("responsetype" .= ("acquireddata" :: Text) <> "data" .= d)
     toEncoding (Wavelengths d) = pairs ("responsetype" .= ("wavelengths" :: Text) <> "wavelengths" .= d)
     toEncoding (AvailableLightSources ls) = pairs ("responsetype" .= ("availablelightsources" :: Text) <> "lightsources" .= ls)
+    toEncoding (AvailableFilterWheels fws) = pairs ("responsetype" .= ("availablefilterwheels" :: Text) <> "filterwheels" .= fws)
     toEncoding (DetectorLimitsResponse dl) = pairs ("responsetype" .= ("detectorlimits" :: Text) <> "detectorlimits" .= dl)
     toEncoding (DetectorTemperatureResponse t) = pairs ("responsetype" .= ("detectortemperature" :: Text) <> "detectortemperature" .= t)
     toEncoding (DetectorTemperatureSetpointResponse t) = pairs ("responsetype" .= ("detectortemperaturesetpoint" :: Text) <> "detectortemperaturesetpoint" .= t)

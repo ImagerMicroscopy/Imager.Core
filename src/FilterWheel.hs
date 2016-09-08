@@ -5,6 +5,7 @@ module FilterWheel where
 import Control.Exception
 import Control.Monad
 import Control.Monad.Trans.Except
+import Data.Aeson
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import Data.Either
@@ -17,7 +18,8 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import System.Environment
 import System.FilePath
-import System.Hardware.Serialport
+import System.Hardware.Serialport hiding(timeout)
+import System.Timeout
 
 import MiscUtils
 
@@ -26,12 +28,20 @@ data FilterWheelDesc = ThorlabsFW103HDesc {
                          , fw103DescPortName :: !String
                          , fw103DescFilters :: [(Text, Int)]
                        }
+                     | DummyFilterWheelDesc {
+                           dfwDescName :: !Text
+                         , dfwDescFilters :: [(Text, Int)]
+                       }
                      deriving (Read, Show)
 
 data FilterWheel = ThorlabsFW103H !Text ![(Text, Int)] !SerialPort !(IORef Bool) !(IORef Int)
+                 | DummyFilterWheel !Text ![(Text, Int)]
 
 data JogDirection = JogForward | JogBackward
                   deriving (Eq)
+
+instance ToJSON FilterWheel where
+  toJSON fw = object ["name" .= filterWheelName fw, "channels" .= filterWheelChannels fw]
 
 readAvailableFilterWheels :: IO [FilterWheelDesc]
 readAvailableFilterWheels =
@@ -45,19 +55,29 @@ withFilterWheels :: [FilterWheelDesc] -> ([FilterWheel] -> IO a) -> IO a
 withFilterWheels descs action =
     bracket (openFilterWheels descs) closeFilterWheels action
 
+filterWheelName :: FilterWheel -> Text
+filterWheelName (ThorlabsFW103H name _ _ _ _) = name
+filterWheelName (DummyFilterWheel name _) = name
+
+filterWheelChannels :: FilterWheel -> [Text]
+filterWheelChannels (ThorlabsFW103H _ chs _ _ _) = map fst chs
+filterWheelChannels (DummyFilterWheel _ chs) = map fst chs
+
 openFilterWheels :: [FilterWheelDesc] -> IO [FilterWheel]
 openFilterWheels = mapM openFilterWheel
   where
     openFilterWheel (ThorlabsFW103HDesc name portName chs) =
         let port = openSerial portName (defaultSerialSettings {commSpeed = CS115200})
         in ThorlabsFW103H name (validateChannels chs) <$> port <*> newIORef False <*> newIORef 0
+    openFilterWheel (DummyFilterWheelDesc name chs) =
+        putStrLn ("Opened dummy filter wheel " ++ T.unpack name ++ " with filters " ++ show chs) >> return (DummyFilterWheel name (validateChannels chs))
     validateChannels :: [(Text, Int)] -> [(Text, Int)]
     validateChannels chs | haveDuplicates chs = error ("duplicate channels in " ++ show chs)
                          | invalidFilterIndices chs = error ("invalid filter indices in "  ++ show chs)
                          | invalidFilterNames chs = error ("invalid filter names in " ++ show chs)
                          | otherwise = chs
       where
-        haveDuplicates chs = (nodups (map fst chs) && nodups (map snd chs))
+        haveDuplicates chs = not ((nodups (map fst chs)) && (nodups (map snd chs)))
         nodups xs = (nub xs) == xs
         invalidFilterIndices = any (\(_, i) -> not (within i 0 5))
         invalidFilterNames = any (\(n, _) -> T.null n)
@@ -66,9 +86,19 @@ closeFilterWheels :: [FilterWheel] -> IO ()
 closeFilterWheels = mapM_ closeFilterWheels
   where
     closeFilterWheels (ThorlabsFW103H _ _ port _ _) = closeSerial port
+    closeFilterWheels (DummyFilterWheel name _) = putStrLn ("Closed filter wheel " ++ T.unpack name)
 
 filterWheelHasChannel :: FilterWheel -> Text -> Bool
 filterWheelHasChannel (ThorlabsFW103H _ chs _ _ _) c = c `elem` (map fst chs)
+filterWheelHasChannel (DummyFilterWheel _ chs) c = c `elem` (map fst chs)
+
+switchToFilter :: [FilterWheel] -> Text -> Text -> IO (Either String ())
+switchToFilter fws fwName fName =
+    let filterWheel = head (filter (\fw -> filterWheelName fw == fwName) fws)
+    in timeout (floor 2.0e6) (switchToChannel filterWheel fName) >>= \result ->
+       case result of
+           Nothing -> error ("timeout communicating with " ++ T.unpack (filterWheelName filterWheel))
+           Just v -> return v
 
 switchToChannel :: FilterWheel -> Text -> IO (Either String ())
 switchToChannel fw chName | not (filterWheelHasChannel fw chName) = error "no matching channel for filter wheel"
@@ -89,6 +119,8 @@ switchToChannel fw chName | not (filterWheelHasChannel fw chName) = error "no ma
               if (any isLeft responses)
               then return (head $ filter isLeft responses)
               else return (Right ())
+    switchToChannel' (DummyFilterWheel name chs) chName =
+        putStrLn ("Switched filter wheel " ++ T.unpack name ++ " to filter " ++ T.unpack chName) >> return (Right ())
 
 initFW103HIfNeeded :: SerialPort -> IORef Bool -> IORef Int -> IO (Either String ())
 initFW103HIfNeeded port haveInitRef currChannelRef =
