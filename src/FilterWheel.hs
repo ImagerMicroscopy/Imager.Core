@@ -149,6 +149,11 @@ sendReceiveFW103HMessage port msg (resp1, resp2) =
 fw103HMoveHomeMessage :: ByteString
 fw103HMoveHomeMessage = fw103HMessage (0x43, 0x04)
 
+fw103HMoveAbsoluteMessage :: Int -> ByteString
+fw103HMoveAbsoluteMessage pos = runPut $
+    mapM_ putWord8 [0x53, 0x04, 0x06, 0x00, 0x50, 0x01, 0x00, 0x00] >>
+    putWord32le (fromIntegral pos)
+
 fw103HJogMessage :: JogDirection -> ByteString
 fw103HJogMessage JogForward  = B.pack [0x6A, 0x04, 0x01, 0x01, 0x50, 0x01]
 fw103HJogMessage JogBackward = B.pack [0x6A, 0x04, 0x01, 0x02, 0x50, 0x01]
