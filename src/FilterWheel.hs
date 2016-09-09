@@ -28,6 +28,11 @@ data FilterWheelDesc = ThorlabsFW103HDesc {
                          , fw103DescPortName :: !String
                          , fw103DescFilters :: [(Text, Int)]
                        }
+                     | ThorlabsFW102CDesc {
+                           fw102CDescName :: !Text
+                         , fw102CDescPortName :: !String
+                         , fw102CDescFilters :: [(Text, Int)]
+                       }
                      | DummyFilterWheelDesc {
                            dfwDescName :: !Text
                          , dfwDescFilters :: [(Text, Int)]
@@ -35,6 +40,7 @@ data FilterWheelDesc = ThorlabsFW103HDesc {
                      deriving (Read, Show)
 
 data FilterWheel = ThorlabsFW103H !Text ![(Text, Int)] !SerialPort
+                 | ThorlabsFW102C !Text ![(Text, Int)] !SerialPort
                  | DummyFilterWheel !Text ![(Text, Int)]
 
 instance ToJSON FilterWheel where
@@ -54,10 +60,12 @@ withFilterWheels descs action =
 
 filterWheelName :: FilterWheel -> Text
 filterWheelName (ThorlabsFW103H name _ _) = name
+filterWheelName (ThorlabsFW102C name _ _) = name
 filterWheelName (DummyFilterWheel name _) = name
 
 filterWheelChannels :: FilterWheel -> [Text]
 filterWheelChannels (ThorlabsFW103H _ chs _) = map fst chs
+filterWheelChannels (ThorlabsFW102C _ chs _) = map fst chs
 filterWheelChannels (DummyFilterWheel _ chs) = map fst chs
 
 openFilterWheels :: [FilterWheelDesc] -> IO [FilterWheel]
@@ -67,6 +75,8 @@ openFilterWheels = mapM openFilterWheel
         openSerial portName (defaultSerialSettings {commSpeed = CS115200}) >>= \port ->
         send port fw103HStopUpdatesMessage >> putStrLn "sent stop" >>
         return (ThorlabsFW103H name (validateChannels chs) port)
+    openFilterWheel (ThorlabsFW102CDesc name portName chs) =
+        ThorlabsFW102C name (validateChannels chs) <$> openSerial portName (defaultSerialSettings {commSpeed = CS115200})
     openFilterWheel (DummyFilterWheelDesc name chs) =
         putStrLn ("Opened dummy filter wheel " ++ T.unpack name ++ " with filters " ++ show chs) >> return (DummyFilterWheel name (validateChannels chs))
     validateChannels :: [(Text, Int)] -> [(Text, Int)]
@@ -84,10 +94,12 @@ closeFilterWheels :: [FilterWheel] -> IO ()
 closeFilterWheels = mapM_ closeFilterWheels
   where
     closeFilterWheels (ThorlabsFW103H _ _ port) = closeSerial port
+    closeFilterWheels (ThorlabsFW102C _ _ port) = closeSerial port
     closeFilterWheels (DummyFilterWheel name _) = putStrLn ("Closed filter wheel " ++ T.unpack name)
 
 filterWheelHasChannel :: FilterWheel -> Text -> Bool
 filterWheelHasChannel (ThorlabsFW103H _ chs _) c = c `elem` (map fst chs)
+filterWheelHasChannel (ThorlabsFW102C _ chs _) c = c `elem` (map fst chs)
 filterWheelHasChannel (DummyFilterWheel _ chs) c = c `elem` (map fst chs)
 
 switchToFilter :: [FilterWheel] -> Text -> Text -> IO (Either String ())
@@ -107,6 +119,10 @@ switchToChannel fw chName | not (filterWheelHasChannel fw chName) = error "no ma
         let filterIndex = fromJust (lookup chName chs)
             wheelPos = (25600 `div` 6) * filterIndex -- Thorlabs:  1 turn represents 360 degrees which is 25600 micro steps
         in  sendReceiveFW103HMessage port (fw103HMoveAbsoluteMessage wheelPos) (0x64, 0x04)
+    switchToChannel' (ThorlabsFW102C _ chs port) chName =
+        let filterIndex = fromJust (lookup chName chs)
+        in flush port >> send port (T.encodeUtf8 . T.pack $ "pos=" ++ show filterIndex) >>
+           readFromSerialUntilChar port 62 >> return (Right ())
     switchToChannel' (DummyFilterWheel name chs) chName =
         putStrLn ("Switched filter wheel " ++ T.unpack name ++ " to filter " ++ T.unpack chName) >> return (Right ())
 
