@@ -34,11 +34,8 @@ data FilterWheelDesc = ThorlabsFW103HDesc {
                        }
                      deriving (Read, Show)
 
-data FilterWheel = ThorlabsFW103H !Text ![(Text, Int)] !SerialPort !(IORef Bool) !(IORef Int)
+data FilterWheel = ThorlabsFW103H !Text ![(Text, Int)] !SerialPort
                  | DummyFilterWheel !Text ![(Text, Int)]
-
-data JogDirection = JogForward | JogBackward
-                  deriving (Eq)
 
 instance ToJSON FilterWheel where
   toJSON fw = object ["name" .= filterWheelName fw, "channels" .= filterWheelChannels fw]
@@ -56,11 +53,11 @@ withFilterWheels descs action =
     bracket (openFilterWheels descs) closeFilterWheels action
 
 filterWheelName :: FilterWheel -> Text
-filterWheelName (ThorlabsFW103H name _ _ _ _) = name
+filterWheelName (ThorlabsFW103H name _ _) = name
 filterWheelName (DummyFilterWheel name _) = name
 
 filterWheelChannels :: FilterWheel -> [Text]
-filterWheelChannels (ThorlabsFW103H _ chs _ _ _) = map fst chs
+filterWheelChannels (ThorlabsFW103H _ chs _) = map fst chs
 filterWheelChannels (DummyFilterWheel _ chs) = map fst chs
 
 openFilterWheels :: [FilterWheelDesc] -> IO [FilterWheel]
@@ -68,7 +65,7 @@ openFilterWheels = mapM openFilterWheel
   where
     openFilterWheel (ThorlabsFW103HDesc name portName chs) =
         let port = openSerial portName (defaultSerialSettings {commSpeed = CS115200})
-        in ThorlabsFW103H name (validateChannels chs) <$> port <*> newIORef False <*> newIORef 0
+        in ThorlabsFW103H name (validateChannels chs) <$> port
     openFilterWheel (DummyFilterWheelDesc name chs) =
         putStrLn ("Opened dummy filter wheel " ++ T.unpack name ++ " with filters " ++ show chs) >> return (DummyFilterWheel name (validateChannels chs))
     validateChannels :: [(Text, Int)] -> [(Text, Int)]
@@ -85,11 +82,11 @@ openFilterWheels = mapM openFilterWheel
 closeFilterWheels :: [FilterWheel] -> IO ()
 closeFilterWheels = mapM_ closeFilterWheels
   where
-    closeFilterWheels (ThorlabsFW103H _ _ port _ _) = closeSerial port
+    closeFilterWheels (ThorlabsFW103H _ _ port) = closeSerial port
     closeFilterWheels (DummyFilterWheel name _) = putStrLn ("Closed filter wheel " ++ T.unpack name)
 
 filterWheelHasChannel :: FilterWheel -> Text -> Bool
-filterWheelHasChannel (ThorlabsFW103H _ chs _ _ _) c = c `elem` (map fst chs)
+filterWheelHasChannel (ThorlabsFW103H _ chs _) c = c `elem` (map fst chs)
 filterWheelHasChannel (DummyFilterWheel _ chs) c = c `elem` (map fst chs)
 
 switchToFilter :: [FilterWheel] -> Text -> Text -> IO (Either String ())
@@ -105,34 +102,12 @@ switchToChannel fw chName | not (filterWheelHasChannel fw chName) = error "no ma
                           | otherwise = switchToChannel' fw chName
   where
     switchToChannel' :: FilterWheel -> Text -> IO (Either String ())
-    switchToChannel' (ThorlabsFW103H _ chs port haveInitRef currChannelRef) chName =
-        runExceptT (
-            ExceptT (initFW103HIfNeeded port haveInitRef currChannelRef) >>
-            ExceptT moveToFilter)
-        where
-          moveToFilter :: IO (Either String ())
-          moveToFilter =
-              readIORef currChannelRef >>= \currChannel ->
-              let filterIndex = fromJust (lookup chName chs)
-                  moveMessages = fw103HJogMessages 6 currChannel filterIndex
-              in mapM (\bs -> sendReceiveFW103HMessage port bs (0x64, 0x04)) moveMessages >>= \responses ->
-              if (any isLeft responses)
-              then return (head $ filter isLeft responses)
-              else return (Right ())
+    switchToChannel' (ThorlabsFW103H _ chs port) chName =
+        let filterIndex = fromJust (lookup chName chs)
+            wheelPos = (25600 `div` 6) * filterIndex -- Thorlabs:  1 turn represents 360 degrees which is 25600 micro steps
+        in  sendReceiveFW103HMessage port (fw103HMoveAbsoluteMessage wheelPos) (0x64, 0x04)
     switchToChannel' (DummyFilterWheel name chs) chName =
         putStrLn ("Switched filter wheel " ++ T.unpack name ++ " to filter " ++ T.unpack chName) >> return (Right ())
-
-initFW103HIfNeeded :: SerialPort -> IORef Bool -> IORef Int -> IO (Either String ())
-initFW103HIfNeeded port haveInitRef currChannelRef =
-      readIORef haveInitRef >>= \haveInit ->
-      if (haveInit)
-      then return (Right ())
-      else
-          sendReceiveFW103HMessage port fw103HMoveHomeMessage (0x44, 0x04) >>= \result ->
-          case result of
-            Left e -> return (Left e)
-            Right _ -> writeIORef haveInitRef True >> writeIORef currChannelRef 0 >>
-                       return (Right ())
 
 sendReceiveFW103HMessage :: SerialPort -> ByteString -> (Int, Int) -> IO (Either String ())
 sendReceiveFW103HMessage port msg (resp1, resp2) =
@@ -146,31 +121,7 @@ sendReceiveFW103HMessage port msg (resp1, resp2) =
         Nothing -> return (Left "error communication with FW103H")
         Just v -> return v
 
-fw103HMoveHomeMessage :: ByteString
-fw103HMoveHomeMessage = fw103HMessage (0x43, 0x04)
-
 fw103HMoveAbsoluteMessage :: Int -> ByteString
 fw103HMoveAbsoluteMessage pos = runPut $
     mapM_ putWord8 [0x53, 0x04, 0x06, 0x00, 0x50, 0x01, 0x00, 0x00] >>
     putWord32le (fromIntegral pos)
-
-fw103HJogMessage :: JogDirection -> ByteString
-fw103HJogMessage JogForward  = B.pack [0x6A, 0x04, 0x01, 0x01, 0x50, 0x01]
-fw103HJogMessage JogBackward = B.pack [0x6A, 0x04, 0x01, 0x02, 0x50, 0x01]
-
-fw103HJogMessages :: Int -> Int -> Int -> [ByteString]
-fw103HJogMessages nFilters current target
-    | nJogStepsForward <= nJogStepsBackward = replicate nJogStepsForward (fw103HJogMessage JogForward)
-    | otherwise                             = replicate nJogStepsBackward (fw103HJogMessage JogBackward)
-    where
-        nJogStepsForward | target >= current = target - current
-                         | otherwise = (nFilters - current) + target
-        nJogStepsBackward | target <= current = current - target
-                          | otherwise = current + (nFilters - target)
-
-fw103HMessage :: (Int, Int) -> ByteString
-fw103HMessage mID = fw103HMessageWithParam mID 0
-
-fw103HMessageWithParam :: (Int, Int) -> Int -> ByteString
-fw103HMessageWithParam (mID1, mID2) mParam = runPut $
-    mapM_ putWord8 [fromIntegral mID1, fromIntegral mID2, fromIntegral mParam, 0, 0x50, 0x01]
