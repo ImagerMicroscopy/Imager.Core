@@ -2,9 +2,11 @@
 
 module MiscUtils where
 
+import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Unsafe as SB
+import Data.List
 import Data.Monoid
 import Data.Word
 import Foreign.Storable
@@ -12,6 +14,7 @@ import Foreign.Marshal
 import Foreign.Ptr
 import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
+import Numeric
 import System.IO.Unsafe
 import System.Clock
 import System.Hardware.Serialport
@@ -45,6 +48,12 @@ readAtLeastNBytesFromSerial port n = readBytes port n B.empty
                     in if (B.length accum' >= n)
                        then return accum'
                        else readBytes port n accum'
+
+byteStringAsHex :: ByteString -> String
+byteStringAsHex = concat . intersperse " " . map showByte . B.unpack
+    where
+        showByte :: Word8 -> String
+        showByte b = (showHex (b `shiftR` 4) . showHex (b .&. 0x0F)) ""
 
 fromLeft :: Either a b -> a
 fromLeft (Left a) = a
