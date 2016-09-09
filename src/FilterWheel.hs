@@ -102,28 +102,28 @@ filterWheelHasChannel (ThorlabsFW103H _ chs _) c = c `elem` (map fst chs)
 filterWheelHasChannel (ThorlabsFW102C _ chs _) c = c `elem` (map fst chs)
 filterWheelHasChannel (DummyFilterWheel _ chs) c = c `elem` (map fst chs)
 
-switchToFilter :: [FilterWheel] -> Text -> Text -> IO (Either String ())
-switchToFilter fws fwName fName =
+switchFilterWheel :: [FilterWheel] -> Text -> Text -> IO (Either String ())
+switchFilterWheel fws fwName fName =
     let filterWheel = head (filter (\fw -> filterWheelName fw == fwName) fws)
-    in timeout (floor 2.0e6) (switchToChannel filterWheel fName) >>= \result ->
+    in timeout (floor 2.0e6) (switchToFilter filterWheel fName) >>= \result ->
        case result of
            Nothing -> error ("timeout communicating with " ++ T.unpack (filterWheelName filterWheel))
            Just v -> return v
 
-switchToChannel :: FilterWheel -> Text -> IO (Either String ())
-switchToChannel fw chName | not (filterWheelHasChannel fw chName) = error "no matching channel for filter wheel"
-                          | otherwise = switchToChannel' fw chName
+switchToFilter :: FilterWheel -> Text -> IO (Either String ())
+switchToFilter fw chName | not (filterWheelHasChannel fw chName) = error "no matching channel for filter wheel"
+                         | otherwise = switchToFilter' fw chName
   where
-    switchToChannel' :: FilterWheel -> Text -> IO (Either String ())
-    switchToChannel' (ThorlabsFW103H _ chs port) chName =
+    switchToFilter' :: FilterWheel -> Text -> IO (Either String ())
+    switchToFilter' (ThorlabsFW103H _ chs port) chName =
         let filterIndex = fromJust (lookup chName chs)
             wheelPos = (25600 `div` 6) * filterIndex -- Thorlabs:  1 turn represents 360 degrees which is 25600 micro steps
         in  sendReceiveFW103HMessage port (fw103HMoveAbsoluteMessage wheelPos) (0x64, 0x04)
-    switchToChannel' (ThorlabsFW102C _ chs port) chName =
+    switchToFilter' (ThorlabsFW102C _ chs port) chName =
         let filterIndex = fromJust (lookup chName chs)
         in flush port >> send port (T.encodeUtf8 . T.pack $ "pos=" ++ show filterIndex) >>
            readFromSerialUntilChar port 62 >> return (Right ())
-    switchToChannel' (DummyFilterWheel name chs) chName =
+    switchToFilter' (DummyFilterWheel name chs) chName =
         putStrLn ("Switched filter wheel " ++ T.unpack name ++ " to filter " ++ T.unpack chName) >> return (Right ())
 
 sendReceiveFW103HMessage :: SerialPort -> ByteString -> (Int, Int) -> IO (Either String ())

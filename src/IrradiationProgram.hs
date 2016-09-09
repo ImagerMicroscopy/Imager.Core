@@ -209,7 +209,7 @@ disableLightSources lss params = catch (Right <$> mapM_ (\(IrradiationParams sou
 
 switchToFilters :: [FilterWheel] -> [FilterParams] -> IO (Either String ())
 switchToFilters fws fps =
-    mapM (\(FilterParams fwName fw) -> switchToFilter fws fwName fw) fps >>= \results ->
+    mapM (\(FilterParams fwName fw) -> switchFilterWheel fws fwName fw) fps >>= \results ->
     if (any isLeft results)
     then return (head . filter isLeft $ results)
     else return (Right ())
