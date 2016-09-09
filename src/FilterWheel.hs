@@ -12,7 +12,7 @@ import Data.Either
 import Data.IORef
 import Data.List
 import Data.Maybe
-import Data.Serialize
+import Data.Serialize hiding(flush)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -64,8 +64,9 @@ openFilterWheels :: [FilterWheelDesc] -> IO [FilterWheel]
 openFilterWheels = mapM openFilterWheel
   where
     openFilterWheel (ThorlabsFW103HDesc name portName chs) =
-        let port = openSerial portName (defaultSerialSettings {commSpeed = CS115200})
-        in ThorlabsFW103H name (validateChannels chs) <$> port
+        openSerial portName (defaultSerialSettings {commSpeed = CS115200}) >>= \port ->
+        send port fw103HStopUpdatesMessage >> putStrLn "sent stop" >>
+        return (ThorlabsFW103H name (validateChannels chs) port)
     openFilterWheel (DummyFilterWheelDesc name chs) =
         putStrLn ("Opened dummy filter wheel " ++ T.unpack name ++ " with filters " ++ show chs) >> return (DummyFilterWheel name (validateChannels chs))
     validateChannels :: [(Text, Int)] -> [(Text, Int)]
@@ -112,8 +113,10 @@ switchToChannel fw chName | not (filterWheelHasChannel fw chName) = error "no ma
 sendReceiveFW103HMessage :: SerialPort -> ByteString -> (Int, Int) -> IO (Either String ())
 sendReceiveFW103HMessage port msg (resp1, resp2) =
     timeout (floor 2.0e6) (
-        send port msg >>
+        putStrLn ("sending " ++ byteStringAsHex msg) >>
+        flush port >> send port msg >>
         readAtLeastNBytesFromSerial port 6 >>= \response ->
+        putStrLn ("Received " ++ byteStringAsHex response) >>
         if ((map fromIntegral . B.unpack . B.take 2) response /= [resp1, resp2])
             then return (Left ("unexpected response from FW103H: " ++ show response))
             else return (Right ())) >>= \result ->
@@ -125,3 +128,7 @@ fw103HMoveAbsoluteMessage :: Int -> ByteString
 fw103HMoveAbsoluteMessage pos = runPut $
     mapM_ putWord8 [0x53, 0x04, 0x06, 0x00, 0x50, 0x01, 0x00, 0x00] >>
     putWord32le (fromIntegral pos)
+
+fw103HStopUpdatesMessage :: ByteString
+fw103HStopUpdatesMessage = runPut $
+    mapM_ putWord8 [0x12, 0x00, 0x00, 0x00, 0x50, 0x01]
