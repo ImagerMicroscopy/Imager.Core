@@ -45,6 +45,7 @@ data ProgramStep = ProgramStep {
 
 data DetectionParams = DetectionParams {
                            dpExposureTime :: !Double
+                         , dpGain :: !Double
                          , dpNSpectraToAverage :: !Int
                          , dpIrradiation :: [IrradiationParams]
                          , dpFilterParams :: [FilterParams]
@@ -93,13 +94,14 @@ instance ToJSON ProgramStep where
 instance FromJSON DetectionParams where
     parseJSON (Object v) =
         DetectionParams <$> v .: "exposuretime"
+                        <*> v .: "gain"
                         <*> v .: "nspectra"
                         <*> v .: "irradiation"
                         <*> v .: "filters"
     parseJSON _ = fail "can't decode detection params"
 instance ToJSON DetectionParams where
-    toEncoding (DetectionParams expTime nSpectra irr filters) =
-        pairs ("exposuretime" .= expTime <> "nspectra" .= nSpectra <> "irradiation" .= irr <> "filters" .= filters)
+    toEncoding (DetectionParams expTime gain nSpectra irr filters) =
+        pairs ("exposuretime" .= expTime <> "gain" .= gain <> "nspectra" .= nSpectra <> "irradiation" .= irr <> "filters" .= filters)
     toJSON _ = error "no toJSON"
 
 instance FromJSON IrradiationParams where
@@ -175,7 +177,7 @@ executeIrradiationProgram prog@(IrradiationProgram steps detection) env =
             runExceptT (
                 ExceptT (switchToFilters filterWheels (dpFilterParams detParams)) >>
                 ExceptT (enableLightSources lightSources (dpIrradiation detParams)) >>
-                ExceptT (Right <$> acquireStreamingData detector (dpExposureTime detParams) 1.0
+                ExceptT (Right <$> acquireStreamingData detector (dpExposureTime detParams) (dpGain detParams)
                             (dpNSpectraToAverage detParams) nTimesToPerform startTime dataMVar) >>
                 ExceptT (disableLightSources lightSources (dpIrradiation detParams))) >>= \result ->
             case result of
@@ -190,7 +192,7 @@ executeDetection det lss fws DetectionParams{..} =
     runExceptT (
         ExceptT (switchToFilters fws dpFilterParams) >>
         ExceptT (enableLightSources lss dpIrradiation) >>
-        ExceptT (acquireData det dpExposureTime 1.0 dpNSpectraToAverage) >>= \acquiredData ->
+        ExceptT (acquireData det dpExposureTime dpGain dpNSpectraToAverage) >>= \acquiredData ->
         ExceptT (disableLightSources lss dpIrradiation) >>
         ExceptT (return $ Right acquiredData))
 
