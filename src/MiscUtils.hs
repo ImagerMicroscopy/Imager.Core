@@ -39,6 +39,7 @@ readFromSerialUntilChar port c = readUntil' port c B.empty
         readUntil' port c accum | (not $ B.null accum) && (B.last accum == c) = return accum
                                 | otherwise         = recv port 100 >>= \msg ->
                                                       readUntil' port c (accum <> msg)
+readFromSerialUntilLF port = readFromSerialUntilChar port 10
 
 readAtLeastNBytesFromSerial :: SerialPort -> Int -> IO ByteString
 readAtLeastNBytesFromSerial port n = readBytes port n B.empty
@@ -54,6 +55,9 @@ byteStringAsHex = concat . intersperse " " . map showByte . B.unpack
     where
         showByte :: Word8 -> String
         showByte b = (showHex (b `shiftR` 4) . showHex (b .&. 0x0F)) ""
+
+nodups :: Eq a => [a] -> Bool
+nodups xs = (nub xs) == xs
 
 fromLeft :: Either a b -> a
 fromLeft (Left a) = a

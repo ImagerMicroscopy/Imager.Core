@@ -27,7 +27,7 @@ import Data.IORef
 import Data.List
 import Data.Maybe
 import Data.Monoid
-import Data.Serialize
+import Data.Serialize hiding(flush)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -54,6 +54,11 @@ data LightSourceDesc = GPIOLightSourceDesc {
                            llsdName :: !Text
                          , llsdSerialPortName :: !String
                        }
+                     | AsahiLightSourceDesc {
+                           alsName :: !Text
+                         , alsSerialPortName :: !String
+                         , alsFilters :: ![(Text, Int)]
+                       }
                      | DummyLightSourceDesc {
                            dlsdName :: !Text
                        }
@@ -62,6 +67,7 @@ data LightSourceDesc = GPIOLightSourceDesc {
 data LightSource = GPIOLightSource !Text !GPIOPin !Double !GPIOHandles
                  | CoherentLightSource !Text !SerialPort
                  | LumencorLightSource !Text !SerialPort !(IORef Bool) !(IORef LumencorFilter)
+                 | AsahiLightSource !Text ![(Text, Int)] !SerialPort
                  | DummyLightSource !Text
 
 data LumencorChannel = LCViolet | LCBlue | LCCyan | LCTeal
@@ -74,22 +80,6 @@ instance ToJSON LightSource where
     toJSON ls = object ["name" .= lightSourceName ls, "channels" .= lightSourceChannels ls,
                         "allowmultiplechannels" .= lightSourceAllowsMultipleChannels ls,
                         "cancontrolpower" .= lightSourceCanControlPower ls]
-
-lumencorChannels :: [Text]
-lumencorChannels = ["violet", "blue", "cyan", "teal", "green", "yellow", "red"]
-
-lumencorChannelFromName :: Text -> LumencorChannel
-lumencorChannelFromName "violet" = LCViolet
-lumencorChannelFromName "blue" = LCBlue
-lumencorChannelFromName "cyan" = LCCyan
-lumencorChannelFromName "teal" = LCTeal
-lumencorChannelFromName "green" = LCGreen
-lumencorChannelFromName "yellow" = LCYellow
-lumencorChannelFromName "red" = LCRed
-lumencorChannelFromName c = error ("unknown channel" ++ T.unpack c)
-
-dummyLightSourceChannels :: [Text]
-dummyLightSourceChannels = ["ch1", "ch2"]
 
 readAvailableLightSources :: IO [LightSourceDesc]
 readAvailableLightSources =
@@ -112,11 +102,13 @@ lightSourceName :: LightSource -> Text
 lightSourceName (GPIOLightSource name _ _ _) = name
 lightSourceName (CoherentLightSource name _) = name
 lightSourceName (LumencorLightSource name _ _ _) = name
+lightSourceName (AsahiLightSource name _ _) = name
 lightSourceName (DummyLightSource name) = name
 
 lightSourceChannels :: LightSource -> [Text]
 lightSourceChannels (LumencorLightSource _ _ _ _) = lumencorChannels
 lightSourceChannels (DummyLightSource _) = dummyLightSourceChannels
+lightSourceChannels (AsahiLightSource _ chs _) = map fst chs
 lightSourceChannels _ = [""]
 
 lightSourceHasChannel :: LightSource -> Text -> Bool
@@ -143,6 +135,14 @@ openLightSources gpioHandles descs = sequence $ map openLightSource descs
         openLightSource (LumencorLightSourceDesc name portName) =
             let port = openSerial portName (defaultSerialSettings {commSpeed = CS9600})
             in LumencorLightSource name <$> port <*> newIORef False <*> newIORef LCGreenFilter
+        openLightSource (AsahiLightSourceDesc name portName chs) =
+            let port = openSerial portName defaultSerialSettings
+            in AsahiLightSource name (validFilters chs) <$> port
+            where
+                validFilters chs | any (T.null . fst) chs = error "cannot have empty filter names for asahi lamp"
+                                 | not (nodups (map fst chs) && nodups (map snd chs)) = error "cannot have duplicate filter names or indices for asahi lamp"
+                                 | not $ all (\n -> within n 1 8) (map snd chs) = error "asahi filter indices must be between 1 and 8"
+                                 | otherwise = chs
         openLightSource (DummyLightSourceDesc name) = putStrLn ("opened light source " ++ T.unpack name) >> return (DummyLightSource name)
         openLightSource _ = error "opening unknown type of light source"
 
@@ -152,6 +152,7 @@ closeLightSources = mapM_ closeLightSource
         closeLightSource (GPIOLightSource _ _ _ _) = return ()
         closeLightSource (CoherentLightSource _ port) = closeSerial port
         closeLightSource (LumencorLightSource _ port _ _) = closeSerial port
+        closeLightSource (AsahiLightSource _ _ port) = closeSerial port
         closeLightSource (DummyLightSource name) = putStr ("closed light source " ++ T.unpack name) >> return ()
 
 isKnownLightSource :: [LightSource] -> Text -> Bool
@@ -195,6 +196,7 @@ activateLightSource ls channels powers
     activateLightSource' (DummyLightSource name) chs ps = putStrLn ("activated " ++ T.unpack name ++ " with channels " ++ show chs ++ " with powers " ++ show ps) >> return (Right ())
     activateLightSource' ls@(CoherentLightSource _ _) _ [power] = activateCoherentLightSource ls power
     activateLightSource' ls@(LumencorLightSource _ _ _ _) chs ps = activateLumencorLightSource ls (map lumencorChannelFromName chs) ps
+    activateLightSource' ls@(AsahiLightSource _ _ _) [ch] [p] = activateAsahiLightSource ls ch p
     activateLightSource' _ _ _ = error "activating unknown light source"
     timeoutDuration = floor (2.0e6)
 
@@ -238,6 +240,16 @@ activateLumencorLightSource (LumencorLightSource _ port haveInitRef currFilterRe
                          | LCYellow `elem` channels = Just LCYellowFilter
                          | otherwise                = Nothing
 
+activateAsahiLightSource :: LightSource -> Text -> Double -> IO (Either String ())
+activateAsahiLightSource (AsahiLightSource _ chs port) filter power =
+    case (lookup filter chs) of
+        Nothing -> return (Left ("missing filter " ++ T.unpack filter))
+        Just idx -> runExceptT (
+            ExceptT (handleAsahiMessage port "S=0\r\n") >> -- close shutter
+            ExceptT (handleAsahiMessage port ("F=" ++ show idx ++ "\r\n")) >> -- set filter
+            ExceptT (handleAsahiMessage port ("LI=" ++ (show . toInteger . round $ power) ++ "\r\n")) >> --set power
+            ExceptT (handleAsahiMessage port "S=1\r\n"))
+
 deactivateLightSource :: LightSource -> IO (Either String ())
 deactivateLightSource (GPIOLightSource _ pin delay handles) = setPinLevel handles pin Low >> threadDelay (floor $ 1e6 * delay) >> return (Right ())
 deactivateLightSource (CoherentLightSource _ port) = catch (send port "L=0\r" >> readFromSerialUntilChar port 10 >> return (Right ())) (\e -> return (Left (displayException (e :: IOException))))
@@ -245,6 +257,7 @@ deactivateLightSource (LumencorLightSource _ port _ currFilterRef) =
     readIORef currFilterRef >>= \currFilter ->
     send port (lumencorDisableMessage currFilter) >>
     return (Right ())
+deactivateLightSource (AsahiLightSource _ _ port) = handleAsahiMessage port "S=0\r\n"
 deactivateLightSource (DummyLightSource name) = putStrLn ("deactivated " ++ T.unpack name) >> return (Right ())
 deactivateLightSource _ = error "deactivating unknown light source"
 
@@ -254,6 +267,22 @@ deactivateAllLightSources sources =
     case result of
         Right _ -> return (Right ())
         Left e -> return (Left e)
+
+dummyLightSourceChannels :: [Text]
+dummyLightSourceChannels = ["ch1", "ch2"]
+
+lumencorChannels :: [Text]
+lumencorChannels = ["violet", "blue", "cyan", "teal", "green", "yellow", "red"]
+
+lumencorChannelFromName :: Text -> LumencorChannel
+lumencorChannelFromName "violet" = LCViolet
+lumencorChannelFromName "blue" = LCBlue
+lumencorChannelFromName "cyan" = LCCyan
+lumencorChannelFromName "teal" = LCTeal
+lumencorChannelFromName "green" = LCGreen
+lumencorChannelFromName "yellow" = LCYellow
+lumencorChannelFromName "red" = LCRed
+lumencorChannelFromName c = error ("unknown channel" ++ T.unpack c)
 
 lumencorEnableRS232Message :: ByteString
 lumencorEnableRS232Message = runPut $
@@ -305,3 +334,10 @@ lumencorDisableMessage filter = runPut $
     where
         filterSelectByte LCGreenFilter = 0x7F
         filterSelectByte LCYellowFilter = 0x6F
+
+handleAsahiMessage :: SerialPort -> String -> IO (Either String ())
+handleAsahiMessage port ss =
+    flush port >> send port (T.encodeUtf8 $ T.pack ss) >> readFromSerialUntilLF port >>= \response ->
+    if (response == "OK\r\n")
+    then return (Right ())
+    else return (Left ("sent " ++ ss ++ "to asahi, received " ++ (T.unpack $ T.decodeUtf8 response)))
