@@ -215,7 +215,7 @@ activateCoherentLightSource (CoherentLightSource _ port) power =
         parseQuery q = sendAndReadResponse port q >>= return . read . filter (`elem` ('.' : ['0' .. '9'])) . T.unpack . T.decodeUtf8
         sendAndReadResponse :: SerialPort -> ByteString -> IO ByteString
         sendAndReadResponse prt msg = send port msg >> recvUntilTerminator port
-        recvUntilTerminator port = readFromSerialUntilChar port 10
+        recvUntilTerminator port = readFromSerialUntilChar port '\n'
 
 activateLumencorLightSource :: LightSource -> [LumencorChannel] -> [Double] -> IO (Either String ())
 activateLumencorLightSource (LumencorLightSource _ port haveInitRef currFilterRef) channels powers =
@@ -252,7 +252,7 @@ activateAsahiLightSource (AsahiLightSource _ chs port) filter power =
 
 deactivateLightSource :: LightSource -> IO (Either String ())
 deactivateLightSource (GPIOLightSource _ pin delay handles) = setPinLevel handles pin Low >> threadDelay (floor $ 1e6 * delay) >> return (Right ())
-deactivateLightSource (CoherentLightSource _ port) = catch (send port "L=0\r" >> readFromSerialUntilChar port 10 >> return (Right ())) (\e -> return (Left (displayException (e :: IOException))))
+deactivateLightSource (CoherentLightSource _ port) = catch (send port "L=0\r" >> readFromSerialUntilChar port '\n' >> return (Right ())) (\e -> return (Left (displayException (e :: IOException))))
 deactivateLightSource (LumencorLightSource _ port _ currFilterRef) =
     readIORef currFilterRef >>= \currFilter ->
     send port (lumencorDisableMessage currFilter) >>
@@ -337,7 +337,7 @@ lumencorDisableMessage filter = runPut $
 
 handleAsahiMessage :: SerialPort -> String -> IO (Either String ())
 handleAsahiMessage port ss =
-    flush port >> send port (T.encodeUtf8 $ T.pack ss) >> readFromSerialUntilLF port >>= \response ->
+    flush port >> send port (T.encodeUtf8 $ T.pack ss) >> readFromSerialUntilChar port '\n' >>= \response ->
     if (response == "OK\r\n")
     then return (Right ())
     else return (Left ("sent " ++ ss ++ "to asahi, received " ++ (T.unpack $ T.decodeUtf8 response)))

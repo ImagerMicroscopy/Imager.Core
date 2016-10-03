@@ -32,14 +32,13 @@ byteStringFromVector v = unsafePerformIO $
 timeSpecAsDouble :: TimeSpec -> Double
 timeSpecAsDouble ts = (*) 1.0e-9 . fromIntegral . toNanoSecs $ ts
 
-readFromSerialUntilChar :: SerialPort -> Word8 -> IO ByteString
-readFromSerialUntilChar port c = readUntil' port c B.empty
+readFromSerialUntilChar :: SerialPort -> Char -> IO ByteString
+readFromSerialUntilChar port c = readUntil' port (fromIntegral . fromEnum $ c) B.empty
     where
         readUntil' :: SerialPort -> Word8 -> ByteString -> IO ByteString
         readUntil' port c accum | (not $ B.null accum) && (B.last accum == c) = return accum
                                 | otherwise         = recv port 100 >>= \msg ->
                                                       readUntil' port c (accum <> msg)
-readFromSerialUntilLF port = readFromSerialUntilChar port 10
 
 readAtLeastNBytesFromSerial :: SerialPort -> Int -> IO ByteString
 readAtLeastNBytesFromSerial port n = readBytes port n B.empty
