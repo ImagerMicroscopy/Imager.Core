@@ -73,7 +73,9 @@ openFilterWheels = mapM openFilterWheel
   where
     openFilterWheel (ThorlabsFW103HDesc name portName chs) =
         openSerial portName (defaultSerialSettings {commSpeed = CS115200}) >>= \port ->
-        send port fw103HStopUpdatesMessage >> putStrLn "sent stop" >>
+        --send port fw103HStopUpdatesMessage >> putStrLn "sent stop" >>
+        send port fw103HInitializationMessage >> putStrLn "sent initialization" >>
+        send port fw103HEnableChannelMessage >> putStrLn "sent enable" >>
         return (ThorlabsFW103H name (validateChannels chs) port)
     openFilterWheel (ThorlabsFW102CDesc name portName chs) =
         ThorlabsFW102C name (validateChannels chs) <$> openSerial portName (defaultSerialSettings {commSpeed = CS115200})
@@ -122,7 +124,7 @@ switchToFilter fw chName | not (filterWheelHasChannel fw chName) = error "no mat
     switchToFilter' (ThorlabsFW102C _ chs port) chName =
         let filterIndex = fromJust (lookup chName chs)
         in flush port >> send port (T.encodeUtf8 . T.pack $ "pos=" ++ show filterIndex) >>
-           readFromSerialUntilChar port 62 >> return (Right ())
+           readFromSerialUntilChar port '>' >> return (Right ())
     switchToFilter' (DummyFilterWheel name chs) chName =
         putStrLn ("Switched filter wheel " ++ T.unpack name ++ " to filter " ++ T.unpack chName) >> return (Right ())
 
@@ -146,5 +148,10 @@ fw103HMoveAbsoluteMessage pos = runPut $
     putWord32le (fromIntegral pos)
 
 fw103HStopUpdatesMessage :: ByteString
-fw103HStopUpdatesMessage = runPut $
-    mapM_ putWord8 [0x12, 0x00, 0x00, 0x00, 0x50, 0x01]
+fw103HStopUpdatesMessage = B.pack [0x12, 0x00, 0x00, 0x00, 0xD0, 0x01]
+
+fw103HInitializationMessage :: ByteString
+fw103HInitializationMessage = B.pack [0x18, 0x00, 0x00, 0x00, 0xD0, 0x01]
+
+fw103HEnableChannelMessage :: ByteString
+fw103HEnableChannelMessage = B.pack [0x10, 0x02, 0x01, 0x01, 0xD0, 0x01]
