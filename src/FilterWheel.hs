@@ -74,11 +74,8 @@ openFilterWheels = mapM openFilterWheel
   where
     openFilterWheel (ThorlabsFW103HDesc name portName chs) =
         openSerial portName (defaultSerialSettings {commSpeed = CS115200}) >>= \port ->
-        debugSend port fw103HInitializationMessage >> putStrLn "sent initialization" >>
-        debugSend port fw103HEnableChannelMessage >> putStrLn "sent enable" >>
-        debugSend port fw103HMoveHomeMessage >> putStrLn "sent move home" >>
-        --debugSend port fw103HStopUpdatesMessage >> putStrLn "sent stop updates" >> flush port >>
-        return (ThorlabsFW103H name (validateChannels chs) port)
+        send port fw103HInitializationMessage >> send port fw103HEnableChannelMessage >>
+        send port fw103HMoveHomeMessage >> return (ThorlabsFW103H name (validateChannels chs) port)
     openFilterWheel (ThorlabsFW102CDesc name portName chs) =
         ThorlabsFW102C name (validateChannels chs) <$> openSerial portName (defaultSerialSettings {commSpeed = CS115200})
     openFilterWheel (DummyFilterWheelDesc name chs) =
@@ -121,8 +118,8 @@ switchToFilter fw chName | not (filterWheelHasChannel fw chName) = error "no mat
     switchToFilter' :: FilterWheel -> Text -> IO (Either String ())
     switchToFilter' (ThorlabsFW103H _ chs port) chName =
         let filterIndex = fromJust (lookup chName chs)
-            wheelPos = (409600 `div` 6) * filterIndex -- Thorlabs:  1 turn represents 360 degrees which is 25600 micro steps
-        in  sendReceiveFW103HMessage port (fw103HMoveAbsoluteMessage wheelPos) (0x64, 0x04)
+            wheelPos = (409600 `div` 6) * filterIndex -- Thorlabs:  1 turn represents 360 degrees which is 409600 micro steps
+        in  send port (fw103HMoveAbsoluteMessage wheelPos) >> threadDelay (floor 150e3) >> return (Right ())
     switchToFilter' (ThorlabsFW102C _ chs port) chName =
         let filterIndex = fromJust (lookup chName chs)
         in flush port >> send port (T.encodeUtf8 . T.pack $ "pos=" ++ show filterIndex) >>
@@ -130,18 +127,10 @@ switchToFilter fw chName | not (filterWheelHasChannel fw chName) = error "no mat
     switchToFilter' (DummyFilterWheel name chs) chName =
         putStrLn ("Switched filter wheel " ++ T.unpack name ++ " to filter " ++ T.unpack chName) >> return (Right ())
 
-sendReceiveFW103HMessage :: SerialPort -> ByteString -> (Int, Int) -> IO (Either String ())
-sendReceiveFW103HMessage port msg (resp1, resp2) =
-    putStrLn ("sending " ++ byteStringAsHex msg) >>
-    flush port >> send port msg >> threadDelay (floor 200e3) >> return (Right())
-
 fw103HMoveAbsoluteMessage :: Int -> ByteString
 fw103HMoveAbsoluteMessage pos = runPut $
     mapM_ putWord8 [0x53, 0x04, 0x06, 0x00, 0xD0, 0x01, 0x01, 0x00] >>
     putWord32le (fromIntegral pos)
-
-fw103HStopUpdatesMessage :: ByteString
-fw103HStopUpdatesMessage = B.pack [0x12, 0x00, 0x00, 0x00, 0x50, 0x01]
 
 fw103HInitializationMessage :: ByteString
 fw103HInitializationMessage = B.pack [0x18, 0x00, 0x00, 0x00, 0x50, 0x01]
@@ -151,6 +140,3 @@ fw103HEnableChannelMessage = B.pack [0x10, 0x02, 0x01, 0x01, 0x50, 0x01]
 
 fw103HMoveHomeMessage :: ByteString
 fw103HMoveHomeMessage = B.pack [0x43, 0x04, 0x01, 0x00, 0x50, 0x01]
-
-debugSend :: SerialPort -> ByteString -> IO ()
-debugSend port msg = send port msg >> putStrLn ("Sent: " ++ byteStringAsHex msg)
