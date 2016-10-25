@@ -47,6 +47,7 @@ executable RaspCuvettor
                      , LightSources
                      , IrradiationProgram
                      , Detector
+                     , AvailableDetector
                      , MiscUtils
   default-extensions:  CPP
   ghc-options:         -O2 -threaded

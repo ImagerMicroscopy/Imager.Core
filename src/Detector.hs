@@ -19,6 +19,8 @@ import Control.Monad
 import Control.Monad.Trans.Except
 import Data.ByteString (ByteString)
 import System.Clock
+import Data.Vector.Storable (Vector)
+import qualified Data.Vector.Storable as V
 
 type ExposureTime = Double
 type Gain = Double
@@ -57,9 +59,14 @@ class Detector a where
             case dat of
               Left e -> error e
               Right acqData -> addDataToMVar dataMVar startTime [acqData])
+
+    getDetectorWavelengths :: a -> IO (Either String (Vector Double))
+    getDetectorWavelengths _ = return (Right V.empty)
+
     setDetectorTemperature :: a -> Temperature -> IO (Either String ())
     getDetectorTemperature :: a -> IO (Either String Temperature)
     getDetectorTemperatureSetpoint :: a -> IO (Either String Temperature)
+
     getGainRange :: a -> IO (Either String (Gain, Gain))
     getExposureTimeRange :: a -> IO (Either String (ExposureTime, ExposureTime))
 

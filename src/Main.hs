@@ -24,6 +24,7 @@ import System.Clock
 
 import CuvettorTypes
 import Detector
+import AvailableDetector
 import GPIO
 import SimpleJSONServer
 import IrradiationProgram
@@ -31,21 +32,6 @@ import LightSources
 import MiscUtils
 import BinaryEncoding
 import FilterWheel
-
-#ifdef WITH_OCEANOPTICS
-import OOSeaBreeze
-import OODetector
-#endif
-#ifdef WITH_SCCAMERA
-import SCCamera
-import SCCamDetector
-#endif
-#if !defined(WITH_OCEANOPTICS) && !defined(WITH_SCCAMERA)
-    #error "building without any detector support"
-#endif
-#if defined(WITH_OCEANOPTICS) && defined(WITH_SCCAMERA)
-    #error "must build for either camera or spectrometer"
-#endif
 
 extraPins :: [GPIOPin]
 #ifdef WITH_OCEANOPTICS
@@ -80,50 +66,12 @@ main =
     async (return ()) >>= \asyncProgramWorker ->
     wait asyncProgramWorker >>
 
-#ifdef WITH_OCEANOPTICS
-    (withSeaBreeze $
-    bracket fetchAvailableSpectrometer closeAvailableSpectrometer $ \maybeSpectrometer ->
-    fetchEncodedWavelengths maybeSpectrometer >>= \encodedWavelengths ->
-    setTriggerMode maybeSpectrometer >>
-    nonlinearityCorrection maybeSpectrometer >>= \nonlinearityCorrFunc ->
-    putStrLn "opened spectrometer" >>
-    let (dID, fID) = fromJust maybeSpectrometer
-        detector = OODetector dID fID (Just (spectrometerTriggerPin, gpioHandles)) nonlinearityCorrFunc
-    in
-#endif
-#if WITH_SCCAMERA
-    (bracket initializeCameraDLL (\_ -> shutdownCameraDLL) $ \initStatus ->
-    when (isLeft initStatus) (error (fromLeft initStatus)) >>
-    listConnectedCameras >>= \camNames ->
-    when (null camNames) (error "no cameras found") >>
-    putStrLn ("using camera " ++ (T.unpack $ head camNames)) >>
-    let camName = head camNames
-        encodedWavelengths = SB.empty
-        detector = SCCamDetector camName
-    in
-#endif
-      let env = Environment lightSources filterWheels gpioHandles
-                extraPins detector encodedWavelengths asyncSpectraMVar asyncProgramWorker
-      in runServer 3200 messageHandler env serverSettings
-    ))))
-    where
-#ifdef WITH_OCEANOPTICS
-        fetchEncodedWavelengths :: Maybe (DeviceID, FeatureID) -> IO SB.ByteString
-        fetchEncodedWavelengths Nothing = return SB.empty
-        fetchEncodedWavelengths (Just (dID, fID)) =
-            getWavelengths dID fID >>= \(Right wLengths) ->
-            return (byteStringFromVector wLengths)
-        setTriggerMode :: Maybe (dID, fID) -> IO ()
-        setTriggerMode Nothing = return ()
-        setTriggerMode (Just (dID, fID)) = return () --setTriggerMode fID dID TriggerExternalHardwareLevel
-        nonlinearityCorrection :: Maybe (DeviceID, FeatureID) -> IO (Double -> Double)
-        nonlinearityCorrection Nothing = return id
-        nonlinearityCorrection (Just (dID, _)) =
-            V.toList <$> getNonlinearityCoeffs dID >>= \coeffs ->
-            return (\x -> x / polyCorr x coeffs)
-            where
-                polyCorr x coeffs = sum $ zipWith3 (\x coeff order -> coeff * x^order) (repeat x) coeffs ([0 ..] :: [Int])
-#endif
+    withAvailableDetector (\det ->
+        getDetectorWavelengths det >>= \(Right wl) ->
+        return (byteStringFromVector wl) >>= \encodedWl ->
+        let env = Environment lightSources filterWheels gpioHandles
+              extraPins det encodedWl asyncSpectraMVar asyncProgramWorker
+        in runServer 3200 messageHandler env serverSettings))))
 
 messageHandler :: Detector a => MessageHandler (Environment a)
 messageHandler msg env =

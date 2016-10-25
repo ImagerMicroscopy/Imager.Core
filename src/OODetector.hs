@@ -11,6 +11,8 @@ import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
 import Foreign
 import System.Clock
+import Data.Vector.Storable (Vector)
+import qualified Data.Vector.Storable as V
 
 import Detector
 import OOSeaBreeze
@@ -39,14 +41,20 @@ instance Detector OODetector where
                            bytes = byteStringFromVector corrected
                            numType = FP64
                        in return $ Right (AcquiredData nRows nCols timeStamp bytes numType)
+
+    getDetectorWavelengths :: OODetector -> IO (Either String (Vector Double))
+    getDetectorWavelengths (OODetector dID fID _ _) = getWavelengths dID fID
+
     setDetectorTemperature :: OODetector -> Temperature -> IO (Either String ())
     setDetectorTemperature _ _ = return (Right ())
     getDetectorTemperature :: OODetector -> IO (Either String Temperature)
     getDetectorTemperature _ = return (Right 20.0)
     getDetectorTemperatureSetpoint :: OODetector -> IO (Either String Temperature)
     getDetectorTemperatureSetpoint _ = return (Right 20.0)
+
     getGainRange :: OODetector -> IO (Either String (Gain, Gain))
     getGainRange _ = return $ Right (1.0, 1.0)
+
     getExposureTimeRange :: OODetector -> IO (Either String (ExposureTime, ExposureTime))
     getExposureTimeRange _ = return $ Right (3.8e-3, 1.0)
 
@@ -70,25 +78,3 @@ acquireTriggeredSpectrum (dID, fID) (pin, pinH) exposure nSpectra =
         measureAveragedSpectrum dID fID nSpectra)
     where
         integrationMicroseconds = floor (exposure * 1e6)
-
-acquireWavelengths :: (DeviceID, FeatureID) -> IO (Either String (Vector Double))
-acquireWavelengths (deviceID, featureID) =
-    getWavelengths deviceID featureID
-
-fetchAvailableSpectrometer :: IO (Maybe (DeviceID, FeatureID))
-fetchAvailableSpectrometer =
-    getDeviceIDs >>= \idList ->
-    if (not $ null idList)
-      then
-        runExceptT (
-            ExceptT (openDevice (head idList)) >>
-            ExceptT (getSpectrometerFeatures (head idList)) >>= \(featureID : _) ->
-            return (head idList, featureID)) >>= \result ->
-        case result of
-            Left _  -> return Nothing
-            Right v -> return $ Just v
-      else return Nothing
-
-closeAvailableSpectrometer :: Maybe (DeviceID, FeatureID) -> IO ()
-closeAvailableSpectrometer Nothing              = return ()
-closeAvailableSpectrometer (Just (deviceID, _)) = closeDevice deviceID >> return ()

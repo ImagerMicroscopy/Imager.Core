@@ -12,6 +12,8 @@ import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
 import Foreign
 import System.Clock
+import Data.Vector.Storable (Vector)
+import qualified Data.Vector.Storable as V
 
 import Detector
 import SCCamera
@@ -69,6 +71,7 @@ instance Detector SCCamDetector where
             measuredImagesAsAcquiredData (MeasuredImages nRows nCols vec) timeStamp =
                 AcquiredData nRows nCols timeStamp (byteStringFromVector vec) UINT16
             nImagesInBuffer = 20
+
     setDetectorTemperature :: SCCamDetector -> Temperature -> IO (Either String ())
     setDetectorTemperature (SCCamDetector camName) t = setTemperature camName t
     getDetectorTemperature :: SCCamDetector -> IO (Either String Temperature)
