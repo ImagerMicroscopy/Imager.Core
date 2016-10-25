@@ -18,14 +18,11 @@ import OODetector
 import SCCamera
 import SCCamDetector
 #endif
-import MiscUtils
+#ifdef WITH_DUMMYDETECTOR
+import DummyDetector
+#endif
 
-#if !defined(WITH_OCEANOPTICS) && !defined(WITH_SCCAMERA)
-    #error "building without any detector support"
-#endif
-#if defined(WITH_OCEANOPTICS) && defined(WITH_SCCAMERA)
-    #error "must build for either camera or spectrometer"
-#endif
+import MiscUtils
 
 #ifdef WITH_OCEANOPTICS
 withAvailableDetector :: (OODetector -> IO ()) -> IO ()
@@ -49,7 +46,7 @@ withAvailableDetector f =
             where
                 polyCorr x coeffs = sum $ zipWith3 (\x coeff order -> coeff * x^order) (repeat x) coeffs ([0 ..] :: [Int])
 #endif
-#if WITH_SCCAMERA
+#ifdef WITH_SCCAMERA
 withAvailableDetector :: (SCCamDetector -> IO ()) -> IO ()
 withAvailableDetector f =
   (bracket initializeCameraDLL (\_ -> shutdownCameraDLL) $ \initStatus ->
@@ -59,4 +56,8 @@ withAvailableDetector f =
     putStrLn ("using camera " ++ (T.unpack $ head camNames)) >>
     let camName = head camNames
     in f (SCCamDetector camName))
+#endif
+#ifdef WITH_DUMMYDETECTOR
+withAvailableDetector :: (DummyDetector -> IO ()) -> IO ()
+withAvailableDetector f = f DummyDetector
 #endif

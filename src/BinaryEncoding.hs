@@ -72,5 +72,6 @@ encodeHeader messageLength nRows nCols nDatasetsOfEachType numType timeStamps =
         mapM_ putFloat64le timeStamps
 
 encodedNumType :: NumberType -> Int
+encodedNumType UINT8 = 2
 encodedNumType UINT16 = 0
 encodedNumType FP64 = 1

@@ -14,11 +14,15 @@ cabal-version:       >=1.10
 
 Flag withoceanoptics {
     Description:     Enable Ocean Optics support
-    Default:         True
+    Default:         False
 }
 Flag withsccamera {
     Description:     Enable SCCamera support
-    Default:         True
+    Default:         False
+}
+Flag withdummydetector {
+    Description:     Enable dummy detector
+    Default:         False
 }
 
 executable RaspCuvettor
@@ -35,6 +39,7 @@ executable RaspCuvettor
                      , containers
                      , transformers
                      , clock
+                     , random
                      , serialport
                      , parallel
                      , vector
@@ -60,3 +65,6 @@ executable RaspCuvettor
       build-depends:   hsSCCamera
       cpp-options:     -DWITH_SCCAMERA
       other-modules:   SCCamDetector
+  if (flag(withdummydetector))
+      cpp-options:     -DWITH_DUMMYDETECTOR
+      other-modules:   DummyDetector

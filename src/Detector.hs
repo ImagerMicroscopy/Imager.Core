@@ -28,7 +28,8 @@ type Temperature = Double
 type NMeasurementsToAverage = Int
 type NMeasurementsToPerform = Int
 
-data NumberType = UINT16
+data NumberType = UINT8
+                | UINT16
                 | FP64
                 deriving (Show)
 
