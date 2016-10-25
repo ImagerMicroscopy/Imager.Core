@@ -1,8 +1,11 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module AvailableDetector where
 
+import Control.Exception
 import Control.Monad
 import Control.Monad.Trans.Except
+import Data.Either
+import qualified Data.Text as T
 import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
 
@@ -15,6 +18,7 @@ import OODetector
 import SCCamera
 import SCCamDetector
 #endif
+import MiscUtils
 
 #if !defined(WITH_OCEANOPTICS) && !defined(WITH_SCCAMERA)
     #error "building without any detector support"
@@ -54,5 +58,5 @@ withAvailableDetector f =
     when (null camNames) (error "no cameras found") >>
     putStrLn ("using camera " ++ (T.unpack $ head camNames)) >>
     let camName = head camNames
-    in f (SCCamDetector camName)
+    in f (SCCamDetector camName))
 #endif
