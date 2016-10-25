@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns, ScopedTypeVariables #-}
+{-# LANGUAGE BangPatterns, ScopedTypeVariables, DeriveGeneric, DeriveAnyClass #-}
 
 module Detector (
     AcquiredData (..)
@@ -15,9 +15,11 @@ module Detector (
 ) where
 
 import Control.Concurrent
+import Control.DeepSeq
 import Control.Monad
 import Control.Monad.Trans.Except
 import Data.ByteString (ByteString)
+import GHC.Generics (Generic)
 import System.Clock
 import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
@@ -39,7 +41,7 @@ data AcquiredData = AcquiredData {
                       , acqTimeStamp :: !TimeSpec
                       , acqData :: !ByteString
                       , acqNumType :: !NumberType
-                  } deriving (Show)
+                  } deriving (Show, Generic, NFData)
 
 data DetectorLimits = DetectorLimits {
                           dlMinExposureTime :: !ExposureTime
@@ -84,6 +86,7 @@ getDetectorLimits det =
 
 addDataToMVar :: MVar [[AcquiredData]] -> TimeSpec -> [AcquiredData] -> IO ()
 addDataToMVar mvar startTime newData =
+    newData `deepseq` (return ()) >>
     modifyMVar_ mvar (\previousData ->
         if (null previousData)
         then return [[d] | d <- adjustedData]
@@ -94,3 +97,8 @@ addDataToMVar mvar startTime newData =
         toSecondsFromStart acqDat =
             let t = acqTimeStamp acqDat
             in acqDat {acqTimeStamp = diffTimeSpec t startTime}
+
+instance NFData NumberType where
+    rnf t = t `seq` ()
+instance NFData TimeSpec where
+    rnf t = t `seq` ()

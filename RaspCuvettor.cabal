@@ -33,6 +33,7 @@ executable RaspCuvettor
                      , aeson
                      , async
                      , cereal
+                     , deepseq
                      , text
                      , bytestring
                      , base64-bytestring
