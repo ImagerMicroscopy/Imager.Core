@@ -1,6 +1,7 @@
 {-# LANGUAGE InstanceSigs #-}
 module DummyDetector where
 
+import Control.Concurrent
 import qualified Data.ByteString as B
 import Data.Word
 import System.Clock
@@ -13,6 +14,7 @@ data DummyDetector = DummyDetector
 instance Detector DummyDetector where
     acquireData :: DummyDetector -> ExposureTime -> Gain -> NMeasurementsToAverage -> IO (Either String AcquiredData)
     acquireData _ _ _ _ =
+        threadDelay 10000 >>
         getTime Monotonic >>= \timeStamp ->
         randoms <$> newStdGen >>= return . B.pack . take (512 * 512) >>= \datas ->
         return (Right $ AcquiredData 512 512 timeStamp datas UINT8)
