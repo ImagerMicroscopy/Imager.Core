@@ -64,10 +64,14 @@ class Detector a where
     getDetectorWavelengths _ = return (Right V.empty)
 
     setDetectorTemperature :: a -> Temperature -> IO (Either String ())
+    setDetectorTemperature _ _ = return (Right ())
     getDetectorTemperature :: a -> IO (Either String Temperature)
+    getDetectorTemperature _ = return (Right 20.0)
     getDetectorTemperatureSetpoint :: a -> IO (Either String Temperature)
+    getDetectorTemperatureSetpoint _ = return (Right 20.0)
 
     getGainRange :: a -> IO (Either String (Gain, Gain))
+    getGainRange _ = return $ Right (1.0, 1.0)
     getExposureTimeRange :: a -> IO (Either String (ExposureTime, ExposureTime))
 
 getDetectorLimits :: (Detector a) => a -> IO (Either String DetectorLimits)

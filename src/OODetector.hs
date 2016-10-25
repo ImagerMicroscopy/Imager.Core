@@ -45,16 +45,6 @@ instance Detector OODetector where
     getDetectorWavelengths :: OODetector -> IO (Either String (Vector Double))
     getDetectorWavelengths (OODetector dID fID _ _) = getWavelengths dID fID
 
-    setDetectorTemperature :: OODetector -> Temperature -> IO (Either String ())
-    setDetectorTemperature _ _ = return (Right ())
-    getDetectorTemperature :: OODetector -> IO (Either String Temperature)
-    getDetectorTemperature _ = return (Right 20.0)
-    getDetectorTemperatureSetpoint :: OODetector -> IO (Either String Temperature)
-    getDetectorTemperatureSetpoint _ = return (Right 20.0)
-
-    getGainRange :: OODetector -> IO (Either String (Gain, Gain))
-    getGainRange _ = return $ Right (1.0, 1.0)
-
     getExposureTimeRange :: OODetector -> IO (Either String (ExposureTime, ExposureTime))
     getExposureTimeRange _ = return $ Right (3.8e-3, 1.0)
 
