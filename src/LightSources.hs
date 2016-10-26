@@ -65,7 +65,7 @@ data LightSourceDesc = GPIOLightSourceDesc {
                      deriving (Show, Read)
 
 data LightSource = GPIOLightSource !Text !GPIOPin !Double !GPIOHandles
-                 | CoherentLightSource !Text !SerialPort
+                 | CoherentLightSource !Text !SerialPort !(IORef (Bool, Double, Double))
                  | LumencorLightSource !Text !SerialPort !(IORef Bool) !(IORef LumencorFilter)
                  | AsahiLightSource !Text ![(Text, Int)] !SerialPort
                  | DummyLightSource !Text
@@ -100,7 +100,7 @@ lightSourceAllowsMultipleChannels _ = False
 
 lightSourceName :: LightSource -> Text
 lightSourceName (GPIOLightSource name _ _ _) = name
-lightSourceName (CoherentLightSource name _) = name
+lightSourceName (CoherentLightSource name _ _) = name
 lightSourceName (LumencorLightSource name _ _ _) = name
 lightSourceName (AsahiLightSource name _ _) = name
 lightSourceName (DummyLightSource name) = name
@@ -130,8 +130,9 @@ openLightSources gpioHandles descs = sequence $ map openLightSource descs
     where
         openLightSource (GPIOLightSourceDesc name pin delay) = return (GPIOLightSource name pin delay gpioHandles)
         openLightSource (CoherentLightSourceDesc name portName) =
-            let port = openSerial portName (defaultSerialSettings {commSpeed = CS19200})
-            in CoherentLightSource name <$> port
+            openSerial portName (defaultSerialSettings {commSpeed = CS19200}) >>= \port ->
+            newIORef (False, 0.0, 0.0) >>= \powerRange ->
+            return (CoherentLightSource name port powerRange)
         openLightSource (LumencorLightSourceDesc name portName) =
             let port = openSerial portName (defaultSerialSettings {commSpeed = CS9600})
             in LumencorLightSource name <$> port <*> newIORef False <*> newIORef LCGreenFilter
@@ -150,7 +151,7 @@ closeLightSources :: [LightSource] -> IO ()
 closeLightSources = mapM_ closeLightSource
     where
         closeLightSource (GPIOLightSource _ _ _ _) = return ()
-        closeLightSource (CoherentLightSource _ port) = closeSerial port
+        closeLightSource (CoherentLightSource _ port _) = closeSerial port
         closeLightSource (LumencorLightSource _ port _ _) = closeSerial port
         closeLightSource (AsahiLightSource _ _ port) = closeSerial port
         closeLightSource (DummyLightSource name) = putStr ("closed light source " ++ T.unpack name) >> return ()
@@ -194,28 +195,34 @@ activateLightSource ls channels powers
   where
     activateLightSource' (GPIOLightSource _ pin delay handles) _ _ = setPinLevel handles pin High >> threadDelay (floor $ 1e6 * delay) >> return (Right ())
     activateLightSource' (DummyLightSource name) chs ps = putStrLn ("activated " ++ T.unpack name ++ " with channels " ++ show chs ++ " with powers " ++ show ps) >> return (Right ())
-    activateLightSource' ls@(CoherentLightSource _ _) _ [power] = activateCoherentLightSource ls power
+    activateLightSource' ls@(CoherentLightSource _ _ _) _ [power] = activateCoherentLightSource ls power
     activateLightSource' ls@(LumencorLightSource _ _ _ _) chs ps = activateLumencorLightSource ls (map lumencorChannelFromName chs) ps
     activateLightSource' ls@(AsahiLightSource _ _ _) [ch] [p] = activateAsahiLightSource ls ch p
     activateLightSource' _ _ _ = error "activating unknown light source"
     timeoutDuration = floor (2.0e6)
 
 activateCoherentLightSource :: LightSource -> Double -> IO (Either String ())
-activateCoherentLightSource (CoherentLightSource _ port) power =
+activateCoherentLightSource (CoherentLightSource _ port powerRange) power =
     catch (powerStr >>= sendAndReadResponse port >> sendAndReadResponse port "L=1\r" >> return (Right ()))
           (\e -> return (Left (displayException (e :: IOException))))
     where
         powerStr :: IO ByteString
-        powerStr = minPowerQ >>= \minPower -> maxPowerQ >>= \maxPower ->
-                  let powerVal = floor (minPower + power / 100.0 * (maxPower - minPower)) :: Int
-                  in return ("P=" <> T.encodeUtf8 (T.pack $ show powerVal) <> "\r")
+        powerStr = minMaxPower >>= \(minPower, maxPower) ->
+                   let powerVal = floor (minPower + power / 100.0 * (maxPower - minPower)) :: Int
+                   in return ("P=" <> T.encodeUtf8 (T.pack $ show powerVal) <> "\r")
+        minMaxPower :: IO (Double, Double)
+        minMaxPower = readIORef powerRange >>= \(haveRange, minP, maxP) ->
+                      if (haveRange)
+                      then return (minP, maxP)
+                      else minPowerQ >>= \minPower -> maxPowerQ >>= \maxPower ->
+                           writeIORef powerRange (True, minPower, maxPower) >>
+                           return (minPower, maxPower)
         minPowerQ = parseQuery "?MINLP\r"
         maxPowerQ = parseQuery "?MAXLP\r"
         parseQuery :: ByteString -> IO Double
         parseQuery q = sendAndReadResponse port q >>= return . read . filter (`elem` ('.' : ['0' .. '9'])) . T.unpack . T.decodeUtf8
         sendAndReadResponse :: SerialPort -> ByteString -> IO ByteString
-        sendAndReadResponse prt msg = send port msg >> recvUntilTerminator port
-        recvUntilTerminator port = readFromSerialUntilChar port '\n'
+        sendAndReadResponse prt msg = send port msg >> readFromSerialUntilChar port '\n'
 
 activateLumencorLightSource :: LightSource -> [LumencorChannel] -> [Double] -> IO (Either String ())
 activateLumencorLightSource (LumencorLightSource _ port haveInitRef currFilterRef) channels powers =
@@ -252,7 +259,9 @@ activateAsahiLightSource (AsahiLightSource _ chs port) filter power =
 
 deactivateLightSource :: LightSource -> IO (Either String ())
 deactivateLightSource (GPIOLightSource _ pin delay handles) = setPinLevel handles pin Low >> threadDelay (floor $ 1e6 * delay) >> return (Right ())
-deactivateLightSource (CoherentLightSource _ port) = catch (send port "L=0\r" >> readFromSerialUntilChar port '\n' >> return (Right ())) (\e -> return (Left (displayException (e :: IOException))))
+deactivateLightSource (CoherentLightSource _ port _) =
+    catch (send port "L=0\r" >> readFromSerialUntilChar port '\n' >> return (Right ()))
+          (\e -> return (Left (displayException (e :: IOException))))
 deactivateLightSource (LumencorLightSource _ port _ currFilterRef) =
     readIORef currFilterRef >>= \currFilter ->
     send port (lumencorDisableMessage currFilter) >>
