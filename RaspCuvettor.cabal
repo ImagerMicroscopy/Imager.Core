@@ -51,6 +51,7 @@ executable RaspCuvettor
                      , BinaryEncoding
                      , FilterWheel
                      , LightSources
+                     , MotorizedStage
                      , IrradiationProgram
                      , Detector
                      , AvailableDetector

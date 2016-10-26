@@ -1,6 +1,7 @@
 {-# LANGUAGE BangPatterns, OverloadedStrings, NumDecimals #-}
 module MotorizedStage where
 
+import Control.Exception
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import Data.Text (Text)
@@ -10,6 +11,7 @@ import System.Environment
 import System.FilePath
 import System.Hardware.Serialport hiding(timeout)
 import System.Timeout
+import Text.Printf
 
 import MiscUtils
 
@@ -17,11 +19,16 @@ data MotorizedStageDesc = PriorDesc {
                               psDescName :: !Text
                             , psDescPortName :: !String
                           }
+                        | DummyStageDesc {
+                              dsName :: !Text
+                          }
+                        deriving (Show, Read)
 
 data MotorizedStage = PriorStage {
                           psName :: !Text
                         , psPort :: !SerialPort
                       }
+                    | DummyStage !Text
 
 readAvailableMotorizedStages :: IO [MotorizedStageDesc]
 readAvailableMotorizedStages =
@@ -41,26 +48,36 @@ openMotorizedStages = mapM openMotorizedStage
         openMotorizedStage (PriorDesc name portName) =
             timeout 2e6 (
               openSerial portName (defaultSerialSettings {commSpeed = CS9600}) >>= \port ->
-              send port "COMP 1\r" >> readFromSerialUntilChar '\r' >>= \resp ->
+              send port "COMP 1\r" >> readFromSerialUntilChar port '\r' >>= \resp ->
               if ((resp /= "0\r") && (resp /= "R\r"))
               then error "unexpected reply from prior stage"
               else return (PriorStage name port)) >>= \result ->
             case result of
               Nothing -> error "timeout connecting to the prior stage"
               Just r -> return r
+        openMotorizedStage (DummyStageDesc name) =
+            putStrLn ("dummy stage " ++ (T.unpack name) ++ " open") >>
+            return (DummyStage name)
 
-closeMotorizedStages :: [MotorizedStageDesc] -> IO ()
-openMotorizedStages = mapM_ closeMotorizedStage
+closeMotorizedStages :: [MotorizedStage] -> IO ()
+closeMotorizedStages = mapM_ closeMotorizedStage'
     where
-      closeMotorizedStage (PriorStage _ port) = closeSerial port
+      closeMotorizedStage' (PriorStage _ port) = closeSerial port
+      closeMotorizedStage' (DummyStage n) = putStrLn ("dummy stage " ++ (T.unpack n) ++ " closed")
 
-getStagePosition :: MotorizedStage -> IO (Double, Double, Double)
-getStagePosition (PriorStage _ port) =
-    (,,) <$> readNumberP "PX\r" <*> readNumberP "PY\r" <*> readNumberP "PZ\r"
+getStagePosition :: MotorizedStage -> IO (Either String (Double, Double, Double))
+getStagePosition s = timeout 20e6 (getStagePosition' s) >>= \result ->
+                     case result of
+                        Nothing -> error "timeout getting stage position"
+                        Just v  -> return (Right v)
     where
-      readNumberP :: SerialPort -> ByteString -> IO Double
-      readNumberP port query = flush port >> send port query >>
-                               readFromSerialUntilChar '\n' >>= return . read
+      getStagePosition' :: MotorizedStage -> IO (Double, Double, Double)
+      getStagePosition' (PriorStage _ port) =
+          (,,) <$> readNumberP "PX\r" <*> readNumberP "PY\r" <*> readNumberP "PZ\r"
+          where
+            readNumberP :: ByteString -> IO Double
+            readNumberP query = flush port >> send port query >>
+                                readFromSerialUntilChar port '\n' >>= return . read . T.unpack . T.decodeUtf8
 
 setStagePosition :: MotorizedStage -> (Double, Double, Double) -> IO (Either String ())
 setStagePosition p pos =
@@ -70,7 +87,7 @@ setStagePosition p pos =
       Just v  -> return v
     where
         setStagePosition' (PriorStage _ port) (x, y, z) =
-            flush port >> send port posStr >> readFromSerialUntilChar '\r' >>= \resp ->
+            flush port >> send port posStr >> readFromSerialUntilChar port '\r' >>= \resp ->
             case resp of
               "R\r" -> return (Right ())
               _     -> return (Left "unexpected response from stage")

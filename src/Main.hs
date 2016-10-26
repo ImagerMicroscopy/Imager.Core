@@ -29,6 +29,7 @@ import GPIO
 import SimpleJSONServer
 import IrradiationProgram
 import LightSources
+import MotorizedStage
 import MiscUtils
 import BinaryEncoding
 import FilterWheel
@@ -52,6 +53,7 @@ main =
     return (nub (extraPins ++ (gpioPinsNeededForLightSources availableLightSources))) >>= \requiredGPIOPins ->
 
     readAvailableFilterWheels >>= \availableFilterWheels ->
+    readAvailableMotorizedStages >>= \availableStages ->
 
     withGPIOPins (zip requiredGPIOPins (repeat $ Output Low)) (\gpioHandles ->
     putStrLn ("opened GPIO pins: " ++ concat (map show requiredGPIOPins)) >>
@@ -62,6 +64,9 @@ main =
     withFilterWheels availableFilterWheels (\filterWheels ->
     putStrLn ("opened filter wheels") >>
 
+    withMotorizedStages availableStages (\motorizedStages ->
+    putStrLn ("opened motorized stages") >>
+
     newMVar [] >>= \asyncSpectraMVar ->
     async (return ()) >>= \asyncProgramWorker ->
     wait asyncProgramWorker >>
@@ -69,9 +74,9 @@ main =
     withAvailableDetector (\det ->
         getDetectorWavelengths det >>= \(Right wl) ->
         return (byteStringFromVector wl) >>= \encodedWl ->
-        let env = Environment lightSources filterWheels gpioHandles
+        let env = Environment lightSources filterWheels motorizedStages gpioHandles
               extraPins det encodedWl asyncSpectraMVar asyncProgramWorker
-        in runServer 3200 messageHandler env serverSettings))))
+        in runServer 3200 messageHandler env serverSettings)))))
 
 messageHandler :: Detector a => MessageHandler (Environment a)
 messageHandler msg env =

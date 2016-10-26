@@ -28,10 +28,12 @@ import GPIO
 import IrradiationProgram
 import LightSources
 import FilterWheel
+import MotorizedStage
 
 data Environment a = Environment {
                       envLightSources :: [LightSource]
                     , envFilterWheels :: [FilterWheel]
+                    , envMotorizedStages :: [MotorizedStage]
                     , envGPIOHandles :: !GPIOHandles
                     , envAvailablePins :: [GPIOPin]
                     , envDetector :: a
