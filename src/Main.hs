@@ -116,9 +116,13 @@ performAction env ListLightSources = return (AvailableLightSources lss, env)
     where
       lss = envLightSources env
 
-performAction env ListFilterWheels = putStrLn "sending filter wheels" >> print (map filterWheelName fws) >> return (AvailableFilterWheels fws, env)
+performAction env ListFilterWheels = return (AvailableFilterWheels fws, env)
     where
         fws = envFilterWheels env
+
+performAction env ListMotorizedStages = return (AvailableMotorizedStages mss, env)
+    where
+        mss = envMotorizedStages env
 
 performAction env GetDetectorLimits =
     runExceptT (

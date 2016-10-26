@@ -2,6 +2,7 @@
 module MotorizedStage where
 
 import Control.Exception
+import Data.Aeson
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import Data.Text (Text)
@@ -30,6 +31,9 @@ data MotorizedStage = PriorStage {
                       }
                     | DummyStage !Text
 
+instance ToJSON MotorizedStage where
+  toJSON s = object ["name" .= motorizedStageName s]
+
 readAvailableMotorizedStages :: IO [MotorizedStageDesc]
 readAvailableMotorizedStages =
   getExecutablePath >>= \exePath ->
@@ -41,6 +45,10 @@ readAvailableMotorizedStages =
 withMotorizedStages :: [MotorizedStageDesc] -> ([MotorizedStage] -> IO a) -> IO a
 withMotorizedStages descs action =
     bracket (openMotorizedStages descs) closeMotorizedStages action
+
+motorizedStageName :: MotorizedStage -> Text
+motorizedStageName (PriorStage name _) = name
+motorizedStageName (DummyStage name) = name
 
 openMotorizedStages :: [MotorizedStageDesc] -> IO [MotorizedStage]
 openMotorizedStages = mapM openMotorizedStage
