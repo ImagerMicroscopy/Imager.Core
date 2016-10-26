@@ -58,6 +58,7 @@ data RequestMessage = SetPinHigh !GPIOPin
                       , reqActivatePowers :: ![Double]
                     }
                     | DeactivateLightSource !Text
+                    | TurnOffLightSource !Text
                     | Ping
                     | ExecuteIrradiationProgram {
                         execIrradiationProgram :: !IrradiationProgram
@@ -80,6 +81,7 @@ instance ToJSON RequestMessage where
     toEncoding GetDetectorTemperatureSetpoint = pairs ("action" .= ("getdetectortemperaturesetpoint" :: Text))
     toEncoding (ActivateLightSource name channel power) = pairs ("action" .= ("activatelightsource" :: Text) <> "name" .= name <> "channel" .= channel <> "power" .= power)
     toEncoding (DeactivateLightSource name) = pairs ("action" .= ("deactivatelightsource" :: Text) <> "name" .= name)
+    toEncoding (TurnOffLightSource name) = pairs ("action" .= ("turnofflightsource" :: Text) <> "name" .= name)
     toEncoding Ping = pairs ("action" .= ("ping" :: Text))
     toEncoding (ExecuteIrradiationProgram prog) = pairs ("action" .= ("executeirradiationprogram" :: Text) <> "program" .= prog)
     toEncoding FetchAsyncData = pairs ("action" .= ("fetchasyncspectra" :: Text))
@@ -102,6 +104,7 @@ instance FromJSON RequestMessage where
             "getdetectortemperaturesetpoint" -> return GetDetectorTemperatureSetpoint
             "activatelightsource" -> ActivateLightSource <$> v .: "name" <*> v .: "channel" <*> v .: "power"
             "deactivatelightsource" -> DeactivateLightSource <$> v .: "name"
+            "turnofflightsource" -> TurnOffLightSource <$> v .: "name"
             "ping"      -> return Ping
             "executeirradiationprogram" -> ExecuteIrradiationProgram <$> v .: "program"
             "fetchasyncspectra" -> return FetchAsyncData

@@ -160,9 +160,9 @@ performAction env (ActivateLightSource name channels powers) =
         ExceptT (ensureAsyncAcquisitionNotRunning env) >>
         ExceptT (return $ lookupEitherLightSource lightSources name) >>= \lightSource ->
         ExceptT (activateLightSource lightSource channels powers)) >>= \result ->
-        case result of
-            Left err -> return (StatusError err, env)
-            Right _ -> return (StatusOK, env)
+    case result of
+        Left err -> return (StatusError err, env)
+        Right _ -> return (StatusOK, env)
     where
         lightSources = envLightSources env
 
@@ -171,9 +171,20 @@ performAction env (DeactivateLightSource name) =
         ExceptT (ensureAsyncAcquisitionNotRunning env) >>
         ExceptT (return $ lookupEitherLightSource lightSources name) >>= \lightSource ->
         ExceptT (deactivateLightSource lightSource)) >>= \result ->
-        case result of
-            Left err -> return (StatusError err, env)
-            Right _ -> return (StatusOK, env)
+    case result of
+        Left err -> return (StatusError err, env)
+        Right _ -> return (StatusOK, env)
+    where
+        lightSources = envLightSources env
+
+performAction env (TurnOffLightSource name) =
+    runExceptT (
+        ExceptT (ensureAsyncAcquisitionNotRunning env) >>
+        ExceptT (return $ lookupEitherLightSource lightSources name) >>= \lightSource ->
+        ExceptT (turnOffLightSource lightSource)) >>= \result ->
+    case result of
+        Left err -> return (StatusError err, env)
+        Right _ -> return (StatusOK, env)
     where
         lightSources = envLightSources env
 

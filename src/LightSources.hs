@@ -8,6 +8,7 @@ module LightSources (
   , lookupLightSource
   , activateLightSource
   , deactivateLightSource
+  , turnOffLightSource
   , isKnownLightSource
   , lookupMaybeLightSource
   , lookupEitherLightSource
@@ -276,6 +277,10 @@ deactivateAllLightSources sources =
     case result of
         Right _ -> return (Right ())
         Left e -> return (Left e)
+
+turnOffLightSource :: LightSource -> IO (Either String ())
+turnOffLightSource (AsahiLightSource _ _ port) = send port "PW0\r\n" >> return (Right ())
+turnOffLightSource _ = return (Left "can't turn off this light source")
 
 dummyLightSourceChannels :: [Text]
 dummyLightSourceChannels = ["ch1", "ch2"]
