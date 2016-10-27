@@ -108,11 +108,11 @@ switchFilterWheel fws fwName fName =
     let filterWheel = head (filter (\fw -> filterWheelName fw == fwName) fws)
     in timeout (floor 2.0e6) (switchToFilter filterWheel fName) >>= \result ->
        case result of
-           Nothing -> error ("timeout communicating with " ++ T.unpack (filterWheelName filterWheel))
+           Nothing -> return (Left ("timeout communicating with " ++ T.unpack (filterWheelName filterWheel)))
            Just v -> return v
 
 switchToFilter :: FilterWheel -> Text -> IO (Either String ())
-switchToFilter fw chName | not (filterWheelHasChannel fw chName) = error "no matching channel for filter wheel"
+switchToFilter fw chName | not (filterWheelHasChannel fw chName) = return (Left "no matching channel for filter wheel")
                          | otherwise = switchToFilter' fw chName
   where
     switchToFilter' :: FilterWheel -> Text -> IO (Either String ())

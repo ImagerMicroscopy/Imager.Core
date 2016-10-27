@@ -269,7 +269,7 @@ deactivateLightSource (LumencorLightSource _ port _ currFilterRef) =
     return (Right ())
 deactivateLightSource (AsahiLightSource _ _ port) = handleAsahiMessage port "S=0\r\n"
 deactivateLightSource (DummyLightSource name) = putStrLn ("deactivated " ++ T.unpack name) >> return (Right ())
-deactivateLightSource _ = error "deactivating unknown light source"
+deactivateLightSource _ = error "deactivating unknown type of light source"
 
 deactivateAllLightSources :: [LightSource] -> IO (Either String ())
 deactivateAllLightSources sources =
