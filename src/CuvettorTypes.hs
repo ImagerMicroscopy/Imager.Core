@@ -52,6 +52,7 @@ data RequestMessage = SetPinHigh !GPIOPin
                     | ListFilterWheels
                     | ListMotorizedStages
                     | GetMotorizedStagePosition !Text
+                    | SetMotorizedStagePosition !Text !(Double, Double, Double)
                     | GetDetectorLimits
                     | SetDetectorTemperature !Double
                     | GetDetectorTemperature
@@ -81,6 +82,7 @@ instance ToJSON RequestMessage where
     toEncoding ListFilterWheels = pairs ("action" .= ("listfilterwheels" :: Text))
     toEncoding ListMotorizedStages = pairs ("action" .= ("listmotorizedstages" :: Text))
     toEncoding (GetMotorizedStagePosition name) = pairs ("action" .= ("getmotorizedstageposition" :: Text) <> "name" .= name)
+    toEncoding (SetMotorizedStagePosition name ds) = pairs ("action" .= ("setmotorizedstageposition" :: Text) <> "name" .= name <> "position" .= ds)
     toEncoding GetDetectorLimits = pairs ("action" .= ("getdetectorlimits" :: Text))
     toEncoding (SetDetectorTemperature t) = pairs ("action" .= ("setdetectortemperature" :: Text) <> "temperature" .= t)
     toEncoding GetDetectorTemperature = pairs ("action" .= ("getdetectortemperature" :: Text))
@@ -106,6 +108,7 @@ instance FromJSON RequestMessage where
             "listfilterwheels" -> return ListFilterWheels
             "listmotorizedstages" -> return ListMotorizedStages
             "getmotorizedstageposition" -> GetMotorizedStagePosition <$> v .: "name"
+            "setmotorizedstageposition" -> SetMotorizedStagePosition <$> v .: "name" <*> v .: "position"
             "getdetectorlimits" -> return GetDetectorLimits
             "setdetectortemperature" -> SetDetectorTemperature <$> v .: "temperature"
             "getdetectortemperature" -> return GetDetectorTemperature

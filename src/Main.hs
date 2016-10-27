@@ -134,6 +134,16 @@ performAction env (GetMotorizedStagePosition name) =
     where
         mss = envMotorizedStages env
 
+performAction env (SetMotorizedStagePosition name ds) =
+    runExceptT (
+        ExceptT (ensureAsyncAcquisitionNotRunning env) >>
+        ExceptT (setStagePositionLookup mss name ds)) >>= \result ->
+    case result of
+        Left err -> return (StatusError err, env)
+        Right ds -> return (StatusOK, env)
+    where
+        mss = envMotorizedStages env
+
 performAction env GetDetectorLimits =
     runExceptT (
         ExceptT (ensureAsyncAcquisitionNotRunning env) >>

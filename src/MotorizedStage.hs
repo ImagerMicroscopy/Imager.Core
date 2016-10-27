@@ -85,7 +85,7 @@ getStagePositionLookup mss name =
 getStagePosition :: MotorizedStage -> IO (Either String (Double, Double, Double))
 getStagePosition s = timeout 20e6 (getStagePosition' s) >>= \result ->
                      case result of
-                        Nothing -> error "timeout getting stage position"
+                        Nothing -> return (Left "timeout getting stage position")
                         Just v  -> return (Right v)
     where
       getStagePosition' :: MotorizedStage -> IO (Double, Double, Double)
@@ -95,6 +95,15 @@ getStagePosition s = timeout 20e6 (getStagePosition' s) >>= \result ->
             readNumberP :: ByteString -> IO Double
             readNumberP query = flush port >> send port query >>
                                 readFromSerialUntilChar port '\n' >>= return . read . T.unpack . T.decodeUtf8
+
+setStagePositionLookup :: [MotorizedStage] -> Text -> (Double, Double, Double) -> IO (Either String ())
+setStagePositionLookup mss name ds =
+    case eligibleStages of
+      [s] -> setStagePosition s ds
+      []  -> return (Left ("no stage named " ++ (T.unpack name)))
+      _   -> return (Left ("more than one stage with the same name"))
+    where
+      eligibleStages = filter ((== name) . motorizedStageName) mss
 
 setStagePosition :: MotorizedStage -> (Double, Double, Double) -> IO (Either String ())
 setStagePosition p pos =
