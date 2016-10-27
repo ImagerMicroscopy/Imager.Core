@@ -51,6 +51,7 @@ data RequestMessage = SetPinHigh !GPIOPin
                     | ListLightSources
                     | ListFilterWheels
                     | ListMotorizedStages
+                    | GetMotorizedStagePosition !Text
                     | GetDetectorLimits
                     | SetDetectorTemperature !Double
                     | GetDetectorTemperature
@@ -79,6 +80,7 @@ instance ToJSON RequestMessage where
     toEncoding ListLightSources = pairs ("action" .= ("listlightsources" :: Text))
     toEncoding ListFilterWheels = pairs ("action" .= ("listfilterwheels" :: Text))
     toEncoding ListMotorizedStages = pairs ("action" .= ("listmotorizedstages" :: Text))
+    toEncoding (GetMotorizedStagePosition name) = pairs ("action" .= ("getmotorizedstageposition" :: Text) <> "name" .= name)
     toEncoding GetDetectorLimits = pairs ("action" .= ("getdetectorlimits" :: Text))
     toEncoding (SetDetectorTemperature t) = pairs ("action" .= ("setdetectortemperature" :: Text) <> "temperature" .= t)
     toEncoding GetDetectorTemperature = pairs ("action" .= ("getdetectortemperature" :: Text))
@@ -103,6 +105,7 @@ instance FromJSON RequestMessage where
             "listlightsources" -> return ListLightSources
             "listfilterwheels" -> return ListFilterWheels
             "listmotorizedstages" -> return ListMotorizedStages
+            "getmotorizedstageposition" -> GetMotorizedStagePosition <$> v .: "name"
             "getdetectorlimits" -> return GetDetectorLimits
             "setdetectortemperature" -> SetDetectorTemperature <$> v .: "temperature"
             "getdetectortemperature" -> return GetDetectorTemperature
@@ -128,6 +131,7 @@ data ResponseMessage = StatusOK
                      | AvailableLightSources ![LightSource]
                      | AvailableFilterWheels ![FilterWheel]
                      | AvailableMotorizedStages ![MotorizedStage]
+                     | MotorizedStagePosition !(Double, Double, Double)
                      | DetectorLimitsResponse !DetectorLimits
                      | DetectorTemperatureResponse !Double
                      | DetectorTemperatureSetpointResponse !Double
@@ -150,6 +154,7 @@ instance ToJSON ResponseMessage where
     toEncoding (AvailableLightSources ls) = pairs ("responsetype" .= ("availablelightsources" :: Text) <> "lightsources" .= ls)
     toEncoding (AvailableFilterWheels fws) = pairs ("responsetype" .= ("availablefilterwheels" :: Text) <> "filterwheels" .= fws)
     toEncoding (AvailableMotorizedStages ss) = pairs ("responsetype" .= ("availablemotorizedstages" :: Text) <> "motorizedstages" .= ss)
+    toEncoding (MotorizedStagePosition ds) = pairs ("responsetype" .= ("motorizedstageposition" :: Text) <> "position" .= ds)
     toEncoding (DetectorLimitsResponse dl) = pairs ("responsetype" .= ("detectorlimits" :: Text) <> "detectorlimits" .= dl)
     toEncoding (DetectorTemperatureResponse t) = pairs ("responsetype" .= ("detectortemperature" :: Text) <> "detectortemperature" .= t)
     toEncoding (DetectorTemperatureSetpointResponse t) = pairs ("responsetype" .= ("detectortemperaturesetpoint" :: Text) <> "detectortemperaturesetpoint" .= t)

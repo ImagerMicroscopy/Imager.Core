@@ -73,6 +73,15 @@ closeMotorizedStages = mapM_ closeMotorizedStage'
       closeMotorizedStage' (PriorStage _ port) = closeSerial port
       closeMotorizedStage' (DummyStage n) = putStrLn ("dummy stage " ++ (T.unpack n) ++ " closed")
 
+getStagePositionLookup :: [MotorizedStage] -> Text -> IO (Either String (Double, Double, Double))
+getStagePositionLookup mss name =
+    case eligibleStages of
+      [s] -> getStagePosition s
+      []  -> return (Left ("no stage named " ++ (T.unpack name)))
+      _   -> return (Left ("more than one stage with the same name"))
+    where
+      eligibleStages = filter ((== name) . motorizedStageName) mss
+
 getStagePosition :: MotorizedStage -> IO (Either String (Double, Double, Double))
 getStagePosition s = timeout 20e6 (getStagePosition' s) >>= \result ->
                      case result of

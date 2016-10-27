@@ -124,6 +124,16 @@ performAction env ListMotorizedStages = return (AvailableMotorizedStages mss, en
     where
         mss = envMotorizedStages env
 
+performAction env (GetMotorizedStagePosition name) =
+    runExceptT (
+        ExceptT (ensureAsyncAcquisitionNotRunning env) >>
+        ExceptT (getStagePositionLookup mss name)) >>= \result ->
+    case result of
+        Left err -> return (StatusError err, env)
+        Right ds -> return (MotorizedStagePosition ds, env)
+    where
+        mss = envMotorizedStages env
+
 performAction env GetDetectorLimits =
     runExceptT (
         ExceptT (ensureAsyncAcquisitionNotRunning env) >>
