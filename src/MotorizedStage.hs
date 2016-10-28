@@ -54,6 +54,7 @@ openMotorizedStages :: [MotorizedStageDesc] -> IO [MotorizedStage]
 openMotorizedStages = mapM openMotorizedStage
     where
         openMotorizedStage (PriorDesc name portName) =
+            putStrLn "Connecting to Prior stage..." >>
             timeout 2e6 (
               openSerial portName (defaultSerialSettings {commSpeed = CS9600}) >>= \port ->
               send port "COMP 1\r" >> readFromSerialUntilChar port '\r' >>= \resp ->
@@ -62,7 +63,7 @@ openMotorizedStages = mapM openMotorizedStage
               else return (PriorStage name port)) >>= \result ->
             case result of
               Nothing -> error "timeout connecting to the prior stage"
-              Just r -> return r
+              Just r -> putStrLn "Connected to Prior stage" >> return r
         openMotorizedStage (DummyStageDesc name) =
             putStrLn ("dummy stage " ++ (T.unpack name) ++ " open") >>
             return (DummyStage name)

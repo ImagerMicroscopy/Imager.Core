@@ -138,11 +138,12 @@ openLightSources gpioHandles descs = sequence $ map openLightSource descs
             let port = openSerial portName (defaultSerialSettings {commSpeed = CS9600})
             in LumencorLightSource name <$> port <*> newIORef False <*> newIORef LCGreenFilter
         openLightSource (AsahiLightSourceDesc name portName chs) =
+            putStrLn "Connecting to Asahi lamp..." >>
             openSerial portName defaultSerialSettings >>= \port ->
             timeout 2e6 (readLampLife port) >>= \response ->
             case response of
-                Nothing -> error "timeout communicating with asahi lamp"
-                Just v -> putStrLn ("asahi lamp has been on " ++ show v ++ " hours (recommended lamp life 500 hours, max lamp life 1000 hours)") >>
+                Nothing -> error "timeout communicating with Asahi lamp"
+                Just v -> putStrLn ("Asahi lamp has been on " ++ show v ++ " hours (recommended lamp life 500 hours, max lamp life 1000 hours)") >>
                           return (AsahiLightSource name (validFilters chs) port)
             where
                 validFilters chs | any (T.null . fst) chs = error "cannot have empty filter names for asahi lamp"
