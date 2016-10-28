@@ -8,12 +8,15 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Unsafe as SB
 import Data.List
 import Data.Monoid
+import Data.Text (Text)
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import Data.Word
+import Data.Vector.Storable (Vector)
+import qualified Data.Vector.Storable as V
 import Foreign.Storable
 import Foreign.Marshal
 import Foreign.Ptr
-import Data.Vector.Storable (Vector)
-import qualified Data.Vector.Storable as V
 import Numeric
 import System.IO.Unsafe
 import System.Clock
@@ -54,6 +57,9 @@ byteStringAsHex = concat . intersperse " " . map showByte . B.unpack
     where
         showByte :: Word8 -> String
         showByte b = (showHex (b `shiftR` 4) . showHex (b .&. 0x0F)) ""
+
+byteStringAsString :: ByteString -> String
+byteStringAsString = T.unpack . T.decodeUtf8
 
 nodups :: Eq a => [a] -> Bool
 nodups xs = (nub xs) == xs

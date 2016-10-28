@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns, OverloadedStrings #-}
+{-# LANGUAGE BangPatterns, OverloadedStrings, NumDecimals #-}
 
 module LightSources (
     LightSourceDesc(..)
@@ -138,13 +138,21 @@ openLightSources gpioHandles descs = sequence $ map openLightSource descs
             let port = openSerial portName (defaultSerialSettings {commSpeed = CS9600})
             in LumencorLightSource name <$> port <*> newIORef False <*> newIORef LCGreenFilter
         openLightSource (AsahiLightSourceDesc name portName chs) =
-            let port = openSerial portName defaultSerialSettings
-            in AsahiLightSource name (validFilters chs) <$> port
+            openSerial portName defaultSerialSettings >>= \port ->
+            timeout 2e6 (readLampLife port) >>= \response ->
+            case response of
+                Nothing -> error "timeout communicating with asahi lamp"
+                Just v -> putStrLn ("asahi lamp has been on " ++ show v ++ " hours (recommended lamp life 500 hours, max lamp life 1000 hours)") >>
+                          return (AsahiLightSource name (validFilters chs) port)
             where
                 validFilters chs | any (T.null . fst) chs = error "cannot have empty filter names for asahi lamp"
                                  | not (nodups (map fst chs) && nodups (map snd chs)) = error "cannot have duplicate filter names or indices for asahi lamp"
                                  | not $ all (\n -> within n 1 8) (map snd chs) = error "asahi filter indices must be between 1 and 8"
                                  | otherwise = chs
+                readLampLife :: SerialPort -> IO Int
+                readLampLife port =
+                    send port "LIFE?\r\n" >> readFromSerialUntilChar port '\n' >>= -- response is of format "LF %d\r"
+                    return . read . drop 3 . byteStringAsString
         openLightSource (DummyLightSourceDesc name) = putStrLn ("opened light source " ++ T.unpack name) >> return (DummyLightSource name)
         openLightSource _ = error "opening unknown type of light source"
 
