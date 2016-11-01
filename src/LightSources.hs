@@ -150,10 +150,10 @@ openLightSources gpioHandles descs = sequence $ map openLightSource descs
                                  | not (nodups (map fst chs) && nodups (map snd chs)) = error "cannot have duplicate filter names or indices for asahi lamp"
                                  | not $ all (\n -> within n 1 8) (map snd chs) = error "asahi filter indices must be between 1 and 8"
                                  | otherwise = chs
-                readLampLife :: SerialPort -> IO Int
+                readLampLife :: SerialPort -> IO Double
                 readLampLife port =
                     send port "LIFE?\r\n" >> readFromSerialUntilChar port '\n' >>= -- response is of format "LF %d\r"
-                    return . read . drop 3 . byteStringAsString
+                    return . read . filter (`elem` ("01234567890." :: String)) . byteStringAsString
         openLightSource (DummyLightSourceDesc name) = putStrLn ("opened light source " ++ T.unpack name) >> return (DummyLightSource name)
         openLightSource _ = error "opening unknown type of light source"
 
