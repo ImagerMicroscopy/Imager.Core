@@ -1,6 +1,7 @@
 {-# LANGUAGE BangPatterns, OverloadedStrings, NumDecimals #-}
 module MotorizedStage where
 
+import Control.Concurrent.MVar
 import Control.Exception
 import Data.Aeson
 import Data.ByteString (ByteString)
@@ -27,7 +28,7 @@ data MotorizedStageDesc = PriorDesc {
 
 data MotorizedStage = PriorStage {
                           psName :: !Text
-                        , psPort :: !SerialPort
+                        , psPort :: !(MVar SerialPort)
                       }
                     | DummyStage !Text
 
@@ -60,7 +61,7 @@ openMotorizedStages = mapM openMotorizedStage
               send port "COMP 1\r" >> readFromSerialUntilChar port '\r' >>= \resp ->
               if ((resp /= "0\r") && (resp /= "R\r"))
               then error "unexpected reply from prior stage"
-              else return (PriorStage name port)) >>= \result ->
+              else PriorStage name <$> newMVar port) >>= \result ->
             case result of
               Nothing -> error "timeout connecting to the prior stage"
               Just r -> putStrLn "Connected to Prior stage" >> return r
@@ -71,7 +72,7 @@ openMotorizedStages = mapM openMotorizedStage
 closeMotorizedStages :: [MotorizedStage] -> IO ()
 closeMotorizedStages = mapM_ closeMotorizedStage'
     where
-      closeMotorizedStage' (PriorStage _ port) = closeSerial port
+      closeMotorizedStage' (PriorStage _ portVar) = withMVar portVar $ (\port -> closeSerial port)
       closeMotorizedStage' (DummyStage n) = putStrLn ("dummy stage " ++ (T.unpack n) ++ " closed")
 
 getStagePositionLookup :: [MotorizedStage] -> Text -> IO (Either String (Double, Double, Double))
@@ -90,12 +91,13 @@ getStagePosition s = timeout 20e6 (getStagePosition' s) >>= \result ->
                         Just v  -> return (Right v)
     where
       getStagePosition' :: MotorizedStage -> IO (Double, Double, Double)
-      getStagePosition' (PriorStage _ port) =
+      getStagePosition' (PriorStage _ portVar) =
           (,,) <$> readNumberP "PX\r" <*> readNumberP "PY\r" <*> readNumberP "PZ\r"
           where
             readNumberP :: ByteString -> IO Double
-            readNumberP query = flush port >> send port query >>
-                                readFromSerialUntilChar port '\n' >>= return . read . T.unpack . T.decodeUtf8
+            readNumberP query = withMVar portVar $ \port ->
+                                  flush port >> send port query >>
+                                  readFromSerialUntilChar port '\n' >>= return . read . T.unpack . T.decodeUtf8
 
 setStagePositionLookup :: [MotorizedStage] -> Text -> (Double, Double, Double) -> IO (Either String ())
 setStagePositionLookup mss name ds =
@@ -113,8 +115,9 @@ setStagePosition p pos =
       Nothing -> return (Left "timeout communicating to stage")
       Just v  -> return v
     where
-        setStagePosition' (PriorStage _ port) (x, y, z) =
-            flush port >> send port posStr >> readFromSerialUntilChar port '\r' >>= \resp ->
+        setStagePosition' (PriorStage _ portVar) (x, y, z) =
+            (withMVar portVar $ \port ->
+                flush port >> send port posStr >> readFromSerialUntilChar port '\r') >>= \resp ->
             case resp of
               "R\r" -> return (Right ())
               _     -> return (Left "unexpected response from stage")
