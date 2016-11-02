@@ -48,25 +48,23 @@ instance Detector SCCamDetector where
             case status of
                 Left e -> error e
                 Right buffer ->
-                    fetchImages (-1) nMeasurements buffer dataMVar
+                    fetchImages nMeasurements buffer dataMVar
         )
         where
-            fetchImages :: Int -> Int -> ImageBuffer -> MVar [[AcquiredData]] -> IO ()
-            fetchImages previousIndex nImagesRemaining buffer dataMVar
+            fetchImages :: Int -> ImageBuffer -> MVar [[AcquiredData]] -> IO ()
+            fetchImages nImagesRemaining buffer dataMVar
                 | nImagesRemaining == 0 = return ()
                 | otherwise =
                     getIndexOfLastImageAsyncAcquired camName >>= \ret ->
                     case ret of
                         Left e -> error e
+                        Right (-1) -> threadDelay 5000 >> fetchImages nImagesRemaining buffer dataMVar
                         Right i ->
-                            if (i == previousIndex)
-                            then threadDelay 5000 >> fetchImages previousIndex nImagesRemaining buffer dataMVar
-                            else
-                                 getTime Monotonic >>= \timeStamp ->
-                                 getImageAtIndexInBuffer buffer i >>= \images ->
-                                 return (measuredImagesAsAcquiredData images timeStamp) >>= \dat ->
-                                 addDataToMVar dataMVar startTime [dat] >>
-                                 fetchImages i (nImagesRemaining - 1) buffer dataMVar
+                            getTime Monotonic >>= \timeStamp ->
+                            getImageAtIndexInBuffer buffer i >>= \images ->
+                            return (measuredImagesAsAcquiredData images timeStamp) >>= \dat ->
+                            addDataToMVar dataMVar startTime [dat] >>
+                            fetchImages (nImagesRemaining - 1) buffer dataMVar
             measuredImagesAsAcquiredData :: MeasuredImages -> TimeSpec -> AcquiredData
             measuredImagesAsAcquiredData (MeasuredImages nRows nCols vec) timeStamp =
                 AcquiredData nRows nCols timeStamp (byteStringFromVector vec) UINT16
