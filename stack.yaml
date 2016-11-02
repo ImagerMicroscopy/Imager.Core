@@ -19,7 +19,7 @@ packages:
   extra-dep: true
 - location:
     git: https://pdedecker@bitbucket.org/pdedecker/hssccamera.git
-    commit: af05cf2b5abb498945fd3fd009c4fac9c095e491
+    commit: 181b1d434d12296cd00021b9b42fded764aaa554
   extra-dep: true
 
 # Packages to be pulled from upstream that are not in the resolver (e.g., acme-missiles-0.3)
