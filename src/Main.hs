@@ -222,17 +222,18 @@ performAction env Ping = return (Pong, env)
 performAction env (ExecuteIrradiationProgram prog) =
     runExceptT (
         ExceptT (ensureAsyncAcquisitionNotRunning env) >>
-        ExceptT (return $ validateIrradiationProgram lightSources filterWheels prog)) >>= \validation ->
+        ExceptT (return $ validateIrradiationProgram lightSources filterWheels motorizedStages prog)) >>= \validation ->
     case validation of
         Left err -> return (StatusError err, env)
         Right _  -> newMVar [] >>= \spectraMVar ->
-                    async (executeIrradiationProgram prog (ProgramEnvironment detector lightSources filterWheels spectraMVar)) >>= \asyncWorker ->
+                    async (executeIrradiationProgram prog (ProgramEnvironment detector lightSources filterWheels motorizedStages spectraMVar)) >>= \asyncWorker ->
                     let newEnv = env {envAsyncDataMVar = spectraMVar, envAsyncProgramWorker = asyncWorker}
                     in return (StatusOK, newEnv)
     where
         detector = envDetector env
         lightSources = envLightSources env
         filterWheels = envFilterWheels env
+        motorizedStages = envMotorizedStages env
 
 performAction env FetchAsyncData =
     modifyMVar dataMVar (\s -> return ([], s)) >>= \newData ->

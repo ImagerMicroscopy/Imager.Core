@@ -29,11 +29,13 @@ import System.Clock
 import FilterWheel
 import LightSources
 import Detector
+import MotorizedStage
 import MiscUtils
 
 data IrradiationProgram = IrradiationProgram {
                    ipSteps :: [ProgramStep]
                  , ipDetection :: [DetectionParams]
+                 , ipStagePositions :: [StagePositions]
                }
 
 data ProgramStep = ProgramStep {
@@ -58,6 +60,8 @@ data IrradiationParams = IrradiationParams {
                          }
                          deriving (Show)
 
+type StagePositions = [(Text, (Double, Double, Double))]
+
 data FilterParams = FilterParams {
                         fpFilterWheelName :: !Text
                       , fpFilterName :: !Text
@@ -67,6 +71,7 @@ data ProgramEnvironment a = ProgramEnvironment {
                                 peDetector :: a
                               , peLightSources :: [LightSource]
                               , peFilterWheels :: [FilterWheel]
+                              , peMotorizedStages :: [MotorizedStage]
                               , peDataMVar :: MVar [[AcquiredData]]
                             }
 
@@ -74,10 +79,12 @@ instance FromJSON IrradiationProgram where
     parseJSON (Object v) =
         IrradiationProgram <$> v .: "programsteps"
                            <*> v .: "detection"
+                           <*> v .: "stagepositions"
     parseJSON _ = fail "can't decode irradiation program"
 instance ToJSON IrradiationProgram where
-    toEncoding (IrradiationProgram steps detection) =
-        pairs ("programsteps" .= steps <> "detection" .= detection)
+    toEncoding (IrradiationProgram steps detection stagePos) =
+        pairs ("programsteps" .= steps <> "detection" .= detection
+               <> "stagepositions" .= stagePos)
     toJSON _ = error "no toJSON"
 
 instance FromJSON ProgramStep where
@@ -126,17 +133,30 @@ instance ToJSON FilterParams where
     toJSON _ = error "no toJSON"
 
 executeIrradiationProgram :: Detector a => IrradiationProgram -> ProgramEnvironment a -> IO ()
-executeIrradiationProgram prog@(IrradiationProgram steps detection) env =
-    (getTime Monotonic >>= \startTime ->
-    putStrLn "will execute acquisition" >> putStrLn (show (initialAcquisitionStep : steps)) >>
-    mapM_ (executeStep env startTime detection) (initialAcquisitionStep : steps))
-        `finally` closeUsedLightsources >>
-        putStrLn "acquisition finished"
+executeIrradiationProgram prog@(IrradiationProgram steps detection stagePositions) env =
+    if (null stagePositions)
+    then executeIrradiation
+    else (forM_ stagePositions $ \poss ->
+             setStagePositions motorizedStages poss >> executeIrradiation)
     where
         closeUsedLightsources = mapM_ (\n -> deactivateLightSource (lookupLightSource lightSources n)) lightSourceNamesInProgram
         lightSourceNamesInProgram = lightsourceNamesUsedInProgram prog
+        motorizedStages = peMotorizedStages env
+
+        executeIrradiation :: IO ()
+        executeIrradiation =
+          (getTime Monotonic >>= \startTime ->
+          putStrLn "will execute acquisition" >> putStrLn (show (initialAcquisitionStep : steps)) >>
+          mapM_ (executeStep env startTime detection) (initialAcquisitionStep : steps))
+              `finally` closeUsedLightsources >>
+              putStrLn "acquisition finished"
+
         initialAcquisitionStep :: ProgramStep   -- makes sure a spectrum gets acquired before the acquisition
         initialAcquisitionStep = ProgramStep 0.0 1 []
+
+        setStagePositions :: [MotorizedStage] -> StagePositions -> IO ()
+        setStagePositions ms pos = forM_ pos $ \(name, loc) ->
+                                       setStagePositionLookup ms name loc
 
         executeStep :: Detector a => ProgramEnvironment a -> TimeSpec -> [DetectionParams] -> ProgramStep -> IO ()
         executeStep env startTime detParams ps
@@ -216,13 +236,14 @@ switchToFilters fws fps =
     then return (head . filter isLeft $ results)
     else return (Right ())
 
-validateIrradiationProgram :: [LightSource] -> [FilterWheel] -> IrradiationProgram -> Either String ()
-validateIrradiationProgram lightSources filterWheels IrradiationProgram{..} =
+validateIrradiationProgram :: [LightSource] -> [FilterWheel] -> [MotorizedStage] -> IrradiationProgram -> Either String ()
+validateIrradiationProgram lightSources filterWheels mss IrradiationProgram{..} =
     if (any isLeft validationResults)
         then head . filter isLeft $ validationResults
         else Right ()
     where
         validationResults = map validateProgramStep ipSteps ++ map (validateDetectionParams lightSources filterWheels) ipDetection
+                              ++ [validateStagePositionsParams mss ipStagePositions]
         validateProgramStep :: ProgramStep -> Either String ()
         validateProgramStep ProgramStep{..} =
             if ((within psIrradiationDuration 0.0 3600) && (within psNTimesToPerform 1 100000) && (all isRight $ map (validateIrradiation lightSources) psIrradiation))
@@ -258,8 +279,18 @@ validateDetectionParams lightSources filterWheels DetectionParams{..} =
                 Just (availableFilters) -> fName `elem` availableFilters
         nodups xs = xs == nub xs
 
+validateStagePositionsParams :: [MotorizedStage] -> [StagePositions] -> Either String ()
+validateStagePositionsParams mss pos = case (all (`elem` msNames) allRequestedNames) of
+                                          True -> Right ()
+                                          False -> Left "unknown stage name found"
+    where
+      requestedMSNames = map (\(n, _) -> n)
+      allRequestedNames :: [Text]
+      allRequestedNames = concat $ map requestedMSNames pos
+      msNames = map motorizedStageName mss
+
 lightsourceNamesUsedInProgram :: IrradiationProgram -> [Text]
-lightsourceNamesUsedInProgram (IrradiationProgram steps dets) = S.toList (mconcat (map lightSourceNamesInStep steps) <> mconcat (map lightSourceNamesInDetPars dets))
+lightsourceNamesUsedInProgram (IrradiationProgram steps dets _) = S.toList (mconcat (map lightSourceNamesInStep steps) <> mconcat (map lightSourceNamesInDetPars dets))
   where
     lightSourceNamesInStep :: ProgramStep -> Set Text
     lightSourceNamesInStep step = foldr (\irr s -> S.insert (ipLightSourceName irr) s) S.empty (psIrradiation step)
