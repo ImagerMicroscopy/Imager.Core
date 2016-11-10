@@ -125,9 +125,7 @@ performAction env ListMotorizedStages = return (AvailableMotorizedStages mss, en
         mss = envMotorizedStages env
 
 performAction env (GetMotorizedStagePosition name) =
-    runExceptT (
-        ExceptT (ensureAsyncAcquisitionNotRunning env) >>
-        ExceptT (getStagePositionLookup mss name)) >>= \result ->
+    getStagePositionLookup mss name >>= \result ->
     case result of
         Left err -> return (StatusError err, env)
         Right ds -> return (MotorizedStagePosition ds, env)
@@ -135,9 +133,7 @@ performAction env (GetMotorizedStagePosition name) =
         mss = envMotorizedStages env
 
 performAction env (SetMotorizedStagePosition name ds) =
-    runExceptT (
-        ExceptT (ensureAsyncAcquisitionNotRunning env) >>
-        ExceptT (setStagePositionLookup mss name ds)) >>= \result ->
+    setStagePositionLookup mss name ds >>= \result ->
     case result of
         Left err -> return (StatusError err, env)
         Right ds -> return (StatusOK, env)
