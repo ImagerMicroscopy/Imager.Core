@@ -91,6 +91,7 @@ getStagePosition s = timeout 20e6 (getStagePosition' s) >>= \result ->
                         Just v  -> return (Right v)
     where
       getStagePosition' :: MotorizedStage -> IO (Double, Double, Double)
+      getStagePosition' (DummyStage n) = putStrLn ("read position of " ++ T.unpack n) >> return (0.0, 0.0, 0.0)
       getStagePosition' (PriorStage _ portVar) =
           (,,) <$> readNumberP "PX\r" <*> readNumberP "PY\r" <*> readNumberP "PZ\r"
           where
@@ -115,6 +116,9 @@ setStagePosition p pos =
       Nothing -> return (Left "timeout communicating to stage")
       Just v  -> return v
     where
+        setStagePosition' (DummyStage n) ds =
+            putStrLn ("set position of " ++ T.unpack n ++ " to " ++ show ds) >>
+            return (Right ())
         setStagePosition' (PriorStage _ portVar) (x, y, z) =
             (withMVar portVar $ \port ->
                 flush port >> send port posStr >> readFromSerialUntilChar port '\r') >>= \resp ->
