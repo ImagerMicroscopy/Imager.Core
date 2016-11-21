@@ -98,7 +98,7 @@ getStagePosition s = timeout 20e6 (getStagePosition' s) >>= \result ->
             readNumberP :: ByteString -> IO Double
             readNumberP query = withMVar portVar $ \port ->
                                   flush port >> send port query >>
-                                  readFromSerialUntilChar port '\n' >>= return . read . T.unpack . T.decodeUtf8
+                                  readFromSerialUntilChar port '\r' >>= return . read . T.unpack . T.decodeUtf8
 
 setStagePositionLookup :: [MotorizedStage] -> Text -> (Double, Double, Double) -> IO (Either String ())
 setStagePositionLookup mss name ds =
@@ -126,4 +126,4 @@ setStagePosition p pos =
               "R\r" -> return (Right ())
               _     -> return (Left "unexpected response from stage")
             where
-              posStr = T.encodeUtf8 . T.pack $ printf "G %d, %d, %d\r" x y z
+              posStr = T.encodeUtf8 . T.pack $ printf "G %d, %d, %d\r" (round x :: Int) (round y :: Int) (round z :: Int)
