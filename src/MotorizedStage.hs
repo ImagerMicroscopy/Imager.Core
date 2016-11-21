@@ -92,13 +92,13 @@ getStagePosition s = timeout 20e6 (getStagePosition' s) >>= \result ->
     where
       getStagePosition' :: MotorizedStage -> IO (Double, Double, Double)
       getStagePosition' (DummyStage n) = putStrLn ("read position of " ++ T.unpack n) >> return (0.0, 0.0, 0.0)
-      getStagePosition' (PriorStage _ portVar) =
-          (,,) <$> readNumberP "PX\r" <*> readNumberP "PY\r" <*> readNumberP "PZ\r"
+      getStagePosition' (PriorStage _ portVar) = withMVar portVar $ \port ->
+          (,,) <$> readNumberP port "PX\r" <*> readNumberP port "PY\r" <*> readNumberP port "PZ\r"
           where
-            readNumberP :: ByteString -> IO Double
-            readNumberP query = withMVar portVar $ \port ->
-                                  flush port >> send port query >>
-                                  readFromSerialUntilChar port '\r' >>= return . read . T.unpack . T.decodeUtf8
+            readNumberP :: SerialPort -> ByteString -> IO Double
+            readNumberP port query = flush port >> send port query >>
+                                     readFromSerialUntilChar port '\r' >>=
+                                     return . read . T.unpack . T.decodeUtf8
 
 setStagePositionLookup :: [MotorizedStage] -> Text -> (Double, Double, Double) -> IO (Either String ())
 setStagePositionLookup mss name ds =
