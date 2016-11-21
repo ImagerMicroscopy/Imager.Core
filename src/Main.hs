@@ -45,7 +45,7 @@ extraPins = []
 handlerTimeout :: Int
 handlerTimeout = 2 * 1000000
 
-serverSettings = defaultSettings {ssHandlerTimeout = Just (round 2.5e6)}
+serverSettings = defaultSettings {ssHandlerTimeout = Just (round 10e6)}
 
 main :: IO ()
 main =
