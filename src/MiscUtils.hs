@@ -52,6 +52,9 @@ readAtLeastNBytesFromSerial port n = readBytes port n B.empty
                        then return accum'
                        else readBytes port n accum'
 
+debugSend :: SerialPort -> ByteString -> IO ()
+debugSend p bs = putStrLn ("sending " ++ byteStringAsHex bs) >> send p bs >> return ()
+
 byteStringAsHex :: ByteString -> String
 byteStringAsHex = concat . intersperse " " . map showByte . B.unpack
     where
