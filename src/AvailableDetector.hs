@@ -52,7 +52,9 @@ withAvailableDetector f =
   (bracket initializeCameraDLL (\_ -> shutdownCameraDLL) $ \initStatus ->
     when (isLeft initStatus) (error (fromLeft initStatus)) >>
     listConnectedCameras >>= \camNames ->
-    when (null camNames) (error "no cameras found") >>
+    when (null camNames) (
+        putStrLn "no cameras found... press return to exit" >>
+        readLine >> error "no cameras found")
     putStrLn ("using camera " ++ (T.unpack $ head camNames)) >>
     let camName = head camNames
     in f (SCCamDetector camName))
