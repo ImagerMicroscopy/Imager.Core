@@ -73,11 +73,11 @@ openFilterWheels :: [FilterWheelDesc] -> IO [FilterWheel]
 openFilterWheels = mapM openFilterWheel
   where
     openFilterWheel (ThorlabsFW103HDesc name portName chs) =
-        openSerial portName (defaultSerialSettings {commSpeed = CS115200}) >>= \port ->
+        openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS115200}) >>= \port ->
         forM_ fw103HStartupMessages (\msg -> debugSend port msg >> threadDelay (floor 50e3)) >>
         return (ThorlabsFW103H name (validateChannels chs) port)
     openFilterWheel (ThorlabsFW102CDesc name portName chs) =
-        ThorlabsFW102C name (validateChannels chs) <$> openSerial portName (defaultSerialSettings {commSpeed = CS115200})
+        ThorlabsFW102C name (validateChannels chs) <$> openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS115200})
     openFilterWheel (DummyFilterWheelDesc name chs) =
         putStrLn ("Opened dummy filter wheel " ++ T.unpack name ++ " with filters " ++ show chs) >> return (DummyFilterWheel name (validateChannels chs))
     validateChannels :: [(Text, Int)] -> [(Text, Int)]

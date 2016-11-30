@@ -131,15 +131,15 @@ openLightSources gpioHandles descs = sequence $ map openLightSource descs
     where
         openLightSource (GPIOLightSourceDesc name pin delay) = return (GPIOLightSource name pin delay gpioHandles)
         openLightSource (CoherentLightSourceDesc name portName) =
-            openSerial portName (defaultSerialSettings {commSpeed = CS19200}) >>= \port ->
+            openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS19200}) >>= \port ->
             newIORef (False, 0.0, 0.0) >>= \powerRange ->
             return (CoherentLightSource name port powerRange)
         openLightSource (LumencorLightSourceDesc name portName) =
-            let port = openSerial portName (defaultSerialSettings {commSpeed = CS9600})
+            let port = openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS9600})
             in LumencorLightSource name <$> port <*> newIORef False <*> newIORef LCGreenFilter
         openLightSource (AsahiLightSourceDesc name portName chs) =
             putStrLn "Connecting to Asahi lamp..." >>
-            openSerial portName defaultSerialSettings >>= \port ->
+            openSerialWithErrorMsg portName defaultSerialSettings >>= \port ->
             timeout 2e6 (readLampLife port) >>= \response ->
             case response of
                 Nothing -> error "timeout communicating with Asahi lamp"

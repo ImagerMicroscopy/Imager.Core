@@ -2,6 +2,7 @@
 
 module MiscUtils where
 
+import Control.Exception
 import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
@@ -18,6 +19,7 @@ import Foreign.Storable
 import Foreign.Marshal
 import Foreign.Ptr
 import Numeric
+import System.IO
 import System.IO.Unsafe
 import System.Clock
 import System.Hardware.Serialport
@@ -51,6 +53,14 @@ readAtLeastNBytesFromSerial port n = readBytes port n B.empty
                     in if (B.length accum' >= n)
                        then return accum'
                        else readBytes port n accum'
+
+openSerialWithErrorMsg :: FilePath -> SerialPortSettings -> IO SerialPort
+openSerialWithErrorMsg p s =
+    catch (openSerial p s)
+        (\(e :: IOException) -> putStrLn "error opening serial port:" >>
+                                putStrLn (displayException e) >>
+                                putStrLn "press return to close" >> getLine >>
+                                error (show e))
 
 debugSend :: SerialPort -> ByteString -> IO ()
 debugSend p bs = putStrLn ("sending " ++ byteStringAsHex bs) >> send p bs >> return ()
