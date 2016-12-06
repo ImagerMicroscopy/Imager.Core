@@ -58,7 +58,7 @@ instance Detector SCCamDetector where
                     getIndexOfLastImageAsyncAcquired camName >>= \ret ->
                     case ret of
                         Left e -> error e
-                        Right (-1) -> threadDelay 5000 >> fetchImages nImagesRemaining buffer dataMVar
+                        Right (-1) -> threadDelay (floor 50e3) >> fetchImages nImagesRemaining buffer dataMVar
                         Right i ->
                             getTime Monotonic >>= \timeStamp ->
                             getImageAtIndexInBuffer buffer i >>= \images ->
