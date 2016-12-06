@@ -54,7 +54,7 @@ withAvailableDetector f =
     listConnectedCameras >>= \camNames ->
     when (null camNames) (
         putStrLn "no cameras found... press return to exit" >>
-        getLine >> error "no cameras found")
+        getLine >> error "no cameras found") >>
     putStrLn ("using camera " ++ (T.unpack $ head camNames)) >>
     let camName = head camNames
     in f (SCCamDetector camName))
