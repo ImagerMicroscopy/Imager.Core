@@ -7,6 +7,7 @@ import Control.Exception
 import Control.Monad
 import Control.Monad.Trans.Except
 import Data.Aeson
+import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import Data.Either
@@ -75,6 +76,7 @@ openFilterWheels = mapM openFilterWheel
     openFilterWheel (ThorlabsFW103HDesc name portName chs) =
         openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS115200}) >>= \port ->
         forM_ fw103HStartupMessages (\msg -> debugSend port msg >> threadDelay (floor 50e3)) >>
+        debugSend port fw103HStopUpdatesMessage >>
         return (ThorlabsFW103H name (validateChannels chs) port)
     openFilterWheel (ThorlabsFW102CDesc name portName chs) =
         ThorlabsFW102C name (validateChannels chs) <$> openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS115200})
@@ -120,11 +122,10 @@ switchToFilter fw chName | not (filterWheelHasChannel fw chName) = return (Left 
         let filterIndex = fromJust (lookup chName chs)
             wheelPos = (409600 `div` 6) * filterIndex -- Thorlabs:  1 turn represents 360 degrees which is 409600 micro steps
         in  debugSend port (fw103HMoveAbsoluteMessage wheelPos) >> --threadDelay (floor 150e3) >> return (Right ())
-            threadDelay (floor 250e3) >>
-            timeout (floor 1e6) (readAtLeastNBytesFromSerial port 6) >>= \resp ->
-            case resp of
-                Nothing -> putStrLn "no reply" >> return (Right ())
-                Just v -> putStrLn ("received " ++ byteStringAsHex v) >> return (Right ())
+            timeout (floor 1e6) (fw103HWaitUntilMotionStops port) >>= \result ->
+            case result of
+                Nothing -> return (Left "no reply from filter wheel")
+                Just () -> return (Right ())
     switchToFilter' (ThorlabsFW102C _ chs port) chName =
         let filterIndex = fromJust (lookup chName chs)
         in flush port >> send port (T.encodeUtf8 . T.pack $ "pos=" ++ show filterIndex) >>
@@ -137,16 +138,31 @@ fw103HMoveAbsoluteMessage pos = runPut $
     mapM_ putWord8 [0x53, 0x04, 0x06, 0x00, 0xD0, 0x01, 0x01, 0x00] >>
     putWord32le (fromIntegral pos)
 
+fw103HWaitUntilMotionStops :: SerialPort -> IO ()
+fw103HWaitUntilMotionStops port =
+    flush port >> send port fw103HGetStatusMessage >>
+    readAtLeastNBytesFromSerial port 20 >>= \response ->
+    putStrLn ("received " ++ byteStringAsHex response) >>
+    case (0xF0 .&. (B.index response 16)) of
+        0 -> return ()
+        _ -> fw103HWaitUntilMotionStops port
+
 fw103HInitializationMessage :: ByteString
 fw103HInitializationMessage = B.pack [0x18, 0x00, 0x00, 0x00, 0x50, 0x01]
 
 fw103HEnableChannelMessage :: ByteString
 fw103HEnableChannelMessage = B.pack [0x10, 0x02, 0x01, 0x01, 0x50, 0x01]
 
+fw103HStopUpdatesMessage :: ByteString
+fw103HStopUpdatesMessage = B.pack [0x12, 0x00, 0x00, 0x00, 0x50, 0x01]
+
 fw103HMoveHomeMessage :: ByteString
 fw103HMoveHomeMessage = B.pack [0x43, 0x04, 0x01, 0x00, 0x50, 0x01]
 
-fw103HStartupMessages :: [ByteString]
+fw103HGetStatusMessage :: ByteString
+fw103HGetStatusMessage = B.pack [0x80, 0x04, 0x01, 0x00, 0x50, 0x01]
+
+fw103HStartupMessages :: [ByteString] -- copied from the APT software log
 fw103HStartupMessages =
     map B.pack  [[0x18, 0x00, 0x00, 0x00, 0x50, 0x01],[0x05, 0x00, 0x00, 0x00, 0x50, 0x01],
                  [0x10, 0x02, 0x01, 0x01, 0x50, 0x01],[0x13, 0x02, 0x00, 0x00, 0x50, 0x01],
