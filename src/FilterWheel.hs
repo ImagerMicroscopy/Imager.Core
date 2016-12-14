@@ -143,9 +143,12 @@ fw103HWaitUntilMotionStops :: SerialPort -> IO ()
 fw103HWaitUntilMotionStops port =
     flush port >> send port fw103HGetStatusMessage >>
     readAtLeastNBytesFromSerial port 20 >>= \response ->
-    case (0xF0 .&. (B.index response 16)) of
-        0 -> return ()
-        _ -> fw103HWaitUntilMotionStops port
+    let Right status = runGet getWord32le ((B.take 4 . B.drop 15) response)
+        isInMotion = (0x00F0 .&. status) /= 0
+        isHoming = (0x0200 .&. status) /= 0
+    in if (isInMotion || isHoming)
+       then fw103HWaitUntilMotionStops port
+       else return ()
 
 fw103HInitializationMessage :: ByteString
 fw103HInitializationMessage = B.pack [0x18, 0x00, 0x00, 0x00, 0x50, 0x01]
