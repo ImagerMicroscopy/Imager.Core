@@ -76,7 +76,8 @@ openFilterWheels = mapM openFilterWheel
     openFilterWheel (ThorlabsFW103HDesc name portName chs) =
         openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS115200}) >>= \port ->
         forM_ fw103HStartupMessages (\msg -> send port msg >> threadDelay (floor 25e3)) >>
-        send port fw103HStopUpdatesMessage >>
+        send port fw103HStopUpdatesMessage >> send port fw103HMoveHomeMessage >>
+        fw103HWaitUntilMotionStops port >>
         return (ThorlabsFW103H name (validateChannels chs) port)
     openFilterWheel (ThorlabsFW102CDesc name portName chs) =
         ThorlabsFW102C name (validateChannels chs) <$> openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS115200})
