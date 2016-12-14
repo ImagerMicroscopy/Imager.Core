@@ -308,15 +308,15 @@ lumencorChannelFromName "red" = LCRed
 lumencorChannelFromName c = error ("unknown channel" ++ T.unpack c)
 
 lumencorEnableRS232Message :: ByteString
-lumencorEnableRS232Message = runPut $
-    mapM_ putWord8 [0x57, 0x02, 0xFF, 0x50, 0x57, 0x03, 0xAB, 0x50]
+lumencorEnableRS232Message =
+    B.pack [0x57, 0x02, 0xFF, 0x50, 0x57, 0x03, 0xAB, 0x50]
 
 lumencorFilterMessage :: LumencorFilter -> ByteString
 lumencorFilterMessage = lumencorDisableMessage
 
 lumencorEnableMessage :: [LumencorChannel] -> LumencorFilter -> ByteString
-lumencorEnableMessage channels filter = runPut $
-    mapM_ putWord8 [0x4F, enableByte, 0x50]
+lumencorEnableMessage channels filter =
+    B.pack [0x4F, enableByte, 0x50]
     where
         enableByte :: Word8
         enableByte = let channelsEnable = 0x7F .&. (complement $  foldl' (\accum ch -> accum .|. (channelEnableByte ch)) 0 channels)
@@ -335,8 +335,8 @@ lumencorIntensityMessage :: [LumencorChannel] -> [Double] -> ByteString
 lumencorIntensityMessage chs ps = mconcat (zipWith lumencorChannelIntensityMessage chs ps)
 
 lumencorChannelIntensityMessage :: LumencorChannel -> Double -> ByteString
-lumencorChannelIntensityMessage ch p = runPut $
-    mapM_ putWord8 [0x53, byte5, 0x03, byte3, byte2, byte1, 0x50]
+lumencorChannelIntensityMessage ch p =
+    B.pack [0x53, byte5, 0x03, byte3, byte2, byte1, 0x50]
     where
         intensityByte = round ((1.0 - p / 100.0) * 255) -- 255 means no light
         dacAndIntensity LCViolet = (0x18, 2^0)
@@ -352,8 +352,8 @@ lumencorChannelIntensityMessage ch p = runPut $
         byte1 = intensityByte `shiftL` 4
 
 lumencorDisableMessage :: LumencorFilter -> ByteString
-lumencorDisableMessage filter = runPut $
-    mapM_ putWord8 [0x4F, filterSelectByte filter, 0x50]
+lumencorDisableMessage filter =
+    B.pack [0x4F, filterSelectByte filter, 0x50]
     where
         filterSelectByte LCGreenFilter = 0x7F
         filterSelectByte LCYellowFilter = 0x6F
