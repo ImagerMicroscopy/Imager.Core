@@ -121,7 +121,7 @@ switchToFilter fw chName | not (filterWheelHasChannel fw chName) = return (Left 
     switchToFilter' (ThorlabsFW103H _ chs port) chName =
         let filterIndex = fromJust (lookup chName chs)
             wheelPos = (409600 `div` 6) * filterIndex -- Thorlabs:  1 turn represents 360 degrees which is 409600 micro steps
-        in  debugSend port (fw103HMoveAbsoluteMessage wheelPos) >> --threadDelay (floor 150e3) >> return (Right ())
+        in  send port (fw103HMoveAbsoluteMessage wheelPos) >> --threadDelay (floor 150e3) >> return (Right ())
             timeout (floor 1e6) (fw103HWaitUntilMotionStops port) >>= \result ->
             case result of
                 Nothing -> return (Left "no reply from filter wheel")
