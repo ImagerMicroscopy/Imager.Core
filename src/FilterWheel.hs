@@ -77,7 +77,7 @@ openFilterWheels = mapM openFilterWheel
         openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS115200}) >>= \port ->
         forM_ fw103HStartupMessages (\msg -> send port msg >> threadDelay (floor 25e3)) >>
         send port fw103HStopUpdatesMessage >> send port fw103HMoveHomeMessage >>
-        fw103HWaitUntilMotionStops port >>
+        fw103HWaitUntilHomingStops port >>
         return (ThorlabsFW103H name (validateChannels chs) port)
     openFilterWheel (ThorlabsFW102CDesc name portName chs) =
         ThorlabsFW102C name (validateChannels chs) <$> openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS115200})
@@ -148,6 +148,15 @@ fw103HWaitUntilMotionStops port =
         isHoming = (0x0200 .&. status) /= 0
     in if (isInMotion || isHoming)
        then fw103HWaitUntilMotionStops port
+       else return ()
+
+fw103HWaitUntilHomingStops :: SerialPort -> IO ()
+fw103HWaitUntilHomingStops port =
+    flush port >> send port fw103HGetStatusMessage >>
+    readAtLeastNBytesFromSerial port 20 >>= \response ->
+    let Right position = runGet getWord32le ((B.take 4 . B.drop 7) response)
+    in if (position /= 0)
+       then fw103HWaitUntilHomingStops port
        else return ()
 
 fw103HInitializationMessage :: ByteString
