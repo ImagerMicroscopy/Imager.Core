@@ -15,7 +15,7 @@ packages:
   extra-dep: true
 - location:
     git: https://pdedecker@bitbucket.org/pdedecker/hsgpio.git
-    commit: 1cab809bdb465d3aed06cb597a4c9aa34e16f5f0
+    commit: 9138874bebfa0a9bcbf5c68634626225d02198b6
   extra-dep: true
 - location:
     git: https://pdedecker@bitbucket.org/pdedecker/hssccamera.git
