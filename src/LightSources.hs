@@ -166,8 +166,7 @@ openLightSources gpioHandles descs = sequence $ map openLightSource descs
         openLightSource (ArduinoLightSourceDesc name portName chs) =
             putStrLn "Connecting to Arduino" >>
             let chs' = validChannelNames chs (2, 13)
-            in putStrLn portName >>
-               openSerialWithErrorMsg portName defaultSerialSettings >>= \port -> threadDelay (floor 2e6) >> -- delay needed, otherwise the arduino won't receive the messages.
+            in openSerialWithErrorMsg portName defaultSerialSettings >>= \port -> threadDelay (floor 2e6) >> -- delay needed, otherwise the arduino won't receive the messages.
                setArduinoPinsState ArduinoOutput (map snd chs) port >>
                return (ArduinoLightSource name chs port)
         openLightSource (DummyLightSourceDesc name) = putStrLn ("opened light source " ++ T.unpack name) >> return (DummyLightSource name)
