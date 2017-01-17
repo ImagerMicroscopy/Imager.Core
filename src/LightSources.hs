@@ -232,7 +232,7 @@ activateLightSource ls channels powers
     activateLightSource' ls@(CoherentLightSource _ _ _) _ [power] = activateCoherentLightSource ls power
     activateLightSource' ls@(LumencorLightSource _ _ _ _) chs ps = activateLumencorLightSource ls (map lumencorChannelFromName chs) ps
     activateLightSource' ls@(AsahiLightSource _ _ _) [ch] [p] = activateAsahiLightSource ls ch p
-    activateLightSource' ls@(ArduinoLightSource _ _ _) [ch] [p] = activateArduinoLightSource ls ch p
+    activateLightSource' ls@(ArduinoLightSource _ _ _) chs ps = activateArduinoLightSource ls chs ps
     activateLightSource' _ _ _ = error "activating unknown light source"
     timeoutDuration = floor (2.0e6)
 
@@ -292,11 +292,15 @@ activateAsahiLightSource (AsahiLightSource _ chs port) filter power =
             ExceptT (handleAsahiMessage port ("LI=" ++ (show . toInteger . round $ power) ++ "\r\n")) >> --set power
             ExceptT (handleAsahiMessage port "S=1\r\n"))
 
-activateArduinoLightSource :: LightSource -> Text -> Double -> IO (Either String ())
-activateArduinoLightSource (ArduinoLightSource _ chs port) ch _ =
-    case (lookup ch chs) of
-        Nothing -> return (Left ("unknown arduino channel " ++ T.unpack ch))
-        Just pin -> handleArduinoMessage port ("set high pin " ++ show pin ++ "\r")
+activateArduinoLightSource :: LightSource -> [Text] -> [Double] -> IO (Either String ())
+activateArduinoLightSource (ArduinoLightSource _ availChs port) chs _ =
+    forM chs (\ch ->
+      case (lookup ch availChs) of
+          Nothing -> return (Left ("unknown arduino channel " ++ T.unpack ch))
+          Just pin -> handleArduinoMessage port ("set high pin " ++ show pin ++ "\r")) >>= \results ->
+    case (filter isLeft results) of
+        [] -> return (Right ())
+        (Left e : _) -> return (Left e)
 
 deactivateLightSource :: LightSource -> IO (Either String ())
 deactivateLightSource (GPIOLightSource _ pin delay handles) = setPinLevel handles pin Low >> threadDelay (floor $ 1e6 * delay) >> return (Right ())
