@@ -24,6 +24,7 @@ import Data.Aeson
 import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
+import Data.Either
 import Data.IORef
 import Data.List
 import Data.Maybe
@@ -163,11 +164,12 @@ openLightSources gpioHandles descs = sequence $ map openLightSource descs
                     send port "LIFE?\r\n" >> readFromSerialUntilChar port '\n' >>= -- response is of format "LF %d\r"
                     return . read . filter (`elem` ("01234567890." :: String)) . byteStringAsString
         openLightSource (ArduinoLightSourceDesc name portName chs) =
+            putStrLn "Connecting to Arduino" >>
             let chs' = validChannelNames chs (2, 13)
-            in openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS9600}) >>= \port ->
+            in putStrLn portName >>
+               openSerialWithErrorMsg portName defaultSerialSettings >>= \port -> threadDelay (floor 2e6) >> -- delay needed, otherwise the arduino won't receive the messages.
                setArduinoPinsState ArduinoOutput (map snd chs) port >>
                return (ArduinoLightSource name chs port)
-            where
         openLightSource (DummyLightSourceDesc name) = putStrLn ("opened light source " ++ T.unpack name) >> return (DummyLightSource name)
         openLightSource _ = error "opening unknown type of light source"
 
@@ -230,6 +232,7 @@ activateLightSource ls channels powers
     activateLightSource' ls@(CoherentLightSource _ _ _) _ [power] = activateCoherentLightSource ls power
     activateLightSource' ls@(LumencorLightSource _ _ _ _) chs ps = activateLumencorLightSource ls (map lumencorChannelFromName chs) ps
     activateLightSource' ls@(AsahiLightSource _ _ _) [ch] [p] = activateAsahiLightSource ls ch p
+    activateLightSource' ls@(ArduinoLightSource _ _ _) [ch] [p] = activateArduinoLightSource ls ch p
     activateLightSource' _ _ _ = error "activating unknown light source"
     timeoutDuration = floor (2.0e6)
 
@@ -293,7 +296,7 @@ activateArduinoLightSource :: LightSource -> Text -> Double -> IO (Either String
 activateArduinoLightSource (ArduinoLightSource _ chs port) ch _ =
     case (lookup ch chs) of
         Nothing -> return (Left ("unknown arduino channel " ++ T.unpack ch))
-        Just pin -> handleArduinoMessage port ("set high pin " ++ show pin)
+        Just pin -> handleArduinoMessage port ("set high pin " ++ show pin ++ "\r")
 
 deactivateLightSource :: LightSource -> IO (Either String ())
 deactivateLightSource (GPIOLightSource _ pin delay handles) = setPinLevel handles pin Low >> threadDelay (floor $ 1e6 * delay) >> return (Right ())
@@ -305,6 +308,11 @@ deactivateLightSource (LumencorLightSource _ port _ currFilterRef) =
     send port (lumencorDisableMessage currFilter) >>
     return (Right ())
 deactivateLightSource (AsahiLightSource _ _ port) = handleAsahiMessage port "S=0\r\n"
+deactivateLightSource (ArduinoLightSource _ chs port) =
+    forM (map snd chs) (\p -> handleArduinoMessage port ("set low pin " ++ show p ++ "\r")) >>= \results ->
+    case (filter isLeft results) of
+        [] -> return (Right ())
+        (Left e : _) -> return (Left e)
 deactivateLightSource (DummyLightSource name) = putStrLn ("deactivated " ++ T.unpack name) >> return (Right ())
 deactivateLightSource _ = error "deactivating unknown type of light source"
 
@@ -396,10 +404,11 @@ handleAsahiMessage port ss =
 handleArduinoMessage :: SerialPort -> String -> IO (Either String ())
 handleArduinoMessage port ss =
     flush port >> send port (T.encodeUtf8 . T.pack $ ss) >>
-    readFromSerialUntilChar port '\r' >>= \response ->
+    timeout (floor 1e6) (readFromSerialUntilChar port '\r') >>= \response ->
     case response of
-        "OK\r" -> return (Right ())
-        e -> return (Left (T.unpack . T.decodeUtf8 $ e))
+        Just "OK\r" -> return (Right ())
+        Just e -> return (Left ("arduino responded \"" ++ T.unpack (T.decodeUtf8 e) ++ "\""))
+        Nothing -> return (Left "timeout communicating with the arduino")
 
 setArduinoPinsState :: ArduinoPinState -> [Int] -> SerialPort -> IO ()
 setArduinoPinsState state ps port =
