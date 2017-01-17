@@ -60,6 +60,11 @@ data LightSourceDesc = GPIOLightSourceDesc {
                          , alsSerialPortName :: !String
                          , alsFilters :: ![(Text, Int)]
                        }
+                     | ArduinoLightSourceDesc {
+                           ardName :: !Text
+                         , ardSerialPortName :: !String
+                         , ardChannels :: ![(Text, Int)]
+                       }
                      | DummyLightSourceDesc {
                            dlsdName :: !Text
                        }
@@ -69,6 +74,7 @@ data LightSource = GPIOLightSource !Text !GPIOPin !Double !GPIOHandles
                  | CoherentLightSource !Text !SerialPort !(IORef (Bool, Double, Double))
                  | LumencorLightSource !Text !SerialPort !(IORef Bool) !(IORef LumencorFilter)
                  | AsahiLightSource !Text ![(Text, Int)] !SerialPort
+                 | ArduinoLightSource !Text ![(Text, Int)] !SerialPort
                  | DummyLightSource !Text
 
 data LumencorChannel = LCViolet | LCBlue | LCCyan | LCTeal
@@ -76,6 +82,8 @@ data LumencorChannel = LCViolet | LCBlue | LCCyan | LCTeal
                        deriving (Eq)
 data LumencorFilter = LCGreenFilter | LCYellowFilter
                       deriving (Eq)
+
+data ArduinoPinState = ArduinoInput | ArduinoOutput
 
 instance ToJSON LightSource where
     toJSON ls = object ["name" .= lightSourceName ls, "channels" .= lightSourceChannels ls,
@@ -92,10 +100,12 @@ readAvailableLightSources =
 
 lightSourceCanControlPower :: LightSource -> Bool
 lightSourceCanControlPower (GPIOLightSource _ _ _ _) = False
+lightSourceCanControlPower (ArduinoLightSource _ _ _) = False
 lightSourceCanControlPower _ = True
 
 lightSourceAllowsMultipleChannels :: LightSource -> Bool
 lightSourceAllowsMultipleChannels (LumencorLightSource _ _ _ _) = True
+lightSourceAllowsMultipleChannels (ArduinoLightSource _ _ _) = True
 lightSourceAllowsMultipleChannels (DummyLightSource _) = True
 lightSourceAllowsMultipleChannels _ = False
 
@@ -104,12 +114,14 @@ lightSourceName (GPIOLightSource name _ _ _) = name
 lightSourceName (CoherentLightSource name _ _) = name
 lightSourceName (LumencorLightSource name _ _ _) = name
 lightSourceName (AsahiLightSource name _ _) = name
+lightSourceName (ArduinoLightSource name _ _) = name
 lightSourceName (DummyLightSource name) = name
 
 lightSourceChannels :: LightSource -> [Text]
 lightSourceChannels (LumencorLightSource _ _ _ _) = lumencorChannels
 lightSourceChannels (DummyLightSource _) = dummyLightSourceChannels
 lightSourceChannels (AsahiLightSource _ chs _) = map fst chs
+lightSourceChannels (ArduinoLightSource _ chs _ ) = map fst chs
 lightSourceChannels _ = [""]
 
 lightSourceHasChannel :: LightSource -> Text -> Bool
@@ -144,18 +156,27 @@ openLightSources gpioHandles descs = sequence $ map openLightSource descs
             case response of
                 Nothing -> error "timeout communicating with Asahi lamp"
                 Just v -> putStrLn ("Asahi lamp has been on " ++ show v ++ " hours (recommended lamp life 500 hours, max lamp life 1000 hours)") >>
-                          return (AsahiLightSource name (validFilters chs) port)
+                          return (AsahiLightSource name (validChannelNames chs (1, 8)) port)
             where
-                validFilters chs | any (T.null . fst) chs = error "cannot have empty filter names for asahi lamp"
-                                 | not (nodups (map fst chs) && nodups (map snd chs)) = error "cannot have duplicate filter names or indices for asahi lamp"
-                                 | not $ all (\n -> within n 1 8) (map snd chs) = error "asahi filter indices must be between 1 and 8"
-                                 | otherwise = chs
                 readLampLife :: SerialPort -> IO Double
                 readLampLife port =
                     send port "LIFE?\r\n" >> readFromSerialUntilChar port '\n' >>= -- response is of format "LF %d\r"
                     return . read . filter (`elem` ("01234567890." :: String)) . byteStringAsString
+        openLightSource (ArduinoLightSourceDesc name portName chs) =
+            let chs' = validChannelNames chs (2, 13)
+            in openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS9600}) >>= \port ->
+               setArduinoPinsState ArduinoOutput (map snd chs) port >>
+               return (ArduinoLightSource name chs port)
+            where
         openLightSource (DummyLightSourceDesc name) = putStrLn ("opened light source " ++ T.unpack name) >> return (DummyLightSource name)
         openLightSource _ = error "opening unknown type of light source"
+
+validChannelNames :: [(Text, Int)] -> (Int, Int) -> [(Text, Int)]
+validChannelNames chs (lowChanLim, highChanLim)
+    | any (T.null . fst) chs = error "cannot have empty filter/channel names"
+    | not (nodups (map fst chs) && nodups (map snd chs)) = error "cannot have duplicate filter/channel names"
+    | not $ all (\n -> within n lowChanLim highChanLim) (map snd chs) = error "invalid light source filter/channel index"
+    | otherwise = chs
 
 closeLightSources :: [LightSource] -> IO ()
 closeLightSources = mapM_ closeLightSource
@@ -164,6 +185,7 @@ closeLightSources = mapM_ closeLightSource
         closeLightSource (CoherentLightSource _ port _) = closeSerial port
         closeLightSource (LumencorLightSource _ port _ _) = closeSerial port
         closeLightSource (AsahiLightSource _ _ port) = closeSerial port
+        closeLightSource (ArduinoLightSource _ chs port) = setArduinoPinsState ArduinoInput (map snd chs) port >> closeSerial port
         closeLightSource (DummyLightSource name) = putStr ("closed light source " ++ T.unpack name) >> return ()
 
 isKnownLightSource :: [LightSource] -> Text -> Bool
@@ -267,6 +289,12 @@ activateAsahiLightSource (AsahiLightSource _ chs port) filter power =
             ExceptT (handleAsahiMessage port ("LI=" ++ (show . toInteger . round $ power) ++ "\r\n")) >> --set power
             ExceptT (handleAsahiMessage port "S=1\r\n"))
 
+activateArduinoLightSource :: LightSource -> Text -> Double -> IO (Either String ())
+activateArduinoLightSource (ArduinoLightSource _ chs port) ch _ =
+    case (lookup ch chs) of
+        Nothing -> return (Left ("unknown arduino channel " ++ T.unpack ch))
+        Just pin -> handleArduinoMessage port ("set high pin " ++ show pin)
+
 deactivateLightSource :: LightSource -> IO (Either String ())
 deactivateLightSource (GPIOLightSource _ pin delay handles) = setPinLevel handles pin Low >> threadDelay (floor $ 1e6 * delay) >> return (Right ())
 deactivateLightSource (CoherentLightSource _ port _) =
@@ -364,3 +392,23 @@ handleAsahiMessage port ss =
     if (response == "OK\r\n")
     then return (Right ())
     else return (Left ("sent " ++ ss ++ "to asahi, received " ++ (T.unpack $ T.decodeUtf8 response)))
+
+handleArduinoMessage :: SerialPort -> String -> IO (Either String ())
+handleArduinoMessage port ss =
+    flush port >> send port (T.encodeUtf8 . T.pack $ ss) >>
+    readFromSerialUntilChar port '\r' >>= \response ->
+    case response of
+        "OK\r" -> return (Right ())
+        e -> return (Left (T.unpack . T.decodeUtf8 $ e))
+
+setArduinoPinsState :: ArduinoPinState -> [Int] -> SerialPort -> IO ()
+setArduinoPinsState state ps port =
+    forM_ ps $ \p ->
+        handleArduinoMessage port ("set " ++ stateStr ++ " pin " ++ show p ++ "\r") >>= \result ->
+        case result of
+            Right () -> return ()
+            Left e -> error ("received response: " ++ e ++ " from arduino")
+    where
+        stateStr = case state of
+                    ArduinoInput -> "input"
+                    ArduinoOutput -> "output"
