@@ -25,11 +25,11 @@ data SCCamDetector = SCCamDetector {
 
 instance Detector SCCamDetector where
     acquireData :: SCCamDetector -> ExposureTime -> Gain -> NMeasurementsToAverage -> IO (Either String AcquiredData)
-    acquireData (SCCamDetector camName) expTime emGain _ =
+    acquireData (SCCamDetector camName) expTime emGain nAvg =
         runExceptT (
             ExceptT (setExposureTime camName expTime) >>
             ExceptT (setEMGain camName emGain) >>
-            ExceptT (acquireImages camName 1) >>= \im ->
+            ExceptT (acquireImages camName 1 nAvg) >>= \im ->
             ExceptT (return $ Right im)
         ) >>= \images ->
         case images of
@@ -42,9 +42,9 @@ instance Detector SCCamDetector where
 
     acquireStreamingData :: SCCamDetector -> ExposureTime -> Gain -> NMeasurementsToAverage ->
                             NMeasurementsToPerform -> TimeSpec -> MVar [[AcquiredData]] -> IO ()
-    acquireStreamingData (SCCamDetector camName) expTime gain nMeasurementsToAverage nMeasurements startTime dataMVar =
+    acquireStreamingData (SCCamDetector camName) expTime gain nAvg nMeasurements startTime dataMVar =
         (flip finally) (abortAsyncAcquisition camName) (
-            startAsyncAcquisition camName nImagesInBuffer >>= \status ->
+            startAsyncAcquisition camName nAvg nImagesInBuffer >>= \status ->
             case status of
                 Left e -> error e
                 Right buffer ->
