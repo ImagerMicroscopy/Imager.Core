@@ -75,6 +75,7 @@ main =
     withAvailableDetector (\det ->
         getDetectorWavelengths det >>= \(Right wl) ->
         return (byteStringFromVector wl) >>= \encodedWl ->
+        putStrLn "ready to measure!" >>
         let env = Environment lightSources filterWheels motorizedStages gpioHandles
               extraPins det encodedWl asyncSpectraMVar asyncProgramWorker
         in runServer 3200 messageHandler env serverSettings)))))
