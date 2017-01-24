@@ -26,13 +26,12 @@ data SCCamDetector = SCCamDetector {
 instance Detector SCCamDetector where
     acquireData :: SCCamDetector -> ExposureTime -> Gain -> NMeasurementsToAverage -> IO (Either String AcquiredData)
     acquireData (SCCamDetector camName) expTime emGain nAvg =
-        putStrLn ("acquireData with " ++ show nAvg ++ " acqs") >>
         runExceptT (
             ExceptT (setExposureTime camName expTime) >>
             ExceptT (setEMGain camName emGain) >>
             ExceptT (acquireImages camName 1 nAvg) >>= \im ->
             ExceptT (return $ Right im)
-        ) >>= \images -> putStrLn "have image" >>
+        ) >>= \images ->
         case images of
             Left e  -> return (Left e)
             Right (MeasuredImages nRows nCols vec) ->
