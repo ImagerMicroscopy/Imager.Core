@@ -46,7 +46,8 @@ handlerTimeout :: Int
 handlerTimeout = 2 * 1000000
 
 serverSettings = defaultSettings {ssHandlerTimeout = Just (round 10e6),
-                                  ssReceiveTimeout = Just (round 2e6)}
+                                  ssReceiveTimeout = Just (round 2e6),
+                                  ssMaxMessageSize = round 2e6}
 
 main :: IO ()
 main =
