@@ -24,6 +24,13 @@ import System.IO.Unsafe
 import System.Clock
 import System.Hardware.Serialport
 
+sequenceExcept :: [IO (Either String ())] -> IO (Either String ())
+sequenceExcept [] = return (Right ())
+sequenceExcept (a : as) = a >>= \result ->
+                            case result of
+                              Left e  -> return (Left e)
+                              Right _ -> sequenceExcept as
+
 byteStringFromVector :: forall a . Storable a => Vector a -> ByteString
 byteStringFromVector v = unsafePerformIO $
     let sizeOfElem = sizeOf (undefined :: a)
