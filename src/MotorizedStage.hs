@@ -17,6 +17,8 @@ import Text.Printf
 
 import MiscUtils
 
+type StagePosition = (Double, Double, Double)
+
 data MotorizedStageDesc = PriorDesc {
                               psDescName :: !Text
                             , psDescPortName :: !String
@@ -75,7 +77,7 @@ closeMotorizedStages = mapM_ closeMotorizedStage'
       closeMotorizedStage' (PriorStage _ portVar) = withMVar portVar $ (\port -> closeSerial port)
       closeMotorizedStage' (DummyStage n) = putStrLn ("dummy stage " ++ (T.unpack n) ++ " closed")
 
-getStagePositionLookup :: [MotorizedStage] -> Text -> IO (Either String (Double, Double, Double))
+getStagePositionLookup :: [MotorizedStage] -> Text -> IO (Either String StagePosition)
 getStagePositionLookup mss name =
     case eligibleStages of
       [s] -> getStagePosition s
@@ -84,13 +86,13 @@ getStagePositionLookup mss name =
     where
       eligibleStages = filter ((== name) . motorizedStageName) mss
 
-getStagePosition :: MotorizedStage -> IO (Either String (Double, Double, Double))
+getStagePosition :: MotorizedStage -> IO (Either String StagePosition)
 getStagePosition s = timeout 20e6 (getStagePosition' s) >>= \result ->
                      case result of
                         Nothing -> return (Left "timeout getting stage position")
                         Just v  -> return (Right v)
     where
-      getStagePosition' :: MotorizedStage -> IO (Double, Double, Double)
+      getStagePosition' :: MotorizedStage -> IO StagePosition
       getStagePosition' (DummyStage n) = putStrLn ("read position of " ++ T.unpack n) >> return (0.0, 0.0, 0.0)
       getStagePosition' (PriorStage _ portVar) = withMVar portVar $ \port ->
           (,,) <$> readNumberP port "PX\r" <*> readNumberP port "PY\r" <*> readNumberP port "PZ\r"
@@ -100,7 +102,7 @@ getStagePosition s = timeout 20e6 (getStagePosition' s) >>= \result ->
                                      readFromSerialUntilChar port '\r' >>=
                                      return . read . T.unpack . T.decodeUtf8
 
-setStagePositionLookup :: [MotorizedStage] -> Text -> (Double, Double, Double) -> IO (Either String ())
+setStagePositionLookup :: [MotorizedStage] -> Text -> StagePosition -> IO (Either String ())
 setStagePositionLookup mss name ds =
     case eligibleStages of
       [s] -> setStagePosition s ds
@@ -109,7 +111,7 @@ setStagePositionLookup mss name ds =
     where
       eligibleStages = filter ((== name) . motorizedStageName) mss
 
-setStagePosition :: MotorizedStage -> (Double, Double, Double) -> IO (Either String ())
+setStagePosition :: MotorizedStage -> StagePosition -> IO (Either String ())
 setStagePosition p pos =
     timeout 20e6 (setStagePosition' p pos) >>= \result ->
     case result of

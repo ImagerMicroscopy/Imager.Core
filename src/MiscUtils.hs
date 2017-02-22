@@ -87,5 +87,8 @@ nodups xs = (nub xs) == xs
 fromLeft :: Either a b -> a
 fromLeft (Left a) = a
 
+fromRight :: Either a b -> b
+fromRight (Right b) = b
+
 within :: (Ord a) => a -> a -> a -> Bool
 within a b c = (a >= b) && (a <= c)

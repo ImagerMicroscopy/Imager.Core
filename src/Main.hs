@@ -27,7 +27,7 @@ import Detector
 import AvailableDetector
 import GPIO
 import SimpleJSONServer
-import IrradiationProgram
+import MeasurementProgram
 import LightSources
 import MotorizedStage
 import MiscUtils
@@ -218,7 +218,7 @@ performAction env (TurnOffLightSource name) =
 
 performAction env Ping = return (Pong, env)
 
-performAction env (ExecuteIrradiationProgram prog) =
+performAction env (ExecuteMeasurementProgram prog) =
     runExceptT (
         ExceptT (ensureAsyncAcquisitionNotRunning env) >>
         ExceptT (return $ validateIrradiationProgram lightSources filterWheels motorizedStages prog)) >>= \validation ->

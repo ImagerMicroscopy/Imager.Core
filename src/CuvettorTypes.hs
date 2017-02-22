@@ -25,7 +25,8 @@ import System.IO.Unsafe
 import MiscUtils
 import Detector
 import GPIO
-import IrradiationProgram
+import MeasurementProgram
+import MeasurementProgramTypes
 import LightSources
 import FilterWheel
 import MotorizedStage
@@ -65,8 +66,8 @@ data RequestMessage = SetPinHigh !GPIOPin
                     | DeactivateLightSource !Text
                     | TurnOffLightSource !Text
                     | Ping
-                    | ExecuteIrradiationProgram {
-                        execIrradiationProgram :: !IrradiationProgram
+                    | ExecuteMeasurementProgram {
+                        execMeasurementProgram :: !MeasurementElement
                       }
                     | FetchAsyncData
                     | CancelAsyncAcquisition
@@ -91,7 +92,7 @@ instance ToJSON RequestMessage where
     toEncoding (DeactivateLightSource name) = pairs ("action" .= ("deactivatelightsource" :: Text) <> "name" .= name)
     toEncoding (TurnOffLightSource name) = pairs ("action" .= ("turnofflightsource" :: Text) <> "name" .= name)
     toEncoding Ping = pairs ("action" .= ("ping" :: Text))
-    toEncoding (ExecuteIrradiationProgram prog) = pairs ("action" .= ("executeirradiationprogram" :: Text) <> "program" .= prog)
+    toEncoding (ExecuteMeasurementProgram prog) = pairs ("action" .= ("executemeasurementprogram" :: Text) <> "program" .= prog)
     toEncoding FetchAsyncData = pairs ("action" .= ("fetchasyncspectra" :: Text))
     toEncoding CancelAsyncAcquisition = pairs ("action" .= ("cancelasyncacquisition" :: Text))
     toEncoding IsAsyncAcquisitionRunning = pairs ("action" .= ("isasyncacquisitionrunning" :: Text))
@@ -117,7 +118,7 @@ instance FromJSON RequestMessage where
             "deactivatelightsource" -> DeactivateLightSource <$> v .: "name"
             "turnofflightsource" -> TurnOffLightSource <$> v .: "name"
             "ping"      -> return Ping
-            "executeirradiationprogram" -> ExecuteIrradiationProgram <$> v .: "program"
+            "executemeasurementprogram" -> ExecuteMeasurementProgram <$> v .: "program"
             "fetchasyncspectra" -> return FetchAsyncData
             "cancelasyncacquisition" -> return CancelAsyncAcquisition
             "isasyncacquisitionrunning" -> return IsAsyncAcquisitionRunning
