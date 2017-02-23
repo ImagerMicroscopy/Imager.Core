@@ -52,7 +52,9 @@ executable RaspCuvettor
                      , FilterWheel
                      , LightSources
                      , MotorizedStage
-                     , IrradiationProgram
+                     , MeasurementProgram
+                     , MeasurementProgramTypes
+                     , MeasurementProgramVerification
                      , Detector
                      , AvailableDetector
                      , MiscUtils

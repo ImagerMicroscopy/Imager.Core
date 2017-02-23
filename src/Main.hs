@@ -28,6 +28,8 @@ import AvailableDetector
 import GPIO
 import SimpleJSONServer
 import MeasurementProgram
+import MeasurementProgramTypes
+import MeasurementProgramVerification
 import LightSources
 import MotorizedStage
 import MiscUtils
@@ -97,7 +99,7 @@ performAction env (SetPinLow pin)  = setPinLevelOrError env pin Low
 performAction env (AcquireData params) =
     runExceptT (
         ExceptT (ensureAsyncAcquisitionNotRunning env) >>
-        ExceptT (return $ validateDetectionParams lightsources filterWheels params) >>
+        ExceptT (return $ validateDetection lightsources filterWheels params) >>
         ExceptT (executeDetection detector lightsources filterWheels params)) >>= \acquiredData ->
     case acquiredData of
         Left err -> return (StatusError err, env)
@@ -218,14 +220,16 @@ performAction env (TurnOffLightSource name) =
 
 performAction env Ping = return (Pong, env)
 
-performAction env (ExecuteMeasurementProgram prog) =
+performAction env (ExecuteMeasurementProgram me) =
     runExceptT (
         ExceptT (ensureAsyncAcquisitionNotRunning env) >>
-        ExceptT (return $ validateIrradiationProgram lightSources filterWheels motorizedStages prog)) >>= \validation ->
+        ExceptT (return $ validateMeasurementElement lightSources filterWheels motorizedStages me)) >>= \validation ->
     case validation of
         Left err -> return (StatusError err, env)
         Right _  -> newMVar [] >>= \spectraMVar ->
-                    async (executeIrradiationProgram prog (ProgramEnvironment detector lightSources filterWheels motorizedStages spectraMVar)) >>= \asyncWorker ->
+                    getTime Monotonic >>= \startTime ->
+                    async (executeMeasurement (ProgramEnvironment detector startTime lightSources filterWheels motorizedStages spectraMVar) me >>
+                           return ()) >>= \asyncWorker ->
                     let newEnv = env {envAsyncDataMVar = spectraMVar, envAsyncProgramWorker = asyncWorker}
                     in return (StatusOK, newEnv)
     where

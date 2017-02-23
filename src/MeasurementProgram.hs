@@ -1,5 +1,8 @@
 {-# LANGUAGE RecordWildCards, ScopedTypeVariables #-}
-module MeasurementProgram where
+module MeasurementProgram (
+    executeMeasurement
+  , executeDetection
+) where
 
 import Control.Concurrent
 import Control.Exception
@@ -8,12 +11,14 @@ import Control.Monad.Trans.Except
 import Data.Either
 import Data.List
 import Data.Text (Text)
+import qualified Data.Text as T
 import System.Clock
 
 import Detector
 import FilterWheel
 import LightSources
 import MeasurementProgramTypes
+import MeasurementProgramVerification
 import MotorizedStage
 import MiscUtils
 
@@ -76,7 +81,7 @@ executeMeasurementElement env (MEStageLoop sn poss es) =
 insertFastAcquisitionLoops :: MeasurementElement -> MeasurementElement
 insertFastAcquisitionLoops (MEDoTimes n es)
     | isSimpleDetection es = MEFastAcquisitionLoop n theDetection
-    | otherwise                = MEDoTimes n (map insertFastAcquisitionLoops es)
+    | otherwise            = MEDoTimes n (map insertFastAcquisitionLoops es)
     where
       isSimpleDetection es = not (null es) && all hasSingleDetection es && allIdentical (map detection es)
       hasSingleDetection (MEDetection [d]) = True
@@ -132,8 +137,3 @@ disableLightSources lss params = catch (Right <$> mapM_ (\(IrradiationParams sou
                                     (\e -> return (Left (displayException (e :: IOException))))
     where
         allLightSourcesKnown = and $ map (isKnownLightSource lss . ipLightSourceName) params
-
-validateMeasurementProgram :: [LightSource] -> [FilterWheel] -> MeasurementElement -> IO (Either String ())
-validateMeasurementProgram lss fws me = undefined
-    where
-        validateWaits = undefined

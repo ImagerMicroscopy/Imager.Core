@@ -7,6 +7,7 @@ import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Unsafe as SB
+import Data.Either
 import Data.List
 import Data.Monoid
 import Data.Text (Text)
@@ -30,6 +31,11 @@ sequenceExcept (a : as) = a >>= \result ->
                             case result of
                               Left e  -> return (Left e)
                               Right _ -> sequenceExcept as
+
+sequenceEither :: [Either a b] -> Either a b
+sequenceEither [] = error "can't sequence empty either list"
+sequenceEither xs = let (ls, rs) = partitionEithers xs
+               in if (null ls) then Right (head rs) else Left (head ls)
 
 byteStringFromVector :: forall a . Storable a => Vector a -> ByteString
 byteStringFromVector v = unsafePerformIO $
