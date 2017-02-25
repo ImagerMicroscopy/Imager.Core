@@ -86,7 +86,7 @@ main =
 messageHandler :: Detector a => MessageHandler (Environment a)
 messageHandler msg env =
     case (fromJSON msg) of
-      Error _   -> return (ResponseJSON (object [("responsetype", "invalidquery")]), env)
+      Error e   -> return (ResponseJSON (object [("responsetype", String (T.pack ("invalidquery: " ++ e)))]), env)
       Success v -> performAction env v >>= \(resp, newEnv) ->
                    if (shouldBinaryEncode resp)
                      then return (ResponseBSList (binaryEncode resp), newEnv)
