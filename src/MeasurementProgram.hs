@@ -71,7 +71,7 @@ executeMeasurementElement env (METimeLapse n dur es) =
         waitUntil ts = getTime Monotonic >>= return . toNanoSecs . diffTimeSpec ts >>= \ns ->
                        threadDelay (fromIntegral (max (ns `div` 1000) 0))
 executeMeasurementElement env (MEStageLoop sn poss es) =
-    forM_ poss (\pos -> setStagePosition sn pos >> executeMeasurementElements env es) >>
+    forM_ poss (\pos -> setStagePosition sn (snd pos) >> executeMeasurementElements env es) >>
     return (Right ())
     where
         stages = peMotorizedStages env

@@ -19,7 +19,7 @@ data MeasurementElement = MEDetection [DetectionParams]
                         | MEDoTimes Int [MeasurementElement]
                         | MEFastAcquisitionLoop Int DetectionParams
                         | METimeLapse Int Double [MeasurementElement]
-                        | MEStageLoop Text [StagePosition] [MeasurementElement]
+                        | MEStageLoop Text [(Text, StagePosition)] [MeasurementElement]
                         deriving (Show)
 
 data ProgramEnvironment a = ProgramEnvironment {
