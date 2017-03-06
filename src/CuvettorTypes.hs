@@ -40,6 +40,7 @@ data Environment a = Environment {
                     , envDetector :: a
                     , envEncodedSpectrometerWavelengths :: !SB.ByteString
                     , envAsyncDataMVar :: MVar [[AcquiredData]]
+                    , envAsyncStatusMessagesMVar :: MVar [Text]
                     , envAsyncProgramWorker :: Async ()
 }
 
@@ -70,6 +71,7 @@ data RequestMessage = SetPinHigh !GPIOPin
                         execMeasurementProgram :: !MeasurementElement
                       }
                     | FetchAsyncData
+                    | FetchAsyncStatusMessages
                     | CancelAsyncAcquisition
                     | IsAsyncAcquisitionRunning
                     deriving (Generic)
@@ -94,6 +96,7 @@ instance ToJSON RequestMessage where
     toEncoding Ping = pairs ("action" .= ("ping" :: Text))
     toEncoding (ExecuteMeasurementProgram prog) = pairs ("action" .= ("executemeasurementprogram" :: Text) <> "program" .= prog)
     toEncoding FetchAsyncData = pairs ("action" .= ("fetchasyncspectra" :: Text))
+    toEncoding FetchAsyncStatusMessages = pairs ("action" .= ("fetchasyncstatusmessages" :: Text))
     toEncoding CancelAsyncAcquisition = pairs ("action" .= ("cancelasyncacquisition" :: Text))
     toEncoding IsAsyncAcquisitionRunning = pairs ("action" .= ("isasyncacquisitionrunning" :: Text))
 
@@ -120,6 +123,7 @@ instance FromJSON RequestMessage where
             "ping"      -> return Ping
             "executemeasurementprogram" -> ExecuteMeasurementProgram <$> v .: "program"
             "fetchasyncspectra" -> return FetchAsyncData
+            "fetchasyncstatusmessages" -> return FetchAsyncStatusMessages
             "cancelasyncacquisition" -> return CancelAsyncAcquisition
             "isasyncacquisitionrunning" -> return IsAsyncAcquisitionRunning
             _            -> fail $ "invalid action \"" ++ (T.unpack action) ++ "\""
@@ -141,6 +145,7 @@ data ResponseMessage = StatusOK
                      | DetectorTemperatureSetpointResponse !Double
                      | Pong
                      | AsyncAcquiredData ![[AcquiredData]]
+                     | AsyncStatusMessages ![Text]
                      | AsyncAcquisitionIsRunning !Bool
                      deriving (Generic)
 
@@ -165,6 +170,8 @@ instance ToJSON ResponseMessage where
     toEncoding (Pong) = pairs ("responsetype" .= ("pong" :: Text))
     toEncoding (AsyncAcquiredData ds) =
         pairs ("responsetype" .= ("asyncdata" :: Text) <> "data" .= ds)
+    toEncoding (AsyncStatusMessages ms) =
+        pairs ("responsetype" .= ("asyncstatusmessages" :: Text) <> "messages" .= ms)
     toEncoding (AsyncAcquisitionIsRunning b) = pairs ("responsetype" .= ("asyncacquisitionstatus" :: Text) <> "running" .= b)
 
 instance ToJSON AcquiredData where

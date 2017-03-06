@@ -72,6 +72,7 @@ main =
     putStrLn ("opened motorized stages") >>
 
     newMVar [] >>= \asyncSpectraMVar ->
+    newMVar [] >>= \asyncStatusMessagesMVar ->
     async (return ()) >>= \asyncProgramWorker ->
     wait asyncProgramWorker >>
 
@@ -80,7 +81,7 @@ main =
         return (byteStringFromVector wl) >>= \encodedWl ->
         putStrLn "ready to measure!" >>
         let env = Environment lightSources filterWheels motorizedStages gpioHandles
-              extraPins det encodedWl asyncSpectraMVar asyncProgramWorker
+              extraPins det encodedWl asyncSpectraMVar asyncStatusMessagesMVar asyncProgramWorker
         in runServer 3200 messageHandler env serverSettings)))))
 
 messageHandler :: Detector a => MessageHandler (Environment a)
@@ -231,7 +232,7 @@ performAction env (ExecuteMeasurementProgram me) =
                     getTime Monotonic >>= \startTime ->
                     async (executeMeasurement (ProgramEnvironment detector startTime lightSources filterWheels motorizedStages spectraMVar statusMVar) me >>
                            return ()) >>= \asyncWorker ->
-                    let newEnv = env {envAsyncDataMVar = spectraMVar, envAsyncProgramWorker = asyncWorker}
+                    let newEnv = env {envAsyncDataMVar = spectraMVar, envAsyncStatusMessagesMVar = statusMVar, envAsyncProgramWorker = asyncWorker}
                     in return (StatusOK, newEnv)
     where
         detector = envDetector env
@@ -251,6 +252,18 @@ performAction env FetchAsyncData =
             | not (null asyncErrorMsg) = StatusError asyncErrorMsg
             | asyncIsRunning           = if (null newData) then StatusNoNewAsyncData else (AsyncAcquiredData newData)
             | otherwise                = if (null newData) then StatusNoNewAsyncDataComing else (AsyncAcquiredData newData)
+
+performAction env FetchAsyncStatusMessages =
+    asyncAcquisitionErrorMessage env >>= \asyncErrorMsg ->
+    asyncAcquisitionRunning env >>= \asyncIsRunning ->
+    withMVar msgMVar (return . id) >>= \ms ->
+    return (response asyncErrorMsg asyncIsRunning ms, env)
+    where
+        response asyncErrorMsg asyncIsRunning msgs
+            | not (null asyncErrorMsg) = StatusError asyncErrorMsg
+            | not asyncIsRunning = StatusError "no async acquisition running"
+            | otherwise = AsyncStatusMessages (reverse msgs)
+        msgMVar = envAsyncStatusMessagesMVar env
 
 performAction env CancelAsyncAcquisition =
     asyncAcquisitionRunning env >>= \asyncIsRunning ->
