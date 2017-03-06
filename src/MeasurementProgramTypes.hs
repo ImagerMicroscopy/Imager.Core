@@ -29,6 +29,7 @@ data ProgramEnvironment a = ProgramEnvironment {
                               , peFilterWheels :: [FilterWheel]
                               , peMotorizedStages :: [MotorizedStage]
                               , peDataMVar :: MVar [[AcquiredData]]
+                              , peStatusMVar :: MVar [Text]
                             }
 
 data DetectionParams = DetectionParams {

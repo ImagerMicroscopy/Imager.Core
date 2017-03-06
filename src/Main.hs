@@ -227,8 +227,9 @@ performAction env (ExecuteMeasurementProgram me) =
     case validation of
         Left err -> return (StatusError err, env)
         Right _  -> newMVar [] >>= \spectraMVar ->
+                    newMVar [] >>= \statusMVar ->
                     getTime Monotonic >>= \startTime ->
-                    async (executeMeasurement (ProgramEnvironment detector startTime lightSources filterWheels motorizedStages spectraMVar) me >>
+                    async (executeMeasurement (ProgramEnvironment detector startTime lightSources filterWheels motorizedStages spectraMVar statusMVar) me >>
                            return ()) >>= \asyncWorker ->
                     let newEnv = env {envAsyncDataMVar = spectraMVar, envAsyncProgramWorker = asyncWorker}
                     in return (StatusOK, newEnv)

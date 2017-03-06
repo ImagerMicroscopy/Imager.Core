@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards, ScopedTypeVariables #-}
+{-# LANGUAGE RecordWildCards, ScopedTypeVariables, OverloadedStrings #-}
 module MeasurementProgram (
     executeMeasurement
   , executeDetection
@@ -12,6 +12,10 @@ import Data.Either
 import Data.List
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.Lazy as LT
+import qualified Data.Text.Format as T
+import Data.Time.Clock
+import Data.Time.LocalTime
 import System.Clock
 
 import Detector
@@ -44,10 +48,18 @@ executeMeasurementElement env (MEIrradiation dur ips) = executeIrradiation lss f
     where
       lss = peLightSources env
       fws = peFilterWheels env
-executeMeasurementElement _ (MEWait dur) = threadDelay (round $ dur * 1e6) >> return (Right ())
-executeMeasurementElement env (MEDoTimes n es) = executeMeasurementElements env . concat . take n . repeat $ es
+executeMeasurementElement env (MEWait dur) =
+    withStatusMessage env (T.format "waiting {} s" (T.Only dur)) (
+        threadDelay (round $ dur * 1e6) >> return (Right ()))
+executeMeasurementElement env (MEDoTimes n es) =
+    withStatusMessage env "do times" (
+        forM_ (zip [1 ..] (take n . repeat $ es)) (\(index :: Int, ses) ->
+            updateStatusMessage env (T.format "do times {} of {}" (index, n)) >>
+            executeMeasurementElements env ses
+        ) >> return (Right ()))
 executeMeasurementElement env (MEFastAcquisitionLoop n detParams) =
-    executeFastDetectionLoop detector lss fws detParams n startTime mvar
+    withStatusMessage env (T.format "fast acquisition ({} images)" (T.Only n)) (
+        executeFastDetectionLoop detector lss fws detParams n startTime mvar)
     where
       lss = peLightSources env
       fws = peFilterWheels env
@@ -55,26 +67,43 @@ executeMeasurementElement env (MEFastAcquisitionLoop n detParams) =
       startTime = peStartTime env
       detector = peDetector env
 executeMeasurementElement env (METimeLapse n dur es) =
-    futureMeasurements >>= \ft ->
-    forM_ ft (\(ts, es) ->
-        waitUntil ts >> executeMeasurementElements env es) >>
+    futureTimes >>= \fts ->
+    timeSpecToUTCTimes fts >>= \utcs ->
+    withStatusMessage env "time lapse" (
+        forM_ (zip3 [1 ..] fts utcs) (\(index :: Int, ts, utc) ->
+            formattedTime utc >>= \timeStr ->
+            updateStatusMessage env (T.format "next time lapse ({} of {}) at {}" (index, n, timeStr)) >>
+            waitUntil ts >> executeMeasurementElements env es)) >>
     return (Right ())
     where
-        futureDurations :: [Double]
         futureDurations = map ((*) dur . fromIntegral) [0 .. (n - 1)]
         futureTimes :: IO [TimeSpec]
         futureTimes = getTime Monotonic >>= \now ->
                       return $ map (\delta -> fromNanoSecs (toNanoSecs now + round (delta * 1.0e9))) futureDurations
-        futureMeasurements :: IO [(TimeSpec, [MeasurementElement])]
-        futureMeasurements = futureTimes >>= \ft -> return (zip ft (repeat es))
+        timeSpecToUTCTimes :: [TimeSpec] -> IO [UTCTime]
+        timeSpecToUTCTimes tss = getTime Monotonic >>= \now ->
+                                 getCurrentTime >>= \nowUTC ->
+                                 return (map (\ts ->
+                                   let picosecs = toNanoSecs (diffTimeSpec ts now) * 1000
+                                       psDiff = picosecondsToDiffTime picosecs
+                                   in addUTCTime (realToFrac psDiff) nowUTC) tss)
+        formattedTime :: UTCTime -> IO Text
+        formattedTime utc = getCurrentTimeZone >>= \tz ->
+                            let lt = utcToLocalTime tz utc
+                                tod = localTimeOfDay lt
+                            in return (T.pack (show tod))
         waitUntil :: TimeSpec -> IO ()
         waitUntil ts = getTime Monotonic >>= return . toNanoSecs . diffTimeSpec ts >>= \ns ->
                        threadDelay (fromIntegral (max (ns `div` 1000) 0))
 executeMeasurementElement env (MEStageLoop sn poss es) =
-    forM_ poss (\pos -> setStagePosition sn (snd pos) >> executeMeasurementElements env es) >>
-    return (Right ())
+    withStatusMessage env "stage loop" (
+        forM_ (zip [1..] poss) (\(index :: Int, (posName, pos)) ->
+            updateStatusMessage env (T.format "stage position {} of {} ({})" (index, nPos, posName)) >>
+            setStagePosition sn pos >> executeMeasurementElements env es) >>
+        return (Right ()))
     where
         stages = peMotorizedStages env
+        nPos = length poss
         setStagePosition :: Text -> StagePosition -> IO (Either String ())
         setStagePosition stageName pos = setStagePositionLookup stages stageName pos
 
@@ -137,3 +166,21 @@ disableLightSources lss params = catch (Right <$> mapM_ (\(IrradiationParams sou
                                     (\e -> return (Left (displayException (e :: IOException))))
     where
         allLightSourcesKnown = and $ map (isKnownLightSource lss . ipLightSourceName) params
+
+withStatusMessage :: ProgramEnvironment a -> LT.Text -> IO b -> IO b
+withStatusMessage env msg action =
+    bracket (addStatusMessage msg statusMVar) (\_ -> removeStatusMessage statusMVar) (\_ -> action)
+    where
+        statusMVar = peStatusMVar env
+        addStatusMessage :: LT.Text -> MVar [Text] -> IO ()
+        addStatusMessage msg mvar =
+            modifyMVar_ mvar (\ms -> return (LT.toStrict msg : ms))
+        removeStatusMessage :: MVar [Text] -> IO ()
+        removeStatusMessage mvar =
+            modifyMVar_ mvar (\ms -> return (drop 1 ms))
+
+updateStatusMessage :: ProgramEnvironment a -> LT.Text -> IO ()
+updateStatusMessage env newMsg =
+    modifyMVar_ statusMVar (\(m : ms) -> return (LT.toStrict newMsg : ms))
+    where
+        statusMVar = peStatusMVar env

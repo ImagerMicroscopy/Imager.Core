@@ -35,6 +35,8 @@ executable RaspCuvettor
                      , cereal
                      , deepseq
                      , text
+                     , text-format
+                     , time
                      , bytestring
                      , base64-bytestring
                      , containers
