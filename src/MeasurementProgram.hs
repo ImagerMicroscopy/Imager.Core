@@ -91,7 +91,7 @@ executeMeasurementElement env (METimeLapse n dur es) =
         formattedTime utc = getCurrentTimeZone >>= \tz ->
                             let lt = utcToLocalTime tz utc
                                 tod = localTimeOfDay lt
-                            in return (T.pack (show tod))
+                            in (return . T.pack . take 8 . show) tod
         waitUntil :: TimeSpec -> IO ()
         waitUntil ts = getTime Monotonic >>= return . toNanoSecs . diffTimeSpec ts >>= \ns ->
                        threadDelay (fromIntegral (max (ns `div` 1000) 0))
