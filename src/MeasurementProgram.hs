@@ -44,7 +44,9 @@ executeMeasurementElement env (MEDetection detParams) =
       fws = peFilterWheels env
       mvar = peDataMVar env
       startTime = peStartTime env
-executeMeasurementElement env (MEIrradiation dur ips) = executeIrradiation lss fws ips dur
+executeMeasurementElement env (MEIrradiation dur ips) =
+    withStatusMessage env (T.format "irradiating {} s" (T.Only dur)) (
+        executeIrradiation lss fws ips dur)
     where
       lss = peLightSources env
       fws = peFilterWheels env
@@ -73,7 +75,9 @@ executeMeasurementElement env (METimeLapse n dur es) =
         forM_ (zip3 [1 ..] fts utcs) (\(index :: Int, ts, utc) ->
             formattedTime utc >>= \timeStr ->
             updateStatusMessage env (T.format "next time lapse ({} of {}) at {}" (index, n, timeStr)) >>
-            waitUntil ts >> executeMeasurementElements env es)) >>
+            waitUntil ts >>
+            updateStatusMessage env (T.format "executing time lapse {} of {}" (index, n)) >>
+            executeMeasurementElements env es)) >>
     return (Right ())
     where
         futureDurations = map ((*) dur . fromIntegral) [0 .. (n - 1)]
@@ -93,8 +97,11 @@ executeMeasurementElement env (METimeLapse n dur es) =
                                 tod = localTimeOfDay lt
                             in (return . T.pack . take 8 . show) tod
         waitUntil :: TimeSpec -> IO ()
-        waitUntil ts = getTime Monotonic >>= return . toNanoSecs . diffTimeSpec ts >>= \ns ->
-                       threadDelay (fromIntegral (max (ns `div` 1000) 0))
+        waitUntil ts = getTime Monotonic >>= \now ->
+                       if (now <= ts)
+                       then let ns = toNanoSecs $ diffTimeSpec ts now
+                            in threadDelay (fromIntegral (max (ns `div` 1000) 0))
+                       else return ()
 executeMeasurementElement env (MEStageLoop sn poss es) =
     withStatusMessage env "stage loop" (
         forM_ (zip [1..] poss) (\(index :: Int, (posName, pos)) ->
