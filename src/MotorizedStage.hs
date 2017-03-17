@@ -62,10 +62,10 @@ openMotorizedStages = mapM openMotorizedStage
               openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS9600}) >>= \port ->
               send port "COMP 1\r" >> readFromSerialUntilChar port '\r' >>= \resp ->
               if ((resp /= "0\r") && (resp /= "R\r"))
-              then error "unexpected reply from prior stage"
+              then throwIO (userError "unexpected reply from prior stage")
               else PriorStage name <$> newMVar port) >>= \result ->
             case result of
-              Nothing -> error "timeout connecting to the prior stage"
+              Nothing -> throwIO (userError "timeout connecting to the prior stage")
               Just r -> putStrLn "Connected to Prior stage" >> return r
         openMotorizedStage (DummyStageDesc name) =
             putStrLn ("dummy stage " ++ (T.unpack name) ++ " open") >>
@@ -102,30 +102,29 @@ getStagePosition s = timeout 20e6 (getStagePosition' s) >>= \result ->
                                      readFromSerialUntilChar port '\r' >>=
                                      return . read . T.unpack . T.decodeUtf8
 
-setStagePositionLookup :: [MotorizedStage] -> Text -> StagePosition -> IO (Either String ())
+setStagePositionLookup :: [MotorizedStage] -> Text -> StagePosition -> IO ()
 setStagePositionLookup mss name ds =
     case eligibleStages of
       [s] -> setStagePosition s ds
-      []  -> return (Left ("no stage named " ++ (T.unpack name)))
-      _   -> return (Left ("more than one stage with the same name"))
+      []  -> throwIO (userError ("no stage named " ++ (T.unpack name)))
+      _   -> throwIO (userError ("more than one stage with the same name"))
     where
       eligibleStages = filter ((== name) . motorizedStageName) mss
 
-setStagePosition :: MotorizedStage -> StagePosition -> IO (Either String ())
+setStagePosition :: MotorizedStage -> StagePosition -> IO ()
 setStagePosition p pos =
     timeout 20e6 (setStagePosition' p pos) >>= \result ->
     case result of
-      Nothing -> return (Left "timeout communicating to stage")
+      Nothing -> throwIO (userError "timeout communicating to stage")
       Just v  -> return v
     where
         setStagePosition' (DummyStage n) ds =
-            putStrLn ("set position of " ++ T.unpack n ++ " to " ++ show ds) >>
-            return (Right ())
+            putStrLn ("set position of " ++ T.unpack n ++ " to " ++ show ds)
         setStagePosition' (PriorStage _ portVar) (x, y, z) =
             (withMVar portVar $ \port ->
                 flush port >> send port posStr >> readFromSerialUntilChar port '\r') >>= \resp ->
             case resp of
-              "R\r" -> return (Right ())
-              _     -> return (Left "unexpected response from stage")
+              "R\r" -> return ()
+              _     -> throwIO (userError "unexpected response from stage")
             where
               posStr = T.encodeUtf8 . T.pack $ printf "G %d, %d, %d\r" (round x :: Int) (round y :: Int) (round z :: Int)

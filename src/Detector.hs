@@ -16,6 +16,7 @@ module Detector (
 
 import Control.Concurrent
 import Control.DeepSeq
+import Control.Exception
 import Control.Monad
 import Control.Monad.Trans.Except
 import Data.ByteString (ByteString)
@@ -91,7 +92,7 @@ addDataToMVar mvar startTime newData =
         if (null previousData)
         then return [[d] | d <- adjustedData]
         else let nDetectionsAlreadyStored = length (head previousData)
-             in when (nDetectionsAlreadyStored > 100) (putStrLn "aborting due to data overflow" >> error "too many async data stored") >>
+             in when (nDetectionsAlreadyStored > 100) (putStrLn "aborting due to data overflow" >> throwIO (userError "too many async data stored")) >>
                 return (zipWith (:) adjustedData previousData))
     where
         adjustedData = map toSecondsFromStart newData

@@ -106,33 +106,33 @@ filterWheelHasChannel (ThorlabsFW103H _ chs _) c = c `elem` (map fst chs)
 filterWheelHasChannel (ThorlabsFW102C _ chs _) c = c `elem` (map fst chs)
 filterWheelHasChannel (DummyFilterWheel _ chs) c = c `elem` (map fst chs)
 
-switchFilterWheel :: [FilterWheel] -> Text -> Text -> IO (Either String ())
+switchFilterWheel :: [FilterWheel] -> Text -> Text -> IO ()
 switchFilterWheel fws fwName fName =
     let filterWheel = head (filter (\fw -> filterWheelName fw == fwName) fws)
-    in timeout (floor 2.0e6) (switchToFilter filterWheel fName) >>= \result ->
+    in timeout (floor 3.0e6) (switchToFilter filterWheel fName) >>= \result ->
        case result of
-           Nothing -> return (Left ("timeout communicating with " ++ T.unpack (filterWheelName filterWheel)))
+           Nothing -> throwIO (userError ("timeout communicating with " ++ T.unpack (filterWheelName filterWheel)))
            Just v -> return v
 
-switchToFilter :: FilterWheel -> Text -> IO (Either String ())
-switchToFilter fw chName | not (filterWheelHasChannel fw chName) = return (Left "no matching channel for filter wheel")
+switchToFilter :: FilterWheel -> Text -> IO ()
+switchToFilter fw chName | not (filterWheelHasChannel fw chName) = throwIO (userError "no matching channel for filter wheel")
                          | otherwise = switchToFilter' fw chName
   where
-    switchToFilter' :: FilterWheel -> Text -> IO (Either String ())
+    switchToFilter' :: FilterWheel -> Text -> IO ()
     switchToFilter' (ThorlabsFW103H _ chs port) chName =
         let filterIndex = fromJust (lookup chName chs)
             wheelPos = (409600 `div` 6) * filterIndex -- Thorlabs:  1 turn represents 360 degrees which is 409600 micro steps
         in  send port (fw103HMoveAbsoluteMessage wheelPos) >> --threadDelay (floor 150e3) >> return (Right ())
             timeout (floor 1e6) (fw103HWaitUntilMotionStops port) >>= \result ->
             case result of
-                Nothing -> return (Left "no reply from filter wheel")
-                Just () -> return (Right ())
+                Nothing -> throwIO (userError ("no reply from Thorlabs filter wheel"))
+                Just () -> return ()
     switchToFilter' (ThorlabsFW102C _ chs port) chName =
         let filterIndex = fromJust (lookup chName chs)
         in flush port >> send port (T.encodeUtf8 . T.pack $ "pos=" ++ show filterIndex) >>
-           readFromSerialUntilChar port '>' >> return (Right ())
+           readFromSerialUntilChar port '>' >> return ()
     switchToFilter' (DummyFilterWheel name chs) chName =
-        putStrLn ("Switched filter wheel " ++ T.unpack name ++ " to filter " ++ T.unpack chName) >> return (Right ())
+        putStrLn ("Switched filter wheel " ++ T.unpack name ++ " to filter " ++ T.unpack chName)
 
 fw103HMoveAbsoluteMessage :: Int -> ByteString
 fw103HMoveAbsoluteMessage pos = runPut $

@@ -26,18 +26,16 @@ import MeasurementProgramVerification
 import MotorizedStage
 import MiscUtils
 
-executeMeasurement :: Detector a => ProgramEnvironment a -> MeasurementElement -> IO (Either String ())
+executeMeasurement :: Detector a => ProgramEnvironment a -> MeasurementElement -> IO ()
 executeMeasurement env me = executeMeasurementElement env (insertFastAcquisitionLoops me)
 
-executeMeasurementElements :: Detector a => ProgramEnvironment a -> [MeasurementElement] -> IO (Either String ())
-executeMeasurementElements env es = (sequenceExcept . map (executeMeasurementElement env)) es
+executeMeasurementElements :: Detector a => ProgramEnvironment a -> [MeasurementElement] -> IO ()
+executeMeasurementElements env es = mapM_ (executeMeasurementElement env) es
 
-executeMeasurementElement :: Detector a => ProgramEnvironment a -> MeasurementElement -> IO (Either String ())
+executeMeasurementElement :: Detector a => ProgramEnvironment a -> MeasurementElement -> IO ()
 executeMeasurementElement env (MEDetection detParams) =
     forM detParams (\p -> executeDetection detector lss fws p) >>=
-    return . map fromRight >>=
-    addDataToMVar mvar startTime >>
-    return (Right ())
+    addDataToMVar mvar startTime
     where
       detector = peDetector env
       lss = peLightSources env
@@ -52,13 +50,13 @@ executeMeasurementElement env (MEIrradiation dur ips) =
       fws = peFilterWheels env
 executeMeasurementElement env (MEWait dur) =
     withStatusMessage env (T.format "waiting {} s" (T.Only dur)) (
-        threadDelay (round $ dur * 1e6) >> return (Right ()))
+        threadDelay (round $ dur * 1e6))
 executeMeasurementElement env (MEDoTimes n es) =
     withStatusMessage env "do times" (
         forM_ (zip [1 ..] (take n . repeat $ es)) (\(index :: Int, ses) ->
             updateStatusMessage env (T.format "do times {} of {}" (index, n)) >>
             executeMeasurementElements env ses
-        ) >> return (Right ()))
+        ))
 executeMeasurementElement env (MEFastAcquisitionLoop n detParams) =
     withStatusMessage env (T.format "fast acquisition ({} images)" (T.Only n)) (
         executeFastDetectionLoop detector lss fws detParams n startTime mvar)
@@ -77,8 +75,7 @@ executeMeasurementElement env (METimeLapse n dur es) =
             updateStatusMessage env (T.format "next time lapse ({} of {}) at {}" (index, n, timeStr)) >>
             waitUntil ts >>
             updateStatusMessage env (T.format "executing time lapse {} of {}" (index, n)) >>
-            executeMeasurementElements env es)) >>
-    return (Right ())
+            executeMeasurementElements env es))
     where
         futureDurations = map ((*) dur . fromIntegral) [0 .. (n - 1)]
         futureTimes :: IO [TimeSpec]
@@ -106,12 +103,11 @@ executeMeasurementElement env (MEStageLoop sn poss es) =
     withStatusMessage env "stage loop" (
         forM_ (zip [1..] poss) (\(index :: Int, (posName, pos)) ->
             updateStatusMessage env (T.format "stage position {} of {} ({})" (index, nPos, posName)) >>
-            setStagePosition sn pos >> executeMeasurementElements env es) >>
-        return (Right ()))
+            setStagePosition sn pos >> executeMeasurementElements env es))
     where
         stages = peMotorizedStages env
         nPos = length poss
-        setStagePosition :: Text -> StagePosition -> IO (Either String ())
+        setStagePosition :: Text -> StagePosition -> IO ()
         setStagePosition stageName pos = setStagePositionLookup stages stageName pos
 
 insertFastAcquisitionLoops :: MeasurementElement -> MeasurementElement
@@ -129,50 +125,41 @@ insertFastAcquisitionLoops (METimeLapse n dur es) = METimeLapse n dur (map inser
 insertFastAcquisitionLoops (MEStageLoop n pos es) = MEStageLoop n pos (map insertFastAcquisitionLoops es)
 insertFastAcquisitionLoops m = m
 
-executeDetection :: Detector a => a -> [LightSource] -> [FilterWheel] -> DetectionParams -> IO (Either String AcquiredData)
+executeDetection :: Detector a => a -> [LightSource] -> [FilterWheel] -> DetectionParams -> IO AcquiredData
 executeDetection det lss fws DetectionParams{..} =
-    runExceptT (
-        ExceptT (switchToFilters fws dpFilterParams) >>
-        ExceptT (enableLightSources lss dpIrradiation) >>
-        ExceptT (acquireData det dpExposureTime dpGain dpNSpectraToAverage) >>= \acquiredData ->
-        ExceptT (disableLightSources lss dpIrradiation) >>
-        ExceptT (return $ Right acquiredData))
+    switchToFilters fws dpFilterParams >>
+    enableLightSources lss dpIrradiation >>
+    acquireData det dpExposureTime dpGain dpNSpectraToAverage >>= \acquiredData ->
+    disableLightSources lss dpIrradiation >>
+    case acquiredData of
+        Left e -> throwIO (userError e)
+        Right d -> return d
 
-executeFastDetectionLoop :: Detector a => a -> [LightSource] -> [FilterWheel] -> DetectionParams -> Int -> TimeSpec -> MVar [[AcquiredData]] -> IO (Either String ())
+executeFastDetectionLoop :: Detector a => a -> [LightSource] -> [FilterWheel] -> DetectionParams -> Int -> TimeSpec -> MVar [[AcquiredData]] -> IO ()
 executeFastDetectionLoop detector lightSources filterWheels detParams nTimesToPerform startTime dataMVar =
-    runExceptT (
-        ExceptT (switchToFilters filterWheels (dpFilterParams detParams)) >>
-        ExceptT (enableLightSources lightSources (dpIrradiation detParams)) >>
-        ExceptT (Right <$> acquireStreamingData detector (dpExposureTime detParams) (dpGain detParams)
-                    (dpNSpectraToAverage detParams) nTimesToPerform startTime dataMVar) >>
-        ExceptT (disableLightSources lightSources (dpIrradiation detParams)))
+    switchToFilters filterWheels (dpFilterParams detParams) >>
+    enableLightSources lightSources (dpIrradiation detParams) >>
+    acquireStreamingData detector (dpExposureTime detParams) (dpGain detParams)
+                    (dpNSpectraToAverage detParams) nTimesToPerform startTime dataMVar >>
+    disableLightSources lightSources (dpIrradiation detParams)
 
-executeIrradiation :: [LightSource] -> [FilterWheel] -> [IrradiationParams] -> Double -> IO (Either String ())
+executeIrradiation :: [LightSource] -> [FilterWheel] -> [IrradiationParams] -> Double -> IO ()
 executeIrradiation lightSources fws ips dur =
-    runExceptT (
-        ExceptT (enableLightSources lightSources ips) >>
-        ExceptT (Right <$> threadDelay (floor $ dur * 1.0e6)) >>
-        ExceptT (disableLightSources lightSources ips))
+    enableLightSources lightSources ips >>
+    threadDelay (floor $ dur * 1.0e6) >>
+    disableLightSources lightSources ips
 
-switchToFilters :: [FilterWheel] -> [FilterParams] -> IO (Either String ())
+switchToFilters :: [FilterWheel] -> [FilterParams] -> IO ()
 switchToFilters fws fps =
-    mapM (\(FilterParams fwName fw) -> switchFilterWheel fws fwName fw) fps >>= \results ->
-    if (any isLeft results)
-    then return (head . filter isLeft $ results)
-    else return (Right ())
+    forM_ fps (\(FilterParams fwName fw) -> switchFilterWheel fws fwName fw)
 
-enableLightSources :: [LightSource] -> [IrradiationParams] -> IO (Either String ())
-enableLightSources lss params
-    | allLightSourcesKnown = Right <$> forM_ params (\(IrradiationParams sourceName channel power) ->  activateLightSource (lookupLightSource lss sourceName) channel power)
-                             --Right <$> return ()
-    | otherwise = return (Left "unknown light source")
-    where
-        allLightSourcesKnown = and $ map (isKnownLightSource lss . ipLightSourceName) params
-disableLightSources :: [LightSource] -> [IrradiationParams] -> IO (Either String ())
-disableLightSources lss params = catch (Right <$> mapM_ (\(IrradiationParams sourceName _ _) -> deactivateLightSource (lookupLightSource lss sourceName)) params)
-                                    (\e -> return (Left (displayException (e :: IOException))))
-    where
-        allLightSourcesKnown = and $ map (isKnownLightSource lss . ipLightSourceName) params
+enableLightSources :: [LightSource] -> [IrradiationParams] -> IO ()
+enableLightSources lss params =
+    forM_ params (\(IrradiationParams sourceName channel power) ->  activateLightSource (lookupLightSource lss sourceName) channel power)
+
+disableLightSources :: [LightSource] -> [IrradiationParams] -> IO ()
+disableLightSources lss params =
+    forM_ params (\(IrradiationParams sourceName _ _) -> deactivateLightSource (lookupLightSource lss sourceName))
 
 withStatusMessage :: ProgramEnvironment a -> LT.Text -> IO b -> IO b
 withStatusMessage env msg action =

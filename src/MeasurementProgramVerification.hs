@@ -1,6 +1,7 @@
 {-# LANGUAGE RecordWildCards #-}
 module MeasurementProgramVerification where
 
+import Control.Exception
 import Data.Either
 import Data.List
 import Data.Text (Text)
@@ -11,6 +12,11 @@ import LightSources
 import MeasurementProgramTypes
 import MotorizedStage
 import MiscUtils
+
+validateMeasurementElementThrows :: [LightSource] -> [FilterWheel] -> [MotorizedStage] -> MeasurementElement -> IO ()
+validateMeasurementElementThrows lss fws mss me = case (validateMeasurementElement lss fws mss me) of
+                                        Left e -> throwIO (userError e)
+                                        Right () -> return ()
 
 validateMeasurementElement :: [LightSource] -> [FilterWheel] -> [MotorizedStage] -> MeasurementElement -> Either String ()
 validateMeasurementElement lss fws _ (MEDetection dets)
@@ -59,6 +65,11 @@ validateDetection lightSources filterWheels DetectionParams{..} =
             case (lookup fwName (map (\f -> (filterWheelName f, filterWheelChannels f)) filterWheels)) of
                 Nothing -> False
                 Just (availableFilters) -> fName `elem` availableFilters
+
+validateDetectionThrows :: [LightSource] -> [FilterWheel] -> DetectionParams -> IO ()
+validateDetectionThrows lss fws ps = case (validateDetection lss fws ps) of
+                                        Left e -> throwIO (userError e)
+                                        Right () -> return ()
 
 validateIrradiation :: [LightSource] -> IrradiationParams -> Either String ()
 validateIrradiation lightSources IrradiationParams{..} =
