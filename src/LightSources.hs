@@ -8,6 +8,7 @@ module LightSources (
   , lookupLightSource
   , activateLightSource
   , deactivateLightSource
+  , deactivateAllLightSources
   , turnOffLightSource
   , isKnownLightSource
   , lookupMaybeLightSource

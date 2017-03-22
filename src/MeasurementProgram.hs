@@ -10,7 +10,10 @@ import Control.Monad
 import Control.Monad.Trans.Except
 import Data.Either
 import Data.List
+import Data.Monoid
 import Data.Text (Text)
+import Data.Set (Set)
+import qualified Data.Set as S
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as LT
 import qualified Data.Text.Format as T
@@ -28,6 +31,11 @@ import MiscUtils
 
 executeMeasurement :: Detector a => ProgramEnvironment a -> MeasurementElement -> IO ()
 executeMeasurement env me = executeMeasurementElement env (insertFastAcquisitionLoops me)
+                                `onException` (deactivateAllLightSources usedLightSources)
+    where
+        lss = peLightSources env
+        usedLightSourceNames = lightSourceNamesUsedIn me
+        usedLightSources = map (lookupLightSource lss) usedLightSourceNames
 
 executeMeasurementElements :: Detector a => ProgramEnvironment a -> [MeasurementElement] -> IO ()
 executeMeasurementElements env es = mapM_ (executeMeasurementElement env) es
@@ -160,6 +168,16 @@ enableLightSources lss params =
 disableLightSources :: [LightSource] -> [IrradiationParams] -> IO ()
 disableLightSources lss params =
     forM_ params (\(IrradiationParams sourceName _ _) -> deactivateLightSource (lookupLightSource lss sourceName))
+
+lightSourceNamesUsedIn :: MeasurementElement -> [Text]
+lightSourceNamesUsedIn me = S.toList (lightSourceNamesUsedIn' S.empty me)
+    where
+        lightSourceNamesUsedIn' :: Set Text -> MeasurementElement -> Set Text
+        lightSourceNamesUsedIn' s (MEDetection dps) = s <> (S.fromList . concat $ map (map ipLightSourceName . dpIrradiation) dps)
+        lightSourceNamesUsedIn' s (MEDoTimes _ mes) = mconcat (map (lightSourceNamesUsedIn' S.empty) mes)
+        lightSourceNamesUsedIn' s (MEFastAcquisitionLoop _ dp) = s <> S.fromList (map ipLightSourceName . dpIrradiation $ dp)
+        lightSourceNamesUsedIn' s (METimeLapse _ _ mes) = mconcat (map (lightSourceNamesUsedIn' S.empty) mes)
+        lightSourceNamesUsedIn' s (MEStageLoop _ _ mes) = mconcat (map (lightSourceNamesUsedIn' S.empty) mes)
 
 withStatusMessage :: ProgramEnvironment a -> LT.Text -> IO b -> IO b
 withStatusMessage env msg action =
