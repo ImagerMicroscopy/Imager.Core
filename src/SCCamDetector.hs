@@ -44,7 +44,10 @@ instance Detector SCCamDetector where
                             NMeasurementsToPerform -> TimeSpec -> MVar [[AcquiredData]] -> IO ()
     acquireStreamingData (SCCamDetector camName) expTime gain nAvg nMeasurements startTime dataMVar =
         (flip finally) (abortAsyncAcquisition camName) (
-            startAsyncAcquisition camName nAvg nImagesInBuffer >>= \status ->
+            runExceptT (
+                ExceptT (setExposureTime camName expTime) >>
+                ExceptT (setEMGain camName gain) >>
+                ExceptT (startAsyncAcquisition camName nAvg nImagesInBuffer)) >>= \status ->
             case status of
                 Left e -> error e
                 Right buffer ->
