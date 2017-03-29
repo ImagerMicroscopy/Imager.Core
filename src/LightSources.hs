@@ -238,7 +238,7 @@ activateLightSource ls channels powers
 
 activateCoherentLightSource :: LightSource -> Double -> IO ()
 activateCoherentLightSource (CoherentLightSource _ port powerRange) power =
-    powerStr >>= sendAndReadResponse port >> sendAndReadResponse port "L=1\r" >> return ()
+    powerStr >>= sendAndReadResponse >> sendAndReadResponse "L=1\r" >> return ()
     where
         powerStr :: IO ByteString
         powerStr = minMaxPower >>= \(minPower, maxPower) ->
@@ -250,13 +250,14 @@ activateCoherentLightSource (CoherentLightSource _ port powerRange) power =
                       then return (minP, maxP)
                       else minPowerQ >>= \minPower -> maxPowerQ >>= \maxPower ->
                            writeIORef powerRange (True, minPower, maxPower) >>
+                           sendAndReadResponse "CDRH=0\r" >> sendAndReadResponse "CW=1\r" >>
                            return (minPower, maxPower)
         minPowerQ = parseQuery "?MINLP\r"
         maxPowerQ = parseQuery "?MAXLP\r"
         parseQuery :: ByteString -> IO Double
-        parseQuery q = sendAndReadResponse port q >>= return . read . filter (`elem` ('.' : ['0' .. '9'])) . T.unpack . T.decodeUtf8
-        sendAndReadResponse :: SerialPort -> ByteString -> IO ByteString
-        sendAndReadResponse prt msg = send port msg >> readFromSerialUntilChar port '\n'
+        parseQuery q = sendAndReadResponse q >>= return . read . filter (`elem` ('.' : ['0' .. '9'])) . T.unpack . T.decodeUtf8
+        sendAndReadResponse :: ByteString -> IO ByteString
+        sendAndReadResponse msg = send port msg >> readFromSerialUntilChar port '\n'
 
 activateLumencorLightSource :: LightSource -> [LumencorChannel] -> [Double] -> IO ()
 activateLumencorLightSource (LumencorLightSource _ port haveInitRef currFilterRef) channels powers =
