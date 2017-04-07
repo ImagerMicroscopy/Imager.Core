@@ -32,8 +32,8 @@ sequenceExcept (a : as) = a >>= \result ->
                               Left e  -> return (Left e)
                               Right _ -> sequenceExcept as
 
-sequenceEither :: [Either a b] -> Either a b
-sequenceEither [] = error "can't sequence empty either list"
+sequenceEither :: [Either a ()] -> Either a ()
+sequenceEither [] = return ()
 sequenceEither xs = let (ls, rs) = partitionEithers xs
                in if (null ls) then Right (head rs) else Left (head ls)
 
