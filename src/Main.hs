@@ -37,12 +37,12 @@ import BinaryEncoding
 import FilterWheel
 
 extraPins :: [GPIOPin]
-#ifdef WITH_OCEANOPTICS
-extraPins = [spectrometerTriggerPin]
-spectrometerTriggerPin = Pin11
-#else
+-- #ifdef WITH_OCEANOPTICS
+--extraPins = [spectrometerTriggerPin]
+--spectrometerTriggerPin = Pin11
+-- #else
 extraPins = []
-#endif
+-- #endif
 
 handlerTimeout :: Int
 handlerTimeout = 2 * 1000000
