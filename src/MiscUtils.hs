@@ -9,6 +9,7 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Unsafe as SB
 import Data.Either
 import Data.List
+import Data.Maybe
 import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -98,3 +99,14 @@ fromRight (Right b) = b
 
 within :: (Ord a) => a -> a -> a -> Bool
 within a b c = (a >= b) && (a <= c)
+
+fst3 :: (a, b, c) -> a
+fst3 (a, b, c) = a
+snd3 :: (a, b, c) -> b
+snd3 (a, b, c) = b
+thd3 :: (a, b, c) -> c
+thd3 (a, b, c) = c
+
+concatMaybes :: (Eq a) => [Maybe a] -> Maybe [a]
+concatMaybes ms | Nothing `elem` ms = Nothing
+                | otherwise = Just (map fromJust ms)
