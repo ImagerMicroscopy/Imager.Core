@@ -97,7 +97,7 @@ openFilterWheels = mapM openFilterWheel
         send port "1LOG IN\r" >> readFromSerialUntilChar port '\r' >>= \response ->
         case response of
             "1LOG +\r" -> putStr "done!\n" >> return (OlympusIX71Dichroic name (validateChannels chs) port)
-            e           -> putStrLn ("unexpected response from Olymus IX71 DM: " ++ show e) >> putStrLn "press return to close" >> getLine >> error "failed"
+            e         -> putStrLn ("unexpected response from Olymus IX71 DM: " ++ show e) >> putStrLn "press return to close" >> getLine >> error "failed"
     openFilterWheel (DummyFilterWheelDesc name chs) =
         putStrLn ("Opened dummy filter wheel " ++ T.unpack name ++ " with filters " ++ show chs) >> return (DummyFilterWheel name (validateChannels chs))
     validateChannels :: [(Text, Int)] -> [(Text, Int)]
@@ -156,9 +156,9 @@ switchToFilter fw chName | not (filterWheelHasChannel fw chName) = throwIO (user
             send port (T.encodeUtf8 . T.pack $ "1MU " ++ show (filterIndex + 1) ++ "\r") >>
             timeout (floor 10e6) (readFromSerialUntilChar port '\r') >>= \result ->
             case result of
-                Nothing     -> putStrLn "no reply" >> throwIO (userError ("no reply from ix71 dichroic turret"))
-                Just "1MU +\r" -> putStrLn "ok" >> return ()
-                Just v      -> putStrLn ("unknown response") >> throwIO (userError ("unknown response from ix71 dichroic turret: " ++ show v))
+                Nothing     -> throwIO (userError ("no reply from ix71 dichroic turret"))
+                Just "1MU +\r" -> return ()
+                Just v      -> throwIO (userError ("unknown response from ix71 dichroic turret: " ++ show v))
     switchToFilter' (DummyFilterWheel name chs) chName =
         putStrLn ("Switched filter wheel " ++ T.unpack name ++ " to filter " ++ T.unpack chName)
 
