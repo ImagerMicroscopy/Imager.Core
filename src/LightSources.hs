@@ -78,7 +78,7 @@ data LightSource = GPIOLightSource !Text !GPIOPin !Double !GPIOHandles
                  | CoherentLightSource !Text !SerialPort !(IORef (Bool, Double, Double))
                  | LumencorLightSource !Text !SerialPort !(IORef Bool) !(IORef LumencorFilter)
                  | AsahiLightSource !Text ![(Text, (Int, Double))] !SerialPort
-                 | ArduinoLightSource !Text ![(Text, (Int, Double))] !(IORef (Set (Int, Double))) !SerialPort
+                 | ArduinoLightSource !Text ![(Text, (Int, Double))] !(IORef [(Int, Double)]) !SerialPort
                  | DummyLightSource !Text
 
 data LumencorChannel = LCViolet | LCBlue | LCCyan | LCTeal
@@ -171,7 +171,7 @@ openLightSources gpioHandles descs = sequence $ map openLightSource descs
             let chs' = validChannelNames chs (2, 13)
             in openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS115200}) >>= \port -> threadDelay (floor 2e6) >> -- delay needed, otherwise the arduino won't receive the messages.
                setArduinoPinsState ArduinoOutput (map (fst . snd) chs) port >>
-               newIORef S.empty >>= \activeSet ->
+               newIORef [] >>= \activeSet ->
                return (ArduinoLightSource name chs activeSet port)
         openLightSource (DummyLightSourceDesc name) = putStrLn ("opened light source " ++ T.unpack name) >> return (DummyLightSource name)
         openLightSource _ = throwIO (userError "opening unknown type of light source")
@@ -301,11 +301,8 @@ activateArduinoLightSource (ArduinoLightSource _ availChs activePinRef port) chs
     case (concatMaybes $ map (\ch -> lookup ch availChs) chs) of
         Nothing -> throwIO (userError "unknown arduino channel")
         Just pins ->
-            let maxShutterDelay = maximum (map snd pins)
-            in  forM_ pins (\(pin, delay) ->
-                    handleArduinoMessage port ("set high pin " ++ show pin ++ "\r") >>
-                    when (maxShutterDelay > 0.0) (threadDelay (floor $ maxShutterDelay * 1.0e6)) >>
-                    modifyIORef' activePinRef (\s -> S.insert (pin, delay) s))
+            setArduinoPinsLevel port pins High >>
+            modifyIORef' activePinRef (\s -> nub (s ++ pins))
 
 deactivateLightSource :: LightSource -> IO ()
 deactivateLightSource (GPIOLightSource _ pin delay handles) = setPinLevel handles pin Low >> threadDelay (floor $ 1e6 * delay)
@@ -315,11 +312,9 @@ deactivateLightSource (LumencorLightSource _ port _ currFilterRef) =
     send port (lumencorDisableMessage currFilter) >> return ()
 deactivateLightSource (AsahiLightSource _ _ port) = handleAsahiMessage port "S=0\r\n"
 deactivateLightSource (ArduinoLightSource _ chs activePinRef port) =
-    S.toList <$> readIORef activePinRef >>= \activePins ->
-    let maxShutterDelay = maximum (map snd activePins)
-    in  forM_ activePins (\(pin, _) -> handleArduinoMessage port ("set low pin " ++ show pin ++ "\r")) >>
-            when (maxShutterDelay > 0.0) (threadDelay (floor $ maxShutterDelay * 1.0e6)) >>
-            writeIORef activePinRef S.empty
+    readIORef activePinRef >>= \activePins ->
+    setArduinoPinsLevel port activePins Low >>
+    writeIORef activePinRef []
 deactivateLightSource (DummyLightSource name) = putStrLn ("deactivated " ++ T.unpack name)
 deactivateLightSource _ = throwIO (userError "deactivating unknown type of light source")
 
@@ -412,6 +407,16 @@ handleArduinoMessage port ss =
         Just "OK\r" -> return ()
         Just e -> throwIO (userError ("arduino responded \"" ++ T.unpack (T.decodeUtf8 e) ++ "\""))
         Nothing -> throwIO (userError "timeout communicating with the arduino")
+
+setArduinoPinsLevel :: SerialPort -> [(Int, Double)] -> Level -> IO ()
+setArduinoPinsLevel port ps level =
+    let pins = map fst ps
+        delays = map snd ps
+        maxDelayMillis = floor ((maximum delays) * 1e3) :: Int
+        actualDelays = (replicate (length delays - 1) 0) ++ [maxDelayMillis]
+        levelStr = if (level == High) then "high" else "low"
+    in  forM_ (zip pins actualDelays) (\(p, delay) ->
+            handleArduinoMessage port ("set " ++ levelStr ++ " pin " ++ show p ++ " wait " ++ show delay))
 
 setArduinoPinsState :: ArduinoPinState -> [Int] -> SerialPort -> IO ()
 setArduinoPinsState state ps port =
