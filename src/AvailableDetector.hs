@@ -27,19 +27,20 @@ import MiscUtils
 #ifdef WITH_OCEANOPTICS
 withAvailableDetector :: (OODetector -> IO ()) -> IO ()
 withAvailableDetector f =
-    getIDs >>= \(dID, fID) ->
+    getIDs >>= \(dID, fID, pfID) ->
     nonlinearityCorrection dID >>= \corrFunc ->
-    withSeaBreeze (f (OODetector dID fID Nothing corrFunc))
+    withSeaBreeze (f (OODetector dID fID pfID Nothing corrFunc))
   where
       getIDs = getDeviceIDs >>= \ids ->
                when (null ids) (error "no spectrometer ids found") >>
                runExceptT (
                     ExceptT (openDevice (head ids)) >>
                     ExceptT (getSpectrometerFeatures (head ids)) >>= \(featureID : _) ->
-                    return (head ids, featureID)) >>= \result ->
+                    ExceptT (getSpectrumProcessingFeatures (head ids)) >>= \(pfID : _) ->
+                    ExceptT (return (Right (head ids, featureID, pfID)))) >>= \result ->
                case result of
                     Left _  -> error "no spectrometer found"
-                    Right (dID, fID) -> return (dID, fID)
+                    Right (dID, fID, pfID) -> return (dID, fID, pfID)
       nonlinearityCorrection dID =
             V.toList <$> getNonlinearityCoeffs dID >>= \coeffs ->
             return (\x -> x / polyCorr x coeffs)
