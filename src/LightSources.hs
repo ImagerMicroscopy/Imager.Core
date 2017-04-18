@@ -416,7 +416,7 @@ setArduinoPinsLevel port ps level =
         actualDelays = (replicate (length delays - 1) 0) ++ [maxDelayMillis]
         levelStr = if (level == High) then "high" else "low"
     in  forM_ (zip pins actualDelays) (\(p, delay) ->
-            handleArduinoMessage port ("set " ++ levelStr ++ " pin " ++ show p ++ " wait " ++ show delay))
+            handleArduinoMessage port ("set " ++ levelStr ++ " pin " ++ show p ++ " wait " ++ show delay ++ "\r"))
 
 setArduinoPinsState :: ArduinoPinState -> [Int] -> SerialPort -> IO ()
 setArduinoPinsState state ps port =
