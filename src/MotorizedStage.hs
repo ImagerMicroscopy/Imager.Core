@@ -11,8 +11,8 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import System.Environment
 import System.FilePath
-import System.Hardware.Serialport hiding(timeout)
-import System.Timeout
+import System.Hardware.Serialport
+import qualified System.Timeout as ST
 import Text.Printf
 
 import MiscUtils
@@ -58,8 +58,8 @@ openMotorizedStages = mapM openMotorizedStage
     where
         openMotorizedStage (PriorDesc name portName) =
             putStrLn "Connecting to Prior stage..." >>
-            timeout 2e6 (
-              openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS9600}) >>= \port ->
+            ST.timeout 2e6 (
+              openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS9600, timeout = 0}) >>= \port ->
               send port "COMP 1\r" >> readFromSerialUntilChar port '\r' >>= \resp ->
               if ((resp /= "0\r") && (resp /= "R\r"))
               then throwIO (userError "unexpected reply from prior stage")
@@ -87,7 +87,7 @@ getStagePositionLookup mss name =
       eligibleStages = filter ((== name) . motorizedStageName) mss
 
 getStagePosition :: MotorizedStage -> IO (Either String StagePosition)
-getStagePosition s = timeout 20e6 (getStagePosition' s) >>= \result ->
+getStagePosition s = ST.timeout 20e6 (getStagePosition' s) >>= \result ->
                      case result of
                         Nothing -> return (Left "timeout getting stage position")
                         Just v  -> return (Right v)
@@ -113,7 +113,7 @@ setStagePositionLookup mss name ds =
 
 setStagePosition :: MotorizedStage -> StagePosition -> IO ()
 setStagePosition p pos =
-    timeout 20e6 (setStagePosition' p pos) >>= \result ->
+    ST.timeout 20e6 (setStagePosition' p pos) >>= \result ->
     case result of
       Nothing -> throwIO (userError "timeout communicating to stage")
       Just v  -> return v
