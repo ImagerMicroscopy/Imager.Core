@@ -23,7 +23,7 @@ import GPIO
 data OODetector = OODetector {
                       oodDeviceID :: !DeviceID
                     , oodFeatureID :: !FeatureID
-                    , oodProcessingFeatureID :: !ProcessingFeatureID
+                    , oodProcessingFeatureID :: Maybe ProcessingFeatureID
                     , oodTriggerParams :: Maybe (GPIOPin, GPIOHandles)
                     , oodNonlinearityCorrection :: Double -> Double
                 }
@@ -60,7 +60,7 @@ acquireData' (OODetector dID fID pfID maybeTrigg corrFunc) expTime _ nSpectraToA
                      numType = FP64
                  in return $ Right (AcquiredData nRows nCols timeStamp bytes numType)
 
-acquireSpectrum :: (DeviceID, FeatureID, ProcessingFeatureID) -> Double -> Int -> Bool -> IO (Either String (Vector Double))
+acquireSpectrum :: (DeviceID, FeatureID, Maybe ProcessingFeatureID) -> Double -> Int -> Bool -> IO (Either String (Vector Double))
 acquireSpectrum (deviceID, featureID, pfID) exposure nSpectra discardFirstSpectrum =
     if ((exposure <= 0.0) || (exposure > 1.0) || (nSpectra < 1))
         then return (Left "invalid number of spectra or exposure time")
@@ -72,7 +72,7 @@ acquireSpectrum (deviceID, featureID, pfID) exposure nSpectra discardFirstSpectr
     where
         integrationMicroseconds = floor (exposure * 1e6)
 
-acquireTriggeredSpectrum :: (DeviceID, FeatureID, ProcessingFeatureID) -> (GPIOPin, GPIOHandles) -> Double -> Int -> IO (Either String (Vector Double))
+acquireTriggeredSpectrum :: (DeviceID, FeatureID, Maybe ProcessingFeatureID) -> (GPIOPin, GPIOHandles) -> Double -> Int -> IO (Either String (Vector Double))
 acquireTriggeredSpectrum (dID, fID, pfID) (pin, pinH) exposure nSpectra =
     setIntegrationTimeMicros dID fID integrationMicroseconds >>
     (flip finally) (setPinLevel pinH pin Low) (
