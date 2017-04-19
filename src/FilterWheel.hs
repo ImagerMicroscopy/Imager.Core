@@ -20,8 +20,8 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import System.Environment
 import System.FilePath
-import System.Hardware.Serialport hiding(timeout)
-import System.Timeout
+import System.Hardware.Serialport
+import qualified System.Timeout as ST
 
 import MiscUtils
 
@@ -82,7 +82,7 @@ openFilterWheels :: [FilterWheelDesc] -> IO [FilterWheel]
 openFilterWheels = mapM openFilterWheel
   where
     openFilterWheel (ThorlabsFW103HDesc name portName chs) =
-        openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS115200}) >>= \port ->
+        openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS115200, timeout = 0}) >>= \port ->
         putStr "initializing Thorlabs FW103H filter wheel..." >>
         forM_ fw103HStartupMessages (\msg -> send port msg >> threadDelay (floor 25e3)) >>
         send port fw103HStopUpdatesMessage >> send port fw103HMoveHomeMessage >>
@@ -93,7 +93,7 @@ openFilterWheels = mapM openFilterWheel
         ThorlabsFW102C name (validateChannels chs) <$> openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS115200})
     openFilterWheel (OlympusIX71DichroicDesc name portName chs) =
         putStr "initializing IX71 motorized dichroic..." >>
-        openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS19200}) >>= \port ->
+        openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS19200, timeout = 0}) >>= \port ->
         send port "1LOG IN\r" >> readFromSerialUntilChar port '\r' >>= \response ->
         case response of
             "1LOG +\r" -> putStr "done!\n" >> return (OlympusIX71Dichroic name (validateChannels chs) port)
@@ -128,7 +128,7 @@ filterWheelHasChannel (DummyFilterWheel _ chs) c = c `elem` (map fst chs)
 switchFilterWheel :: [FilterWheel] -> Text -> Text -> IO ()
 switchFilterWheel fws fwName fName =
     let filterWheel = head (filter (\fw -> filterWheelName fw == fwName) fws)
-    in timeout (floor 3.0e6) (switchToFilter filterWheel fName) >>= \result ->
+    in ST.timeout (floor 3.0e6) (switchToFilter filterWheel fName) >>= \result ->
        case result of
            Nothing -> throwIO (userError ("timeout communicating with " ++ T.unpack (filterWheelName filterWheel)))
            Just v -> return v
@@ -142,7 +142,7 @@ switchToFilter fw chName | not (filterWheelHasChannel fw chName) = throwIO (user
         let filterIndex = fromJust (lookup chName chs)
             wheelPos = (409600 `div` 6) * filterIndex -- Thorlabs:  1 turn represents 360 degrees which is 409600 micro steps
         in  send port (fw103HMoveAbsoluteMessage wheelPos) >> --threadDelay (floor 150e3) >> return (Right ())
-            timeout (floor 1e6) (fw103HWaitUntilMotionStops port) >>= \result ->
+            ST.timeout (floor 1e6) (fw103HWaitUntilMotionStops port) >>= \result ->
             case result of
                 Nothing -> throwIO (userError ("no reply from Thorlabs filter wheel"))
                 Just () -> return ()
@@ -154,7 +154,7 @@ switchToFilter fw chName | not (filterWheelHasChannel fw chName) = throwIO (user
         let filterIndex = fromJust (lookup chName chs)
         in  flush port >>
             send port (T.encodeUtf8 . T.pack $ "1MU " ++ show (filterIndex + 1) ++ "\r") >>
-            timeout (floor 10e6) (readFromSerialUntilChar port '\r') >>= \result ->
+            ST.timeout (floor 10e6) (readFromSerialUntilChar port '\r') >>= \result ->
             case result of
                 Nothing     -> throwIO (userError ("no reply from ix71 dichroic turret"))
                 Just "1MU +\r" -> return ()
