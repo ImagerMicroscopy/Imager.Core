@@ -174,10 +174,12 @@ lightSourceNamesUsedIn me = S.toList (lightSourceNamesUsedIn' S.empty me)
     where
         lightSourceNamesUsedIn' :: Set Text -> MeasurementElement -> Set Text
         lightSourceNamesUsedIn' s (MEDetection dps) = s <> (S.fromList . concat $ map (map ipLightSourceName . dpIrradiation) dps)
+        lightSourceNamesUsedIn' s (MEIrradiation _ ips) = s <> ((S.fromList . map ipLightSourceName) ips)
         lightSourceNamesUsedIn' s (MEDoTimes _ mes) = mconcat (map (lightSourceNamesUsedIn' S.empty) mes)
         lightSourceNamesUsedIn' s (MEFastAcquisitionLoop _ dp) = s <> S.fromList (map ipLightSourceName . dpIrradiation $ dp)
         lightSourceNamesUsedIn' s (METimeLapse _ _ mes) = mconcat (map (lightSourceNamesUsedIn' S.empty) mes)
         lightSourceNamesUsedIn' s (MEStageLoop _ _ mes) = mconcat (map (lightSourceNamesUsedIn' S.empty) mes)
+        lightSourceNamesUsedIn' s _ = s
 
 withStatusMessage :: ProgramEnvironment a -> LT.Text -> IO b -> IO b
 withStatusMessage env msg action =
