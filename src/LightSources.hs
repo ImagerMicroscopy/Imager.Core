@@ -75,7 +75,7 @@ data LightSourceDesc = GPIOLightSourceDesc {
                      deriving (Show, Read)
 
 data LightSource = GPIOLightSource !Text !GPIOPin !Double !GPIOHandles
-                 | CoherentLightSource !Text !SerialPort !(IORef (Bool, Double, Double))
+                 | CoherentLightSource !Text !SerialPort !(IORef (Bool, Double, Double)) !(IORef (Bool, Double))
                  | LumencorLightSource !Text !SerialPort !(IORef Bool) !(IORef LumencorFilter)
                  | AsahiLightSource !Text ![(Text, (Int, Double))] !SerialPort
                  | ArduinoLightSource !Text ![(Text, (Int, Double))] !(IORef [(Int, Double)]) !SerialPort
@@ -115,7 +115,7 @@ lightSourceAllowsMultipleChannels _ = False
 
 lightSourceName :: LightSource -> Text
 lightSourceName (GPIOLightSource name _ _ _) = name
-lightSourceName (CoherentLightSource name _ _) = name
+lightSourceName (CoherentLightSource name _ _ _) = name
 lightSourceName (LumencorLightSource name _ _ _) = name
 lightSourceName (AsahiLightSource name _ _) = name
 lightSourceName (ArduinoLightSource name _ _ _) = name
@@ -149,7 +149,8 @@ openLightSources gpioHandles descs = sequence $ map openLightSource descs
         openLightSource (CoherentLightSourceDesc name portName) =
             openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS19200, timeout = 0}) >>= \port ->
             newIORef (False, 0.0, 0.0) >>= \powerRange ->
-            return (CoherentLightSource name port powerRange)
+            newIORef (False, 0.0) >>= \currentPower ->
+            return (CoherentLightSource name port powerRange currentPower)
         openLightSource (LumencorLightSourceDesc name portName) =
             let port = openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS9600})
             in LumencorLightSource name <$> port <*> newIORef False <*> newIORef LCGreenFilter
@@ -188,7 +189,7 @@ closeLightSources :: [LightSource] -> IO ()
 closeLightSources = mapM_ closeLightSource
     where
         closeLightSource (GPIOLightSource _ _ _ _) = return ()
-        closeLightSource (CoherentLightSource _ port _) = closeSerial port
+        closeLightSource (CoherentLightSource _ port _ _) = closeSerial port
         closeLightSource (LumencorLightSource _ port _ _) = closeSerial port
         closeLightSource (AsahiLightSource _ _ port) = closeSerial port
         closeLightSource (ArduinoLightSource _ chs _ port) = setArduinoPinsState ArduinoInput (map (fst . snd) chs) port >> closeSerial port
@@ -233,7 +234,7 @@ activateLightSource ls channels powers
   where
     activateLightSource' (GPIOLightSource _ pin delay handles) _ _ = setPinLevel handles pin High >> threadDelay (floor $ 1e6 * delay) >> return ()
     activateLightSource' (DummyLightSource name) chs ps = putStrLn ("activated " ++ T.unpack name ++ " with channels " ++ show chs ++ " with powers " ++ show ps) >> return ()
-    activateLightSource' ls@(CoherentLightSource _ _ _) _ [power] = activateCoherentLightSource ls power
+    activateLightSource' ls@(CoherentLightSource _ _ _ _) _ [power] = activateCoherentLightSource ls power
     activateLightSource' ls@(LumencorLightSource _ _ _ _) chs ps = activateLumencorLightSource ls (map lumencorChannelFromName chs) ps
     activateLightSource' ls@(AsahiLightSource _ _ _) [ch] [p] = activateAsahiLightSource ls ch p
     activateLightSource' ls@(ArduinoLightSource _ _ _ _) chs ps = activateArduinoLightSource ls chs ps
@@ -241,13 +242,24 @@ activateLightSource ls channels powers
     timeoutDuration = floor (2.0e6)
 
 activateCoherentLightSource :: LightSource -> Double -> IO ()
-activateCoherentLightSource (CoherentLightSource _ port powerRange) power =
-    powerStr >>= sendAndReadResponse >> sendAndReadResponse "L=1\r" >> return ()
+activateCoherentLightSource (CoherentLightSource _ port powerRange currentPower) power =
+    needToSetPower >>= \needPower ->
+    when (needPower) (setPower power) >>
+    sendAndReadResponse "L=1\r" >> return ()
     where
-        powerStr :: IO ByteString
-        powerStr = minMaxPower >>= \(minPower, maxPower) ->
-                   let powerVal = floor (minPower + power / 100.0 * (maxPower - minPower)) :: Int
-                   in return ("P=" <> T.encodeUtf8 (T.pack $ show powerVal) <> "\r")
+        needToSetPower :: IO Bool
+        needToSetPower =
+            readIORef currentPower >>= \cp ->
+            case cp of
+                (False, _) -> return True
+                (True, p)  -> return (p /= power)
+        setPower :: Double -> IO ()
+        setPower p = powerStr p >>= sendAndReadResponse >>
+                     writeIORef currentPower (True, p)
+        powerStr :: Double -> IO ByteString
+        powerStr p = minMaxPower >>= \(minPower, maxPower) ->
+                    let powerVal = floor (minPower + p / 100.0 * (maxPower - minPower)) :: Int
+                    in return ("P=" <> T.encodeUtf8 (T.pack $ show powerVal) <> "\r")
         minMaxPower :: IO (Double, Double)
         minMaxPower = readIORef powerRange >>= \(haveRange, minP, maxP) ->
                       if (haveRange)
@@ -306,7 +318,7 @@ activateArduinoLightSource (ArduinoLightSource _ availChs activePinRef port) chs
 
 deactivateLightSource :: LightSource -> IO ()
 deactivateLightSource (GPIOLightSource _ pin delay handles) = setPinLevel handles pin Low >> threadDelay (floor $ 1e6 * delay)
-deactivateLightSource (CoherentLightSource _ port _) = send port "L=0\r" >> readFromSerialUntilChar port '\n' >> return ()
+deactivateLightSource (CoherentLightSource _ port _ _) = send port "L=0\r" >> readFromSerialUntilChar port '\n' >> return ()
 deactivateLightSource (LumencorLightSource _ port _ currFilterRef) =
     readIORef currFilterRef >>= \currFilter ->
     send port (lumencorDisableMessage currFilter) >> return ()
