@@ -39,9 +39,9 @@ import qualified Data.Text.Encoding as T
 import Data.Word
 import System.Environment
 import System.FilePath
-import System.Hardware.Serialport hiding(timeout)
+import System.Hardware.Serialport
 import System.IO
-import System.Timeout
+import qualified System.Timeout as ST
 
 import GPIO
 import MiscUtils
@@ -147,7 +147,7 @@ openLightSources gpioHandles descs = sequence $ map openLightSource descs
     where
         openLightSource (GPIOLightSourceDesc name pin delay) = return (GPIOLightSource name pin delay gpioHandles)
         openLightSource (CoherentLightSourceDesc name portName) =
-            openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS19200}) >>= \port ->
+            openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS19200, timeout = 0}) >>= \port ->
             newIORef (False, 0.0, 0.0) >>= \powerRange ->
             return (CoherentLightSource name port powerRange)
         openLightSource (LumencorLightSourceDesc name portName) =
@@ -155,8 +155,8 @@ openLightSources gpioHandles descs = sequence $ map openLightSource descs
             in LumencorLightSource name <$> port <*> newIORef False <*> newIORef LCGreenFilter
         openLightSource (AsahiLightSourceDesc name portName chs) =
             putStrLn "Connecting to Asahi lamp..." >>
-            openSerialWithErrorMsg portName defaultSerialSettings >>= \port ->
-            timeout 2e6 (readLampLife port) >>= \response ->
+            openSerialWithErrorMsg portName (defaultSerialSettings {timeout = 0}) >>= \port ->
+            ST.timeout 2e6 (readLampLife port) >>= \response ->
             case response of
                 Nothing -> throwIO (userError "timeout communicating with Asahi lamp")
                 Just v -> putStrLn ("Asahi lamp has been on " ++ show v ++ " hours (recommended lamp life 500 hours, max lamp life 1000 hours)") >>
@@ -169,7 +169,7 @@ openLightSources gpioHandles descs = sequence $ map openLightSource descs
         openLightSource (ArduinoLightSourceDesc name portName chs) =
             putStrLn "Connecting to Arduino" >>
             let chs' = validChannelNames chs (2, 13)
-            in openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS115200}) >>= \port -> threadDelay (floor 2e6) >> -- delay needed, otherwise the arduino won't receive the messages.
+            in openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed=CS115200, timeout=0}) >>= \port -> threadDelay (floor 2e6) >> -- delay needed, otherwise the arduino won't receive the messages.
                setArduinoPinsState ArduinoOutput (map (fst . snd) chs) port >>
                newIORef [] >>= \activeSet ->
                return (ArduinoLightSource name chs activeSet port)
@@ -226,7 +226,7 @@ validLightSourceChannelsAndPowers ls channels powers
 activateLightSource :: LightSource -> [Text] -> [Double] -> IO ()
 activateLightSource ls channels powers
   | (not . T.null) (validLightSourceChannelsAndPowers ls channels powers) = throwIO (userError "invalid light source parameters")
-  | otherwise = timeout timeoutDuration (activateLightSource' ls channels powers) >>= \result ->
+  | otherwise = ST.timeout timeoutDuration (activateLightSource' ls channels powers) >>= \result ->
                 case result of
                     Nothing -> throwIO (userError ("timeout activating light source " ++ (T.unpack $ lightSourceName ls)))
                     Just v -> return v
@@ -402,7 +402,7 @@ handleAsahiMessage port ss =
 handleArduinoMessage :: SerialPort -> String -> IO ()
 handleArduinoMessage port ss =
     flush port >> send port (T.encodeUtf8 . T.pack $ ss) >>
-    timeout (floor 1e6) (readFromSerialUntilChar port '\r') >>= \response ->
+    ST.timeout (floor 1e6) (readFromSerialUntilChar port '\r') >>= \response ->
     case response of
         Just "OK\r" -> return ()
         Just e -> throwIO (userError ("arduino responded \"" ++ T.unpack (T.decodeUtf8 e) ++ "\""))
