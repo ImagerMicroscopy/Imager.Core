@@ -154,7 +154,7 @@ executeFastDetectionLoop detector lightSources filterWheels detParams nTimesToPe
 executeIrradiation :: [LightSource] -> [FilterWheel] -> [IrradiationParams] -> Double -> IO ()
 executeIrradiation lightSources fws ips dur =
     enableLightSources lightSources ips >>
-    threadDelay (floor $ dur * 1.0e6) >>
+    when (dur > 0.0) (threadDelay (floor $ dur * 1.0e6)) >>
     disableLightSources lightSources ips
 
 switchToFilters :: [FilterWheel] -> [FilterParams] -> IO ()

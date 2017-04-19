@@ -2,6 +2,7 @@
 
 module OODetector where
 
+import Control.DeepSeq
 import Control.Exception
 import Control.Monad
 import Control.Monad.Trans.Except
@@ -58,7 +59,8 @@ acquireData' (OODetector dID fID pfID maybeTrigg corrFunc) expTime _ nSpectraToA
                      nCols = 1
                      bytes = byteStringFromVector corrected
                      numType = FP64
-                 in return $ Right (AcquiredData nRows nCols timeStamp bytes numType)
+                     dat = AcquiredData nRows nCols timeStamp bytes numType
+                 in dat `deepseq` (return $ Right dat)
 
 acquireSpectrum :: (DeviceID, FeatureID, Maybe ProcessingFeatureID) -> Double -> Int -> Bool -> IO (Either String (Vector Double))
 acquireSpectrum (deviceID, featureID, pfID) exposure nSpectra discardFirstSpectrum =
