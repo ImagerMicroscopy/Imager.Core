@@ -59,7 +59,7 @@ openMotorizedStages = mapM openMotorizedStage
         openMotorizedStage (PriorDesc name portName) =
             putStrLn "Connecting to Prior stage..." >>
             ST.timeout 2e6 (
-              openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS9600, timeout = 0}) >>= \port ->
+              openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS9600}) >>= \port ->
               send port "COMP 1\r" >> readFromSerialUntilChar port '\r' >>= \resp ->
               if ((resp /= "0\r") && (resp /= "R\r"))
               then throwIO (userError "unexpected reply from prior stage")
