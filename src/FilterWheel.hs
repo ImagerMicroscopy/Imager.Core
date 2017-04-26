@@ -128,7 +128,7 @@ filterWheelHasChannel (DummyFilterWheel _ chs) c = c `elem` (map fst chs)
 switchFilterWheel :: [FilterWheel] -> Text -> Text -> IO ()
 switchFilterWheel fws fwName fName =
     let filterWheel = head (filter (\fw -> filterWheelName fw == fwName) fws)
-    in ST.timeout (floor 3.0e6) (switchToFilter filterWheel fName) >>= \result ->
+    in ST.timeout (floor 10e6) (switchToFilter filterWheel fName) >>= \result ->
        case result of
            Nothing -> throwIO (userError ("timeout communicating with " ++ T.unpack (filterWheelName filterWheel)))
            Just v -> return v
@@ -141,24 +141,19 @@ switchToFilter fw chName | not (filterWheelHasChannel fw chName) = throwIO (user
     switchToFilter' (ThorlabsFW103H _ chs port) chName =
         let filterIndex = fromJust (lookup chName chs)
             wheelPos = (409600 `div` 6) * filterIndex -- Thorlabs:  1 turn represents 360 degrees which is 409600 micro steps
-        in  send port (fw103HMoveAbsoluteMessage wheelPos) >> --threadDelay (floor 150e3) >> return (Right ())
-            ST.timeout (floor 1e6) (fw103HWaitUntilMotionStops port) >>= \result ->
-            case result of
-                Nothing -> throwIO (userError ("no reply from Thorlabs filter wheel"))
-                Just () -> return ()
+        in  send port (fw103HMoveAbsoluteMessage wheelPos) >>
+            fw103HWaitUntilMotionStops port
     switchToFilter' (ThorlabsFW102C _ chs port) chName =
         let filterIndex = fromJust (lookup chName chs)
         in flush port >> send port (T.encodeUtf8 . T.pack $ "pos=" ++ show filterIndex) >>
            readFromSerialUntilChar port '>' >> return ()
     switchToFilter' (OlympusIX71Dichroic _ chs port) chName =
         let filterIndex = fromJust (lookup chName chs)
-        in  flush port >>
-            send port (T.encodeUtf8 . T.pack $ "1MU " ++ show (filterIndex + 1) ++ "\r") >>
-            ST.timeout (floor 10e6) (readFromSerialUntilChar port '\r') >>= \result ->
+        in  send port (T.encodeUtf8 . T.pack $ "1MU " ++ show (filterIndex + 1) ++ "\r") >>
+            readFromSerialUntilChar port '\r' >>= \result ->
             case result of
-                Nothing     -> throwIO (userError ("no reply from ix71 dichroic turret"))
-                Just "1MU +\r" -> return ()
-                Just v      -> throwIO (userError ("unknown response from ix71 dichroic turret: " ++ show v))
+                "1MU +\r" -> return ()
+                v         -> throwIO (userError ("unknown response from ix71 dichroic turret: " ++ show v))
     switchToFilter' (DummyFilterWheel name chs) chName =
         putStrLn ("Switched filter wheel " ++ T.unpack name ++ " to filter " ++ T.unpack chName)
 
