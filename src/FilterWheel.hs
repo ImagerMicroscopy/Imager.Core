@@ -141,7 +141,7 @@ switchToFilter fw chName | not (filterWheelHasChannel fw chName) = throwIO (user
     switchToFilter' (ThorlabsFW103H _ chs port) chName =
         let filterIndex = fromJust (lookup chName chs)
             wheelPos = (409600 `div` 6) * filterIndex -- Thorlabs:  1 turn represents 360 degrees which is 409600 micro steps
-        in  send port (fw103HMoveAbsoluteMessage wheelPos) >>
+        in  flush port >> send port (fw103HMoveAbsoluteMessage wheelPos) >>
             fw103HWaitUntilMotionStops port
     switchToFilter' (ThorlabsFW102C _ chs port) chName =
         let filterIndex = fromJust (lookup chName chs)
@@ -149,7 +149,7 @@ switchToFilter fw chName | not (filterWheelHasChannel fw chName) = throwIO (user
            readFromSerialUntilChar port '>' >> return ()
     switchToFilter' (OlympusIX71Dichroic _ chs port) chName =
         let filterIndex = fromJust (lookup chName chs)
-        in  send port (T.encodeUtf8 . T.pack $ "1MU " ++ show (filterIndex + 1) ++ "\r") >>
+        in  flush port >> send port (T.encodeUtf8 . T.pack $ "1MU " ++ show (filterIndex + 1) ++ "\r") >>
             readFromSerialUntilChar port '\r' >>= \result ->
             case result of
                 "1MU +\r" -> return ()

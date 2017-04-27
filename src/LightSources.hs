@@ -165,7 +165,7 @@ openLightSources gpioHandles descs = sequence $ map openLightSource descs
             where
                 readLampLife :: SerialPort -> IO Double
                 readLampLife port =
-                    send port "LIFE?\r\n" >> readFromSerialUntilChar port '\n' >>= -- response is of format "LF %d\r"
+                    flush port >> send port "LIFE?\r\n" >> readFromSerialUntilChar port '\n' >>= -- response is of format "LF %d\r"
                     return . read . filter (`elem` ("01234567890." :: String)) . byteStringAsString
         openLightSource (ArduinoLightSourceDesc name portName chs) =
             putStrLn "Connecting to Arduino" >>
@@ -273,7 +273,7 @@ activateCoherentLightSource (CoherentLightSource _ port powerRange currentPower)
         parseQuery :: ByteString -> IO Double
         parseQuery q = sendAndReadResponse q >>= return . read . filter (`elem` ('.' : ['0' .. '9'])) . T.unpack . T.decodeUtf8
         sendAndReadResponse :: ByteString -> IO ByteString
-        sendAndReadResponse msg = send port msg >> readFromSerialUntilChar port '\n'
+        sendAndReadResponse msg = flush port >> send port msg >> readFromSerialUntilChar port '\n'
 
 activateLumencorLightSource :: LightSource -> [LumencorChannel] -> [Double] -> IO ()
 activateLumencorLightSource (LumencorLightSource _ port haveInitRef currFilterRef) channels powers =
@@ -318,7 +318,7 @@ activateArduinoLightSource (ArduinoLightSource _ availChs activePinRef port) chs
 
 deactivateLightSource :: LightSource -> IO ()
 deactivateLightSource (GPIOLightSource _ pin delay handles) = setPinLevel handles pin Low >> threadDelay (floor $ 1e6 * delay)
-deactivateLightSource (CoherentLightSource _ port _ _) = send port "L=0\r" >> readFromSerialUntilChar port '\n' >> return ()
+deactivateLightSource (CoherentLightSource _ port _ _) = flush port >> send port "L=0\r" >> readFromSerialUntilChar port '\n' >> return ()
 deactivateLightSource (LumencorLightSource _ port _ currFilterRef) =
     readIORef currFilterRef >>= \currFilter ->
     send port (lumencorDisableMessage currFilter) >> return ()
