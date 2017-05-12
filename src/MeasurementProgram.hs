@@ -119,16 +119,8 @@ executeMeasurementElement env (MEStageLoop sn poss es) =
         setStagePosition stageName pos = setStagePositionLookup stages stageName pos
 
 insertFastAcquisitionLoops :: MeasurementElement -> MeasurementElement
-insertFastAcquisitionLoops (MEDoTimes n es)
-    | isSimpleDetection es = MEFastAcquisitionLoop n theDetection
-    | otherwise            = MEDoTimes n (map insertFastAcquisitionLoops es)
-    where
-      isSimpleDetection es = not (null es) && all hasSingleDetection es && allIdentical (map detection es)
-      hasSingleDetection (MEDetection [d]) = True
-      hasSingleDetection _ = False
-      detection (MEDetection [d]) = d
-      allIdentical xs = length (nub xs) == 1
-      theDetection = detection (head es)
+insertFastAcquisitionLoops (MEDoTimes n [MEDetection [d]]) = MEFastAcquisitionLoop n d
+insertFastAcquisitionLoops (MEDoTimes n es) = MEDoTimes n (map insertFastAcquisitionLoops es)
 insertFastAcquisitionLoops (METimeLapse n dur es) = METimeLapse n dur (map insertFastAcquisitionLoops es)
 insertFastAcquisitionLoops (MEStageLoop n pos es) = MEStageLoop n pos (map insertFastAcquisitionLoops es)
 insertFastAcquisitionLoops m = m
