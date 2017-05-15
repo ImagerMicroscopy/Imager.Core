@@ -38,7 +38,7 @@ data FilterWheelDesc = ThorlabsFW103HDesc {
                      | OlympusIX71DichroicDesc {
                            ix71DescName :: !Text
                          , ix71DescPortName :: !String
-                         , ix71DescFilters :: [(Text, Int)]
+                         , ix71DescFilters :: ![(Text, Int)]
                        }
                      | DummyFilterWheelDesc {
                            dfwDescName :: !Text
@@ -48,7 +48,7 @@ data FilterWheelDesc = ThorlabsFW103HDesc {
 
 data FilterWheel = ThorlabsFW103H !Text ![(Text, Int)] !SerialPort
                  | ThorlabsFW102C !Text ![(Text, Int)] !SerialPort
-                 | OlympusIX71Dichroic !Text ![(Text, Int)] !SerialPort
+                 | OlympusIX71Dichroic !Text ![(Text, Int)] !(IORef (Bool, Int)) !SerialPort
                  | DummyFilterWheel !Text ![(Text, Int)]
 
 instance ToJSON FilterWheel where
@@ -69,13 +69,13 @@ withFilterWheels descs action =
 filterWheelName :: FilterWheel -> Text
 filterWheelName (ThorlabsFW103H name _ _) = name
 filterWheelName (ThorlabsFW102C name _ _) = name
-filterWheelName (OlympusIX71Dichroic name _ _) = name
+filterWheelName (OlympusIX71Dichroic name _ _ _) = name
 filterWheelName (DummyFilterWheel name _) = name
 
 filterWheelChannels :: FilterWheel -> [Text]
 filterWheelChannels (ThorlabsFW103H _ chs _) = map fst chs
 filterWheelChannels (ThorlabsFW102C _ chs _) = map fst chs
-filterWheelChannels (OlympusIX71Dichroic _ chs _) = map fst chs
+filterWheelChannels (OlympusIX71Dichroic _ chs _ _) = map fst chs
 filterWheelChannels (DummyFilterWheel _ chs) = map fst chs
 
 openFilterWheels :: [FilterWheelDesc] -> IO [FilterWheel]
@@ -87,7 +87,7 @@ openFilterWheels = mapM openFilterWheel
         forM_ fw103HStartupMessages (\msg -> send port msg >> threadDelay (floor 25e3)) >>
         send port fw103HStopUpdatesMessage >> send port fw103HMoveHomeMessage >>
         fw103HWaitUntilHomingStops port >>
-        putStr "done!\n" >>
+        putStrLn "done!" >>
         return (ThorlabsFW103H name (validateChannels chs) port)
     openFilterWheel (ThorlabsFW102CDesc name portName chs) =
         ThorlabsFW102C name (validateChannels chs) <$> openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS115200})
@@ -95,9 +95,10 @@ openFilterWheels = mapM openFilterWheel
         putStr "initializing IX71 motorized dichroic..." >>
         openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS19200, timeout = 0}) >>= \port ->
         send port "1LOG IN\r" >> readFromSerialUntilChar port '\r' >>= \response ->
-        case response of
-            "1LOG +\r" -> putStr "done!\n" >> return (OlympusIX71Dichroic name (validateChannels chs) port)
-            e         -> putStrLn ("unexpected response from Olymus IX71 DM: " ++ show e) >> putStrLn "press return to close" >> getLine >> error "failed"
+        when (response /= "1LOG +\r") (
+            putStrLn ("unexpected response from Olymus IX71 DM: " ++ show response) >> putStrLn "press return to close" >> getLine >> error "failed") >>
+        putStrLn "done!" >> newIORef (False, 0) >>= \currFilterRef ->
+        return (OlympusIX71Dichroic name (validateChannels chs) currFilterRef port)
     openFilterWheel (DummyFilterWheelDesc name chs) =
         putStrLn ("Opened dummy filter wheel " ++ T.unpack name ++ " with filters " ++ show chs) >> return (DummyFilterWheel name (validateChannels chs))
     validateChannels :: [(Text, Int)] -> [(Text, Int)]
@@ -116,13 +117,13 @@ closeFilterWheels = mapM_ closeFilterWheels
   where
     closeFilterWheels (ThorlabsFW103H _ _ port) = closeSerial port
     closeFilterWheels (ThorlabsFW102C _ _ port) = closeSerial port
-    closeFilterWheels (OlympusIX71Dichroic _ _ port) = closeSerial port
+    closeFilterWheels (OlympusIX71Dichroic _ _ _ port) = closeSerial port
     closeFilterWheels (DummyFilterWheel name _) = putStrLn ("Closed filter wheel " ++ T.unpack name)
 
 filterWheelHasChannel :: FilterWheel -> Text -> Bool
 filterWheelHasChannel (ThorlabsFW103H _ chs _) c = c `elem` (map fst chs)
 filterWheelHasChannel (ThorlabsFW102C _ chs _) c = c `elem` (map fst chs)
-filterWheelHasChannel (OlympusIX71Dichroic _ chs _) c = c `elem` (map fst chs)
+filterWheelHasChannel (OlympusIX71Dichroic _ chs _ _) c = c `elem` (map fst chs)
 filterWheelHasChannel (DummyFilterWheel _ chs) c = c `elem` (map fst chs)
 
 switchFilterWheel :: [FilterWheel] -> Text -> Text -> IO ()
@@ -147,13 +148,15 @@ switchToFilter fw chName | not (filterWheelHasChannel fw chName) = throwIO (user
         let filterIndex = fromJust (lookup chName chs)
         in flush port >> send port (T.encodeUtf8 . T.pack $ "pos=" ++ show filterIndex) >>
            readFromSerialUntilChar port '>' >> return ()
-    switchToFilter' (OlympusIX71Dichroic _ chs port) chName =
+    switchToFilter' (OlympusIX71Dichroic _ chs currFilter port) chName =
         let filterIndex = fromJust (lookup chName chs)
-        in  flush port >> send port (T.encodeUtf8 . T.pack $ "1MU " ++ show (filterIndex + 1) ++ "\r") >>
-            readFromSerialUntilChar port '\r' >>= \result ->
-            case result of
-                "1MU +\r" -> return ()
-                v         -> throwIO (userError ("unknown response from ix71 dichroic turret: " ++ show v))
+        in  readIORef currFilter >>= \(haveInit, currFilterIdx) ->
+            when ((not haveInit) || (currFilterIdx /= filterIndex)) (
+                flush port >> send port (T.encodeUtf8 . T.pack $ "1MU " ++ show (filterIndex + 1) ++ "\r") >>
+                readFromSerialUntilChar port '\r' >>= \result ->
+                case result of
+                    "1MU +\r" -> writeIORef currFilter (True, filterIndex) >> return ()
+                    v         -> throwIO (userError ("unknown response from ix71 dichroic turret: " ++ show v)))
     switchToFilter' (DummyFilterWheel name chs) chName =
         putStrLn ("Switched filter wheel " ++ T.unpack name ++ " to filter " ++ T.unpack chName)
 
