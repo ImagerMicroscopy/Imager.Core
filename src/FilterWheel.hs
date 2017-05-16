@@ -82,7 +82,7 @@ openFilterWheels :: [FilterWheelDesc] -> IO [FilterWheel]
 openFilterWheels = mapM openFilterWheel
   where
     openFilterWheel (ThorlabsFW103HDesc name portName chs) =
-        openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS115200, timeout = 0}) >>= \port ->
+        openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS115200}) >>= \port ->
         putStr "initializing Thorlabs FW103H filter wheel..." >>
         forM_ fw103HStartupMessages (\msg -> send port msg >> threadDelay (floor 25e3)) >>
         send port fw103HStopUpdatesMessage >> send port fw103HMoveHomeMessage >>
@@ -93,7 +93,7 @@ openFilterWheels = mapM openFilterWheel
         ThorlabsFW102C name (validateChannels chs) <$> openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS115200})
     openFilterWheel (OlympusIX71DichroicDesc name portName chs) =
         putStr "initializing IX71 motorized dichroic..." >>
-        openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS19200, timeout = 0}) >>= \port ->
+        openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS19200}) >>= \port ->
         send port "1LOG IN\r" >> readFromSerialUntilChar port '\r' >>= \response ->
         when (response /= "1LOG +\r") (
             putStrLn ("unexpected response from Olymus IX71 DM: " ++ show response) >> putStrLn "press return to close" >> getLine >> error "failed") >>

@@ -147,7 +147,7 @@ openLightSources gpioHandles descs = sequence $ map openLightSource descs
     where
         openLightSource (GPIOLightSourceDesc name pin delay) = return (GPIOLightSource name pin delay gpioHandles)
         openLightSource (CoherentLightSourceDesc name portName) =
-            openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS19200, timeout = 0}) >>= \port ->
+            openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS19200}) >>= \port ->
             newIORef (False, 0.0, 0.0) >>= \powerRange ->
             newIORef (False, 0.0) >>= \currentPower ->
             return (CoherentLightSource name port powerRange currentPower)
@@ -156,7 +156,7 @@ openLightSources gpioHandles descs = sequence $ map openLightSource descs
             in LumencorLightSource name <$> port <*> newIORef False <*> newIORef LCGreenFilter
         openLightSource (AsahiLightSourceDesc name portName chs) =
             putStrLn "Connecting to Asahi lamp..." >>
-            openSerialWithErrorMsg portName (defaultSerialSettings {timeout = 0}) >>= \port ->
+            openSerialWithErrorMsg portName defaultSerialSettings >>= \port ->
             ST.timeout 2e6 (readLampLife port) >>= \response ->
             case response of
                 Nothing -> throwIO (userError "timeout communicating with Asahi lamp")
@@ -170,7 +170,7 @@ openLightSources gpioHandles descs = sequence $ map openLightSource descs
         openLightSource (ArduinoLightSourceDesc name portName chs) =
             putStrLn "Connecting to Arduino" >>
             let chs' = validChannelNames chs (2, 13)
-            in openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed=CS115200, timeout=0}) >>= \port -> threadDelay (floor 2e6) >> -- delay needed, otherwise the arduino won't receive the messages.
+            in openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed=CS115200}) >>= \port -> threadDelay (floor 2e6) >> -- delay needed, otherwise the arduino won't receive the messages.
                setArduinoPinsState ArduinoOutput (map (fst . snd) chs) port >>
                newIORef [] >>= \activeSet ->
                return (ArduinoLightSource name chs activeSet port)
