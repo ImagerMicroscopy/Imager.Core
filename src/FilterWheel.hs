@@ -143,7 +143,7 @@ switchToFilter fw chName | not (filterWheelHasChannel fw chName) = throwIO (user
         let filterIndex = fromJust (lookup chName chs)
             wheelPos = (409600 `div` 6) * filterIndex -- Thorlabs:  1 turn represents 360 degrees which is 409600 micro steps
         in  flush port >> send port (fw103HMoveAbsoluteMessage wheelPos) >>
-            fw103HWaitUntilMotionStops port
+            fw103HWaitUntilMotionStops port wheelPos
     switchToFilter' (ThorlabsFW102C _ chs port) chName =
         let filterIndex = fromJust (lookup chName chs)
         in flush port >> send port (T.encodeUtf8 . T.pack $ "pos=" ++ show filterIndex) >>
@@ -165,25 +165,21 @@ fw103HMoveAbsoluteMessage pos = runPut $
     mapM_ putWord8 [0x53, 0x04, 0x06, 0x00, 0xD0, 0x01, 0x01, 0x00] >>
     putWord32le (fromIntegral pos)
 
-fw103HWaitUntilMotionStops :: SerialPort -> IO ()
-fw103HWaitUntilMotionStops port =
-    flush port >> send port fw103HGetStatusMessage >>
+fw103HWaitUntilMotionStops :: SerialPort -> Int -> IO ()
+fw103HWaitUntilMotionStops port targetPos =
+    send port fw103HGetStatusMessage >>
     readAtLeastNBytesFromSerial port 20 >>= \response ->
-    let Right status = runGet getWord32le ((B.take 4 . B.drop 15) response)
+    let Right status = runGet getWord32le ((B.take 4 . B.drop 16) response)
         isInMotion = (0x00F0 .&. status) /= 0
         isHoming = (0x0200 .&. status) /= 0
-    in if (isInMotion || isHoming)
-       then fw103HWaitUntilMotionStops port
+        Right position = runGet getWord32le ((B.take 4 . B.drop 8) response)
+        notAtCorrectPos = position /= (fromIntegral targetPos)
+    in if (isInMotion || isHoming || notAtCorrectPos)
+       then fw103HWaitUntilMotionStops port targetPos
        else return ()
 
 fw103HWaitUntilHomingStops :: SerialPort -> IO ()
-fw103HWaitUntilHomingStops port =
-    flush port >> send port fw103HGetStatusMessage >>
-    readAtLeastNBytesFromSerial port 20 >>= \response ->
-    let Right position = runGet getWord32le ((B.take 4 . B.drop 7) response)
-    in if (position /= 0)
-       then fw103HWaitUntilHomingStops port
-       else return ()
+fw103HWaitUntilHomingStops port = fw103HWaitUntilMotionStops port 0
 
 fw103HInitializationMessage :: ByteString
 fw103HInitializationMessage = B.pack [0x18, 0x00, 0x00, 0x00, 0x50, 0x01]
