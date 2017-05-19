@@ -28,6 +28,9 @@ data MicroscopeRobot = Robottor {
                         , roPortNum :: !Int
                        }
 
+instance ToJSON MicroscopeRobot where
+   toJSON s = object ["name" .= microscopeRobotName s]
+
 data RobottorRequest = ListRobottorPrograms
                      | ExecuteRobottorProgram !Text
                      deriving (Show)

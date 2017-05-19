@@ -30,11 +30,13 @@ import MeasurementProgramTypes
 import LightSources
 import FilterWheel
 import MotorizedStage
+import MicroscopeRobot
 
 data Environment a = Environment {
                       envLightSources :: [LightSource]
                     , envFilterWheels :: [FilterWheel]
                     , envMotorizedStages :: [MotorizedStage]
+                    , envMicroscopeRobots :: [MicroscopeRobot]
                     , envGPIOHandles :: !GPIOHandles
                     , envAvailablePins :: [GPIOPin]
                     , envDetector :: a
@@ -51,8 +53,11 @@ data RequestMessage = AcquireData !DetectionParams
                     | ListLightSources
                     | ListFilterWheels
                     | ListMotorizedStages
+                    | ListMicroscopeRobots
                     | GetMotorizedStagePosition !Text
                     | SetMotorizedStagePosition !Text !(Double, Double, Double)
+                    | ListMicroscopeRobotPrograms !Text
+                    | ExecuteMicroscopeRobotProgram !Text !Text
                     | GetDetectorLimits
                     | SetDetectorTemperature !Double
                     | GetDetectorTemperature
@@ -80,8 +85,11 @@ instance ToJSON RequestMessage where
     toEncoding ListLightSources = pairs ("action" .= ("listlightsources" :: Text))
     toEncoding ListFilterWheels = pairs ("action" .= ("listfilterwheels" :: Text))
     toEncoding ListMotorizedStages = pairs ("action" .= ("listmotorizedstages" :: Text))
+    toEncoding ListMicroscopeRobots = pairs ("action" .= ("listmicroscoperobots" :: Text))
     toEncoding (GetMotorizedStagePosition name) = pairs ("action" .= ("getmotorizedstageposition" :: Text) <> "name" .= name)
     toEncoding (SetMotorizedStagePosition name ds) = pairs ("action" .= ("setmotorizedstageposition" :: Text) <> "name" .= name <> "position" .= ds)
+    toEncoding (ListMicroscopeRobotPrograms name) = pairs ("action" .= ("listmicroscoperobotprograms" :: Text) <> "name" .= name)
+    toEncoding (ExecuteMicroscopeRobotProgram name prog) = pairs ("action" .= ("executemicroscoperobotprogram" :: Text) <> "name" .= name <> "program" .= prog)
     toEncoding GetDetectorLimits = pairs ("action" .= ("getdetectorlimits" :: Text))
     toEncoding (SetDetectorTemperature t) = pairs ("action" .= ("setdetectortemperature" :: Text) <> "temperature" .= t)
     toEncoding GetDetectorTemperature = pairs ("action" .= ("getdetectortemperature" :: Text))
@@ -105,8 +113,11 @@ instance FromJSON RequestMessage where
             "listlightsources" -> return ListLightSources
             "listfilterwheels" -> return ListFilterWheels
             "listmotorizedstages" -> return ListMotorizedStages
+            "listmicroscoperobots" -> return ListMicroscopeRobots
             "getmotorizedstageposition" -> GetMotorizedStagePosition <$> v .: "name"
             "setmotorizedstageposition" -> SetMotorizedStagePosition <$> v .: "name" <*> v .: "position"
+            "listmicroscoperobotprograms" -> ListMicroscopeRobotPrograms <$> v .: "name"
+            "executemicroscoperobotprogram" -> ExecuteMicroscopeRobotProgram <$> v .: "name" <*> v .: "program"
             "getdetectorlimits" -> return GetDetectorLimits
             "setdetectortemperature" -> SetDetectorTemperature <$> v .: "temperature"
             "getdetectortemperature" -> return GetDetectorTemperature
@@ -133,7 +144,9 @@ data ResponseMessage = StatusOK
                      | AvailableLightSources ![LightSource]
                      | AvailableFilterWheels ![FilterWheel]
                      | AvailableMotorizedStages ![MotorizedStage]
+                     | AvailableMicroscopeRobots ![MicroscopeRobot]
                      | MotorizedStagePosition !(Double, Double, Double)
+                     | MicroscopeRobotProgramsResponse ![Text]
                      | DetectorLimitsResponse !DetectorLimits
                      | DetectorTemperatureResponse !Double
                      | DetectorTemperatureSetpointResponse !Double
@@ -157,7 +170,9 @@ instance ToJSON ResponseMessage where
     toEncoding (AvailableLightSources ls) = pairs ("responsetype" .= ("availablelightsources" :: Text) <> "lightsources" .= ls)
     toEncoding (AvailableFilterWheels fws) = pairs ("responsetype" .= ("availablefilterwheels" :: Text) <> "filterwheels" .= fws)
     toEncoding (AvailableMotorizedStages ss) = pairs ("responsetype" .= ("availablemotorizedstages" :: Text) <> "motorizedstages" .= ss)
+    toEncoding (AvailableMicroscopeRobots ss) = pairs ("responsetype" .= ("availablemicroscoperobots" :: Text) <> "microscoperobots" .= ss)
     toEncoding (MotorizedStagePosition ds) = pairs ("responsetype" .= ("motorizedstageposition" :: Text) <> "position" .= ds)
+    toEncoding (MicroscopeRobotProgramsResponse ps) = pairs ("responsetype" .= ("microscoperobotsprograms" :: Text) <> "programs" .= ps)
     toEncoding (DetectorLimitsResponse dl) = pairs ("responsetype" .= ("detectorlimits" :: Text) <> "detectorlimits" .= dl)
     toEncoding (DetectorTemperatureResponse t) = pairs ("responsetype" .= ("detectortemperature" :: Text) <> "detectortemperature" .= t)
     toEncoding (DetectorTemperatureSetpointResponse t) = pairs ("responsetype" .= ("detectortemperaturesetpoint" :: Text) <> "detectortemperaturesetpoint" .= t)
