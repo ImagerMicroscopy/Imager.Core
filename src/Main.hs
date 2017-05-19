@@ -99,15 +99,11 @@ performAction env (SetPinHigh pin) = setPinLevelOrError env pin High
 performAction env (SetPinLow pin)  = setPinLevelOrError env pin Low
 
 performAction env (AcquireData params) =
-    catch (ensureAsyncAcquisitionNotRunning env >>
-           validateDetectionThrows lightsources filterWheels params >>
-           executeDetection detector lightsources filterWheels params >>= \acquiredData ->
+    catch (startAsyncAcquisition env (MEDetection [params]) >>= \(asyncWorker, spectraMVar, statusMVar) ->
+           wait asyncWorker >>
+           takeMVar spectraMVar >>= \[[acquiredData]] ->
            return (AcquiredDataResponse acquiredData, env))
           (\e -> return (StatusError (displayException (e :: IOException)), env))
-    where
-        detector = envDetector env
-        lightsources = envLightSources env
-        filterWheels = envFilterWheels env
 
 performAction env ListWavelengths =
     getTime Monotonic >>= \timeStamp ->
@@ -214,21 +210,10 @@ performAction env (TurnOffLightSource name) =
 performAction env Ping = return (Pong, env)
 
 performAction env (ExecuteMeasurementProgram me) =
-    catch (ensureAsyncAcquisitionNotRunning env >>
-           validateMeasurementElementThrows lightSources filterWheels motorizedStages me >>
-           newMVar [] >>= \spectraMVar ->
-           newMVar [] >>= \statusMVar ->
-           getTime Monotonic >>= \startTime ->
-           async (executeMeasurement (ProgramEnvironment detector startTime lightSources filterWheels motorizedStages spectraMVar statusMVar) me >>
-                  return ()) >>= \asyncWorker ->
+    catch (startAsyncAcquisition env me >>= \(asyncWorker, spectraMVar, statusMVar) ->
            let newEnv = env {envAsyncDataMVar = spectraMVar, envAsyncStatusMessagesMVar = statusMVar, envAsyncProgramWorker = asyncWorker}
            in return (StatusOK, newEnv))
           (\e -> return (StatusError (displayException (e :: IOException)), env))
-    where
-        detector = envDetector env
-        lightSources = envLightSources env
-        filterWheels = envFilterWheels env
-        motorizedStages = envMotorizedStages env
 
 performAction env FetchAsyncData =
     modifyMVar dataMVar (\s -> return ([], s)) >>= \newData ->
@@ -266,6 +251,22 @@ performAction env CancelAsyncAcquisition =
 performAction env IsAsyncAcquisitionRunning =
     asyncAcquisitionRunning env >>= \asyncIsRunning ->
     return (AsyncAcquisitionIsRunning asyncIsRunning, env)
+
+startAsyncAcquisition :: Detector a => Environment a -> MeasurementElement -> IO (Async (), MVar [[AcquiredData]], MVar [Text])
+startAsyncAcquisition env me =
+    ensureAsyncAcquisitionNotRunning env >>
+    validateMeasurementElementThrows lightSources filterWheels motorizedStages me >>
+    newMVar [] >>= \spectraMVar ->
+    newMVar [] >>= \statusMVar ->
+    getTime Monotonic >>= \startTime ->
+    async (executeMeasurement (ProgramEnvironment detector startTime lightSources filterWheels motorizedStages spectraMVar statusMVar) me >>
+           return ()) >>= \asyncWorker ->
+    return (asyncWorker, spectraMVar, statusMVar)
+    where
+        detector = envDetector env
+        lightSources = envLightSources env
+        filterWheels = envFilterWheels env
+        motorizedStages = envMotorizedStages env
 
 setPinLevelOrError :: Environment a -> GPIOPin -> Level -> IO (ResponseMessage, Environment a)
 setPinLevelOrError env pin level =
