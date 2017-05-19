@@ -95,9 +95,6 @@ messageHandler msg env =
                      else return (ResponseLBS (encode resp), newEnv)
 
 performAction :: Detector a => Environment a -> RequestMessage -> IO (ResponseMessage, Environment a)
-performAction env (SetPinHigh pin) = setPinLevelOrError env pin High
-performAction env (SetPinLow pin)  = setPinLevelOrError env pin Low
-
 performAction env (AcquireData params) =
     catch (startAsyncAcquisition env (MEDetection [params]) >>= \(asyncWorker, spectraMVar, statusMVar) ->
            wait asyncWorker >>
@@ -267,16 +264,6 @@ startAsyncAcquisition env me =
         lightSources = envLightSources env
         filterWheels = envFilterWheels env
         motorizedStages = envMotorizedStages env
-
-setPinLevelOrError :: Environment a -> GPIOPin -> Level -> IO (ResponseMessage, Environment a)
-setPinLevelOrError env pin level =
-    if (not havePin)
-      then return (StatusError "pin not available", env)
-      else
-          setPinLevel gpioHandles pin level >> return (StatusOK, env)
-    where
-        havePin = pin `elem` (envAvailablePins env)
-        gpioHandles = envGPIOHandles env
 
 ensureAsyncAcquisitionNotRunning :: Environment a -> IO ()
 ensureAsyncAcquisitionNotRunning env =

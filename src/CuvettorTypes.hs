@@ -46,9 +46,7 @@ data Environment a = Environment {
 
 type ExposureTime = Double
 
-data RequestMessage = SetPinHigh !GPIOPin
-                    | SetPinLow !GPIOPin
-                    | AcquireData !DetectionParams
+data RequestMessage = AcquireData !DetectionParams
                     | ListWavelengths
                     | ListLightSources
                     | ListFilterWheels
@@ -77,8 +75,6 @@ data RequestMessage = SetPinHigh !GPIOPin
                     deriving (Generic)
 
 instance ToJSON RequestMessage where
-    toEncoding (SetPinHigh pin) = pairs ("action" .= ("setpinhigh" :: Text) <> "pin" .= show pin)
-    toEncoding (SetPinLow pin) = pairs ("action" .= ("setpinlow" :: Text) <> "pin" .= show pin)
     toEncoding ListWavelengths = pairs ("action" .= ("listwavelengths" :: Text))
     toEncoding (AcquireData p) = pairs ("action" .= ("acquiredata"  :: Text) <> "params" .= p)
     toEncoding ListLightSources = pairs ("action" .= ("listlightsources" :: Text))
@@ -104,8 +100,6 @@ instance FromJSON RequestMessage where
     parseJSON (Object v) =
         v .: "action" >>= \action ->
         case (T.toLower action) of
-            "setpinhigh" -> SetPinHigh <$> v .: "pin"
-            "setpinlow"  -> SetPinLow <$> v .: "pin"
             "acquiredata" -> AcquireData <$> v .: "params"
             "listwavelengths" -> return ListWavelengths
             "listlightsources" -> return ListLightSources
@@ -185,21 +179,3 @@ instance ToJSON DetectorLimits where
         object ["minexposuretime" .= minExpTime, "maxexposuretime" .= maxExpTime,
                 "mingain" .= minGain, "maxgain" .= maxGain,
                 "minaveraging" .= minAveraging, "maxaveraging" .= maxAveraging]
-
-instance FromJSON GPIOPin where
-    parseJSON (String s) =
-        case (T.toLower s) of
-            "pin2"  -> return Pin2
-            "pin3"  -> return Pin3
-            "pin4"  -> return Pin4
-            "pin7"  -> return Pin7
-            "pin8"  -> return Pin8
-            "pin9"  -> return Pin9
-            "pin10" -> return Pin10
-            "pin11" -> return Pin11
-            "pin17" -> return Pin17
-    parseJSON invalid = fail "can't decode gpio pin"
-
-instance ToJSON GPIOPin where
-    toJSON = toJSON . map toLower . show
-    toEncoding = toEncoding . map toLower . show
