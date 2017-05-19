@@ -3,10 +3,13 @@
 module MiscUtils where
 
 import Control.Exception
+import Control.Monad
+import Data.Aeson
 import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Unsafe as SB
+import qualified Data.ByteString.Lazy as LB
 import Data.Either
 import Data.List
 import Data.Maybe
@@ -20,6 +23,8 @@ import qualified Data.Vector.Storable as V
 import Foreign.Storable
 import Foreign.Marshal
 import Foreign.Ptr
+import Network.Socket hiding (send, sendTo, recv, recvFrom)
+import qualified Network.Socket.ByteString as NS
 import Numeric
 import System.IO
 import System.IO.Unsafe
@@ -78,6 +83,45 @@ openSerialWithErrorMsg p s =
 
 debugSend :: SerialPort -> ByteString -> IO ()
 debugSend p bs = putStrLn ("sending " ++ byteStringAsHex bs) >> send p bs >> return ()
+
+data QueryServerParams a = QueryServerParams {
+                               qspAddress :: !String
+                             , qspPort :: !Int
+                             , qspMaxMessageSize :: !Int
+                             , qspIsMessageCompleteFunc :: LB.ByteString -> Bool
+                             , qspMessageParser :: LB.ByteString -> a
+                         }
+
+queryServer :: QueryServerParams a -> ByteString -> IO a
+queryServer (QueryServerParams addr port maxSize completeP messageParser) msg = withSocketsDo $
+    getAddrInfo Nothing (Just addr) (Just (show port)) >>= \(serverAddr : _) ->
+    bracket (socket (addrFamily serverAddr) Stream defaultProtocol) (close) (\sock -> do
+        connect sock (addrAddress serverAddr)
+        NS.sendAll sock msg
+        receivedMessage <- recvMessage sock LB.empty
+        return (messageParser receivedMessage))
+    where
+        recvMessage :: Socket -> LB.ByteString -> IO LB.ByteString
+        recvMessage sock accum =
+            NS.recv sock 4096 >>= \buf ->
+            when (B.length buf == 0) (
+                throwIO (userError ("connection to " ++ addr ++ "closed unexpectedly"))) >>
+            let accum' = accum <> (LB.fromStrict buf)
+            in  when (LB.length accum' > fromIntegral maxSize) (
+                    throwIO (userError "message length exceeds max size")) >>
+                if (completeP accum')
+                then return accum'
+                else recvMessage sock accum'
+
+isCompleteJSONObject :: LB.ByteString -> Bool
+isCompleteJSONObject msg = case (decode msg :: Maybe Value) of
+                               Just _ -> True
+                               _      -> False
+
+decodeJSONObject :: (FromJSON a) => LB.ByteString -> a
+decodeJSONObject msg = case (decode msg) of
+                           Just v -> v
+                           _      -> throw (userError ("couldn't decode message " ++ show msg))
 
 byteStringAsHex :: ByteString -> String
 byteStringAsHex = concat . intersperse " " . map showByte . B.unpack

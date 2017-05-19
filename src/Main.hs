@@ -31,6 +31,7 @@ import MeasurementProgram
 import MeasurementProgramTypes
 import MeasurementProgramVerification
 import LightSources
+import MicroscopeRobot
 import MotorizedStage
 import MiscUtils
 import BinaryEncoding

@@ -34,6 +34,7 @@ executable RaspCuvettor
                      , async
                      , cereal
                      , deepseq
+                     , network
                      , text
                      , text-format
                      , time
