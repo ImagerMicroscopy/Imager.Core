@@ -31,7 +31,7 @@ import MeasurementProgram
 import MeasurementProgramTypes
 import MeasurementProgramVerification
 import LightSources
-import MicroscopeRobot
+import Robot
 import MotorizedStage
 import MiscUtils
 import BinaryEncoding
@@ -60,7 +60,7 @@ main =
 
     readAvailableFilterWheels >>= \availableFilterWheels ->
     readAvailableMotorizedStages >>= \availableStages ->
-    readAvailableMicroscopeRobots >>= \availableRobots ->
+    readAvailableRobots >>= \availableRobots ->
 
     withGPIOPins (zip requiredGPIOPins (repeat $ Output Low)) (\gpioHandles ->
     putStrLn ("opened GPIO pins: " ++ concat (map show requiredGPIOPins)) >>
@@ -74,8 +74,8 @@ main =
     withMotorizedStages availableStages (\motorizedStages ->
     putStrLn ("opened motorized stages") >>
 
-    withMicroscopeRobots availableRobots (\microscopeRobots ->
-    putStrLn ("opened microscope robots") >>
+    withRobots availableRobots (\robots ->
+    putStrLn ("opened robots") >>
 
     newMVar [] >>= \asyncSpectraMVar ->
     newMVar [] >>= \asyncStatusMessagesMVar ->
@@ -86,7 +86,7 @@ main =
         getDetectorWavelengths det >>= \(Right wl) ->
         return (byteStringFromVector wl) >>= \encodedWl ->
         putStrLn "ready to measure!" >>
-        let env = Environment lightSources filterWheels motorizedStages microscopeRobots gpioHandles
+        let env = Environment lightSources filterWheels motorizedStages robots gpioHandles
               extraPins det encodedWl asyncSpectraMVar asyncStatusMessagesMVar asyncProgramWorker
         in runServer 3200 messageHandler env serverSettings))))))
 
@@ -127,9 +127,9 @@ performAction env ListMotorizedStages = return (AvailableMotorizedStages mss, en
     where
         mss = envMotorizedStages env
 
-performAction env ListMicroscopeRobots = return (AvailableMicroscopeRobots robots, env)
+performAction env ListRobots = return (AvailableRobots robots, env)
     where
-        robots = envMicroscopeRobots env
+        robots = envRobots env
 
 performAction env (GetMotorizedStagePosition name) =
     getStagePositionLookup mss name >>= \result ->
@@ -146,19 +146,19 @@ performAction env (SetMotorizedStagePosition name ds) =
     where
         mss = envMotorizedStages env
 
-performAction env (ListMicroscopeRobotPrograms name) =
+performAction env (ListRobotPrograms name) =
     catch (listRobotPrograms robots name >>= \programs ->
-           return (MicroscopeRobotProgramsResponse programs, env))
+           return (RobotProgramsResponse programs, env))
           (\e -> return (StatusError (displayException (e :: IOException)), env))
     where
-        robots = envMicroscopeRobots env
+        robots = envRobots env
 
-performAction env (ExecuteMicroscopeRobotProgram name prog) =
+performAction env (ExecuteRobotProgram name prog) =
     catch (executeRobotProgram robots name prog >>
            return (StatusOK, env))
           (\e -> return (StatusError (displayException (e :: IOException)), env))
     where
-        robots = envMicroscopeRobots env
+        robots = envRobots env
 
 performAction env GetDetectorLimits =
     catch (ensureAsyncAcquisitionNotRunning env >>

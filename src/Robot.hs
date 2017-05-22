@@ -1,5 +1,5 @@
 {-# LANGUAGE BangPatterns, OverloadedStrings, ScopedTypeVariables #-}
-module MicroscopeRobot where
+module Robot where
 
 import Control.Exception
 import Data.Aeson
@@ -15,20 +15,20 @@ import System.IO
 
 import MiscUtils
 
-data MicroscopeRobotDesc = RobottorDesc {
+data RobotDesc = RobottorDesc {
                               roDescName :: !Text
                             , roDescIPAddress :: !String
                             , roDescPortNum :: !Int
                           }
                         deriving (Show, Read)
 
-data MicroscopeRobot = Robottor {
+data Robot = Robottor {
                           roName :: !Text
                         , roIPAddress :: !String
                         , roPortNum :: !Int
                        }
 
-instance ToJSON MicroscopeRobot where
+instance ToJSON Robot where
    toJSON s = object ["name" .= microscopeRobotName s]
 
 data RobottorRequest = ListRobottorPrograms
@@ -57,40 +57,40 @@ instance FromJSON RobottorResponse where
         _             -> fail "can't decode robottor response type"
   parseJSON _ = fail "can't decode robottor response"
 
-readAvailableMicroscopeRobots :: IO [MicroscopeRobotDesc]
-readAvailableMicroscopeRobots =
+readAvailableRobots :: IO [RobotDesc]
+readAvailableRobots =
    getExecutablePath >>= \exePath ->
    readFile (takeDirectory exePath </> confFilename) >>=
    return . read
    where
-     confFilename = "microscoperobots.txt"
+     confFilename = "robots.txt"
 
-microscopeRobotName :: MicroscopeRobot -> Text
+microscopeRobotName :: Robot -> Text
 microscopeRobotName (Robottor name _ _) = name
 
-withMicroscopeRobots :: [MicroscopeRobotDesc] -> ([MicroscopeRobot] -> IO a) -> IO a
-withMicroscopeRobots descs action =
-    bracket (openMicroscopeRobots descs) closeMicroscopeRobots action
+withRobots :: [RobotDesc] -> ([Robot] -> IO a) -> IO a
+withRobots descs action =
+    bracket (openRobots descs) closeRobots action
 
-openMicroscopeRobots :: [MicroscopeRobotDesc] -> IO [MicroscopeRobot]
-openMicroscopeRobots = mapM openRobot
+openRobots :: [RobotDesc] -> IO [Robot]
+openRobots = mapM openRobot
     where
         openRobot (RobottorDesc name ip port) = return (Robottor name ip port)
         openRobot _ = throwIO (userError "opening unknown type of microscope robot")
 
-closeMicroscopeRobots :: [MicroscopeRobot] -> IO ()
-closeMicroscopeRobots _ = return ()
+closeRobots :: [Robot] -> IO ()
+closeRobots _ = return ()
 
-lookupRobot :: [MicroscopeRobot] -> Text -> Maybe MicroscopeRobot
+lookupRobot :: [Robot] -> Text -> Maybe Robot
 lookupRobot mrs name = case (filter ((==) name . microscopeRobotName) mrs) of
                            []      -> Nothing
                            (m : _) -> Just m
-isKnownMicroscopeRobot :: [MicroscopeRobot] -> Text -> Bool
-isKnownMicroscopeRobot mrs name = isJust (lookupRobot mrs name)
+isKnownRobot :: [Robot] -> Text -> Bool
+isKnownRobot mrs name = isJust (lookupRobot mrs name)
 
-listRobotPrograms :: [MicroscopeRobot] -> Text -> IO [Text]
+listRobotPrograms :: [Robot] -> Text -> IO [Text]
 listRobotPrograms mrs name
-    | not (isKnownMicroscopeRobot mrs name) = throwIO (userError ("unknown robot " ++ T.unpack name))
+    | not (isKnownRobot mrs name) = throwIO (userError ("unknown robot " ++ T.unpack name))
     | otherwise = let robot = fromJust (lookupRobot mrs name)
                   in  listRobotPrograms' robot
     where
@@ -100,9 +100,9 @@ listRobotPrograms mrs name
           in  queryServer serverParams queryMsg >>= \(RobottorProgramListResponse ps) ->
               return ps
 
-executeRobotProgram :: [MicroscopeRobot] -> Text -> Text -> IO ()
+executeRobotProgram :: [Robot] -> Text -> Text -> IO ()
 executeRobotProgram mrs name progName
-    | not (isKnownMicroscopeRobot mrs name) = throwIO (userError ("unknown robot " ++ T.unpack name))
+    | not (isKnownRobot mrs name) = throwIO (userError ("unknown robot " ++ T.unpack name))
     | otherwise = let robot = fromJust (lookupRobot mrs name)
                   in  executeRobotProgram' robot progName
     where
