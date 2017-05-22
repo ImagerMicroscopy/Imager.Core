@@ -53,7 +53,7 @@ instance FromJSON RobottorResponse where
                               "ok"    -> return OKRobottorResponse
                               "error" -> ErrorRobottorResponse <$> v .: "error"
                               _       -> fail "unknown status"
-        "programlist" -> RobottorProgramListResponse <$> v .: "programNames"
+        "programlist" -> RobottorProgramListResponse <$> v .: "programnames"
         _             -> fail "can't decode robottor response type"
   parseJSON _ = fail "can't decode robottor response"
 

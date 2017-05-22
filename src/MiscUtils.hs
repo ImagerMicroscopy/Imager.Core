@@ -94,18 +94,20 @@ data QueryServerParams a = QueryServerParams {
 
 queryServer :: QueryServerParams a -> ByteString -> IO a
 queryServer (QueryServerParams addr port maxSize completeP messageParser) msg = withSocketsDo $
-    getAddrInfo Nothing (Just addr) (Just (show port)) >>= \(serverAddr : _) ->
+    getAddrInfo (Just hints) (Just addr) (Just (show port)) >>= \(serverAddr : _) ->
     bracket (socket (addrFamily serverAddr) Stream defaultProtocol) (close) (\sock -> do
         connect sock (addrAddress serverAddr)
         NS.sendAll sock msg
         receivedMessage <- recvMessage sock LB.empty
         return (messageParser receivedMessage))
     where
+        hints = defaultHints {addrSocketType = Stream , addrFamily = AF_INET}
         recvMessage :: Socket -> LB.ByteString -> IO LB.ByteString
         recvMessage sock accum =
             NS.recv sock 4096 >>= \buf ->
+            putStrLn (T.unpack . T.decodeUtf8 $ buf) >>
             when (B.length buf == 0) (
-                throwIO (userError ("connection to " ++ addr ++ "closed unexpectedly"))) >>
+                throwIO (userError ("connection to " ++ addr ++ " closed unexpectedly"))) >>
             let accum' = accum <> (LB.fromStrict buf)
             in  when (LB.length accum' > fromIntegral maxSize) (
                     throwIO (userError "message length exceeds max size")) >>
@@ -115,13 +117,13 @@ queryServer (QueryServerParams addr port maxSize completeP messageParser) msg = 
 
 isCompleteJSONObject :: LB.ByteString -> Bool
 isCompleteJSONObject msg = case (decode msg :: Maybe Value) of
-                               Just _ -> True
-                               _      -> False
+                               Just (Object _) -> True
+                               _               -> False
 
 decodeJSONObject :: (FromJSON a) => LB.ByteString -> a
 decodeJSONObject msg = case (decode msg) of
                            Just v -> v
-                           _      -> throw (userError ("couldn't decode message " ++ show msg))
+                           _      -> throw (userError ("couldn't decode message " ++ (T.unpack . T.decodeUtf8 . LB.toStrict $ msg)))
 
 byteStringAsHex :: ByteString -> String
 byteStringAsHex = concat . intersperse " " . map showByte . B.unpack

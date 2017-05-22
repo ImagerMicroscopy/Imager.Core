@@ -58,6 +58,7 @@ executable RaspCuvettor
                      , MeasurementProgram
                      , MeasurementProgramTypes
                      , MeasurementProgramVerification
+                     , Robot
                      , Detector
                      , AvailableDetector
                      , MiscUtils
