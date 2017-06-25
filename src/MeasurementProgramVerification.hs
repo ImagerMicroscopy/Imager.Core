@@ -4,6 +4,7 @@ module MeasurementProgramVerification where
 import Control.Exception
 import Data.Either
 import Data.List
+import Data.Maybe
 import Data.Text (Text)
 import qualified Data.Text as T
 
@@ -12,40 +13,48 @@ import LightSources
 import MeasurementProgramTypes
 import MotorizedStage
 import MiscUtils
+import Robot
 
-validateMeasurementElementThrows :: [LightSource] -> [FilterWheel] -> [MotorizedStage] -> MeasurementElement -> IO ()
-validateMeasurementElementThrows lss fws mss me = case (validateMeasurementElement lss fws mss me) of
-                                        Left e -> throwIO (userError e)
-                                        Right () -> return ()
+type RobotInfo = (Text, [Text]) -- robot name, robot programs
 
-validateMeasurementElement :: [LightSource] -> [FilterWheel] -> [MotorizedStage] -> MeasurementElement -> Either String ()
-validateMeasurementElement lss fws _ (MEDetection dets)
+validateMeasurementElementThrows :: [LightSource] -> [FilterWheel] -> [MotorizedStage] -> [RobotInfo] -> MeasurementElement -> ()
+validateMeasurementElementThrows lss fws mss rss me = case (validateMeasurementElement lss fws mss rss me) of
+                                        Left e -> throw (userError e)
+                                        Right () -> ()
+
+validateMeasurementElement :: [LightSource] -> [FilterWheel] -> [MotorizedStage] -> [RobotInfo] -> MeasurementElement -> Either String ()
+validateMeasurementElement lss fws _ _ (MEDetection dets)
     | null dets = Left "no detection specified"
     | otherwise = sequenceEither (map (validateDetection lss fws) dets)
-validateMeasurementElement lss _ _ (MEIrradiation dur ips)
+validateMeasurementElement lss _ _ _ (MEIrradiation dur ips)
     | (dur < 0.0) || (dur > 3600) = Left ("invalid irradiation duration: " ++ show dur)
     | otherwise = sequenceEither (map (validateIrradiation lss) ips)
-validateMeasurementElement _ _ _ (MEWait dur)
+validateMeasurementElement _ _ _ _ (MEWait dur)
     | (dur < 0.0) || (dur > 3600) = Left ("invalid wait duration: " ++ show dur)
     | otherwise = Right ()
-validateMeasurementElement lss fws sts (MEDoTimes n es)
+validateMeasurementElement _ _ _ rss (MEExecuteRobotProgram rName pName)
+    | not (rName `elem` (map fst rss)) = Left ("unknown robot \"" ++ T.unpack rName ++ "\"")
+    | let progs = fromJust (lookup rName rss)
+      in  not (pName `elem` progs) = Left ("unknown robot program \"" ++ T.unpack pName ++ "\"")
+    | otherwise = Right ()
+validateMeasurementElement lss fws sts rss (MEDoTimes n es)
     | (n < 0) || (n > (floor 10e6)) = Left ("invalid number of times to repeat: " ++ show n)
     | null es = Left "do times loop but no actions"
-    | otherwise = sequenceEither (map (validateMeasurementElement lss fws sts) es)
-validateMeasurementElement lss fws _ (MEFastAcquisitionLoop n det)
+    | otherwise = sequenceEither (map (validateMeasurementElement lss fws sts rss) es)
+validateMeasurementElement lss fws _ _ (MEFastAcquisitionLoop n det)
     | (n < 0) || (n > (floor 10e6)) = Left ("invalid number of times to repeat: " ++ show n)
     | otherwise = validateDetection lss fws det
-validateMeasurementElement lss fws sts (METimeLapse n dur es)
+validateMeasurementElement lss fws sts rss (METimeLapse n dur es)
     | (n < 0) || (n > (floor 10e6)) = Left ("invalid number of times to repeat: " ++ show n)
     | (dur < 0.0) || (dur > 3600 * 2) = Left ("invalid time lapse duration: " ++ show dur)
     | null es = Left "timelapse loop but no actions"
-    | otherwise = sequenceEither (map (validateMeasurementElement lss fws sts) es)
-validateMeasurementElement lss fws sts (MEStageLoop stageName pos es)
+    | otherwise = sequenceEither (map (validateMeasurementElement lss fws sts rss) es)
+validateMeasurementElement lss fws sts rss (MEStageLoop stageName pos es)
     | null pos = Left ("no positions in stage loop")
     | T.null stageName = Left ("no stage name")
     | stageName `notElem` stageNames = Left ("can't find stage named " ++ T.unpack stageName)
     | null es = Left "stage loop but no actions"
-    | otherwise = sequenceEither (map (validateMeasurementElement lss fws sts) es)
+    | otherwise = sequenceEither (map (validateMeasurementElement lss fws sts rss) es)
     where
         stageNames = map motorizedStageName sts
 

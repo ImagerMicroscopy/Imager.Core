@@ -12,14 +12,16 @@ import Detector
 import LightSources
 import FilterWheel
 import MotorizedStage
+import Robot
 
 data MeasurementElement = MEDetection [DetectionParams]
-                        | MEIrradiation Double [IrradiationParams]
+                        | MEIrradiation !Double [IrradiationParams]
                         | MEWait Double
-                        | MEDoTimes Int [MeasurementElement]
+                        | MEExecuteRobotProgram !Text !Text
+                        | MEDoTimes !Int [MeasurementElement]
                         | MEFastAcquisitionLoop Int DetectionParams
-                        | METimeLapse Int Double [MeasurementElement]
-                        | MEStageLoop Text [(Text, StagePosition)] [MeasurementElement]
+                        | METimeLapse !Int !Double [MeasurementElement]
+                        | MEStageLoop !Text [(Text, StagePosition)] [MeasurementElement]
                         deriving (Show)
 
 data ProgramEnvironment a = ProgramEnvironment {
@@ -28,6 +30,7 @@ data ProgramEnvironment a = ProgramEnvironment {
                               , peLightSources :: [LightSource]
                               , peFilterWheels :: [FilterWheel]
                               , peMotorizedStages :: [MotorizedStage]
+                              , peRobots :: [Robot]
                               , peDataMVar :: MVar [[AcquiredData]]
                               , peStatusMVar :: MVar [Text]
                             }
@@ -60,6 +63,7 @@ instance FromJSON MeasurementElement where
           "detection"   -> MEDetection <$> v .: "detection"
           "irradiation" -> MEIrradiation <$> v .: "duration" <*> v .: "irradiation"
           "wait"        -> MEWait <$> v .: "duration"
+          "executerobotprogram" -> MEExecuteRobotProgram <$> v .: "robotname" <*> v .: "programname"
           "dotimes"     -> MEDoTimes <$> v .: "ntotal" <*> v .: "elements"
           "timelapse"   -> METimeLapse <$> v .: "ntotal" <*> v .: "timedelta" <*> v .: "elements"
           -- no FromJSON instance for MEFastAcquisitionLoop because it is automatically applied
@@ -70,6 +74,7 @@ instance ToJSON MeasurementElement where
   toEncoding (MEDetection dets) = pairs ("elementtype" .= ("detection" :: Text) <> "detection" .= dets)
   toEncoding (MEIrradiation dur ip) = pairs ("elementtype" .= ("irradiation" :: Text) <> "duration" .= dur <> "irradiation" .= ip)
   toEncoding (MEWait d) = pairs ("elementtype" .= ("wait" :: Text) <> "duration" .= d)
+  toEncoding (MEExecuteRobotProgram n p) = pairs ("elementtype" .= ("executerobotprogram" :: Text) <> "robotname" .= n <> "programname" .= p)
   toEncoding (MEDoTimes n es) = pairs ("elementtype" .= ("dotimes" :: Text) <> "ntotal" .= n <> "elements" .= es)
   toEncoding (METimeLapse n td es) = pairs ("elementtype" .= ("timelapse" :: Text) <> "ntotal" .= n <> "timedelta" .= td <> "elements" .= es)
   toEncoding (MEFastAcquisitionLoop n det) = pairs ("elementtype" .= ("fastacquisitionloop" :: Text) <> "ntotal" .= n <> "detection" .= det)

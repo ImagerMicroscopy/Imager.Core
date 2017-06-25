@@ -57,7 +57,6 @@ data RequestMessage = AcquireData !DetectionParams
                     | GetMotorizedStagePosition !Text
                     | SetMotorizedStagePosition !Text !(Double, Double, Double)
                     | ListRobotPrograms !Text
-                    | ExecuteRobotProgram !Text !Text
                     | GetDetectorLimits
                     | SetDetectorTemperature !Double
                     | GetDetectorTemperature
@@ -89,7 +88,6 @@ instance ToJSON RequestMessage where
     toEncoding (GetMotorizedStagePosition name) = pairs ("action" .= ("getmotorizedstageposition" :: Text) <> "name" .= name)
     toEncoding (SetMotorizedStagePosition name ds) = pairs ("action" .= ("setmotorizedstageposition" :: Text) <> "name" .= name <> "position" .= ds)
     toEncoding (ListRobotPrograms name) = pairs ("action" .= ("listrobotprograms" :: Text) <> "name" .= name)
-    toEncoding (ExecuteRobotProgram name prog) = pairs ("action" .= ("executerobotprogram" :: Text) <> "name" .= name <> "program" .= prog)
     toEncoding GetDetectorLimits = pairs ("action" .= ("getdetectorlimits" :: Text))
     toEncoding (SetDetectorTemperature t) = pairs ("action" .= ("setdetectortemperature" :: Text) <> "temperature" .= t)
     toEncoding GetDetectorTemperature = pairs ("action" .= ("getdetectortemperature" :: Text))
@@ -117,7 +115,6 @@ instance FromJSON RequestMessage where
             "getmotorizedstageposition" -> GetMotorizedStagePosition <$> v .: "name"
             "setmotorizedstageposition" -> SetMotorizedStagePosition <$> v .: "name" <*> v .: "position"
             "listrobotprograms" -> ListRobotPrograms <$> v .: "name"
-            "executerobotprogram" -> ExecuteRobotProgram <$> v .: "name" <*> v .: "program"
             "getdetectorlimits" -> return GetDetectorLimits
             "setdetectortemperature" -> SetDetectorTemperature <$> v .: "temperature"
             "getdetectortemperature" -> return GetDetectorTemperature

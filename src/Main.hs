@@ -153,13 +153,6 @@ performAction env (ListRobotPrograms name) =
     where
         robots = envRobots env
 
-performAction env (ExecuteRobotProgram name prog) =
-    catch (executeRobotProgram robots name prog >>
-           return (StatusOK, env))
-          (\e -> return (StatusError (displayException (e :: IOException)), env))
-    where
-        robots = envRobots env
-
 performAction env GetDetectorLimits =
     catch (ensureAsyncAcquisitionNotRunning env >>
            getDetectorLimits det >>= \limits ->
@@ -275,11 +268,12 @@ performAction env IsAsyncAcquisitionRunning =
 startAsyncAcquisition :: Detector a => Environment a -> MeasurementElement -> IO (Async (), MVar [[AcquiredData]], MVar [Text])
 startAsyncAcquisition env me =
     ensureAsyncAcquisitionNotRunning env >>
-    validateMeasurementElementThrows lightSources filterWheels motorizedStages me >>
+    availableRobotsAndPrograms robots >>= \robotInfo ->
+    evaluate (validateMeasurementElementThrows lightSources filterWheels motorizedStages robotInfo me) >>
     newMVar [] >>= \spectraMVar ->
     newMVar [] >>= \statusMVar ->
     getTime Monotonic >>= \startTime ->
-    async (executeMeasurement (ProgramEnvironment detector startTime lightSources filterWheels motorizedStages spectraMVar statusMVar) me >>
+    async (executeMeasurement (ProgramEnvironment detector startTime lightSources filterWheels motorizedStages robots spectraMVar statusMVar) me >>
            return ()) >>= \asyncWorker ->
     return (asyncWorker, spectraMVar, statusMVar)
     where
@@ -287,6 +281,7 @@ startAsyncAcquisition env me =
         lightSources = envLightSources env
         filterWheels = envFilterWheels env
         motorizedStages = envMotorizedStages env
+        robots = envRobots env
 
 ensureAsyncAcquisitionNotRunning :: Environment a -> IO ()
 ensureAsyncAcquisitionNotRunning env =

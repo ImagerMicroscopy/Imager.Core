@@ -28,6 +28,7 @@ import MeasurementProgramTypes
 import MeasurementProgramVerification
 import MotorizedStage
 import MiscUtils
+import Robot
 
 executeMeasurement :: Detector a => ProgramEnvironment a -> MeasurementElement -> IO ()
 executeMeasurement env me = executeMeasurementElement env (insertFastAcquisitionLoops me)
@@ -59,6 +60,11 @@ executeMeasurementElement env (MEIrradiation dur ips) =
 executeMeasurementElement env (MEWait dur) =
     withStatusMessage env (T.format "waiting {} s" (T.Only dur)) (
         threadDelay (round $ dur * 1e6))
+executeMeasurementElement env (MEExecuteRobotProgram rName pName) =
+    withStatusMessage env (T.format "executing program {} on {}" (rName, pName)) (
+        executeRobotProgram robots rName pName)
+    where
+        robots = peRobots env
 executeMeasurementElement env (MEDoTimes n es) =
     withStatusMessage env "do times" (
         forM_ (zip [1 ..] (take n . repeat $ es)) (\(index :: Int, ses) ->

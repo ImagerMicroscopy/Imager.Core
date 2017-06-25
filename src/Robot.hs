@@ -29,7 +29,7 @@ data Robot = Robottor {
                        }
 
 instance ToJSON Robot where
-   toJSON s = object ["name" .= microscopeRobotName s]
+   toJSON s = object ["name" .= robotName s]
 
 data RobottorRequest = ListRobottorPrograms
                      | ExecuteRobottorProgram !Text
@@ -65,8 +65,8 @@ readAvailableRobots =
    where
      confFilename = "robots.txt"
 
-microscopeRobotName :: Robot -> Text
-microscopeRobotName (Robottor name _ _) = name
+robotName :: Robot -> Text
+robotName (Robottor name _ _) = name
 
 withRobots :: [RobotDesc] -> ([Robot] -> IO a) -> IO a
 withRobots descs action =
@@ -81,8 +81,13 @@ openRobots = mapM openRobot
 closeRobots :: [Robot] -> IO ()
 closeRobots _ = return ()
 
+availableRobotsAndPrograms :: [Robot] -> IO [(Text, [Text])]
+availableRobotsAndPrograms rss =
+    let robotNames = map robotName rss
+    in  zip robotNames <$> mapM (listRobotPrograms rss) robotNames
+
 lookupRobot :: [Robot] -> Text -> Maybe Robot
-lookupRobot mrs name = case (filter ((==) name . microscopeRobotName) mrs) of
+lookupRobot mrs name = case (filter ((==) name . robotName) mrs) of
                            []      -> Nothing
                            (m : _) -> Just m
 isKnownRobot :: [Robot] -> Text -> Bool
