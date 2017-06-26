@@ -105,7 +105,6 @@ queryServer (QueryServerParams addr port maxSize completeP messageParser) msg = 
         recvMessage :: Socket -> LB.ByteString -> IO LB.ByteString
         recvMessage sock accum =
             NS.recv sock 4096 >>= \buf ->
-            putStrLn (T.unpack . T.decodeUtf8 $ buf) >>
             when (B.length buf == 0) (
                 throwIO (userError ("connection to " ++ addr ++ " closed unexpectedly"))) >>
             let accum' = accum <> (LB.fromStrict buf)

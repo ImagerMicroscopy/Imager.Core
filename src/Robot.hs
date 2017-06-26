@@ -102,8 +102,8 @@ listRobotPrograms mrs name
       listRobotPrograms' (Robottor _ ip port) =
           let serverParams = QueryServerParams ip port (floor 1e6) isCompleteJSONObject decodeJSONObject
               queryMsg = (LB.toStrict . encode) (ListRobottorPrograms)
-          in  queryServer serverParams queryMsg >>= \(RobottorProgramListResponse ps) ->
-              return ps
+          in  (queryServer serverParams queryMsg >>= \(RobottorProgramListResponse ps) ->
+              return ps) `catch` \(e :: IOException) -> throw (userError "can't communicate with Robottor program")
 
 executeRobotProgram :: [Robot] -> Text -> Text -> IO ()
 executeRobotProgram mrs name progName
@@ -114,7 +114,7 @@ executeRobotProgram mrs name progName
         executeRobotProgram' (Robottor _ ip port) progName =
             let serverParams = QueryServerParams ip port (floor 1e6) isCompleteJSONObject decodeJSONObject
                 queryMsg = (LB.toStrict . encode) (ExecuteRobottorProgram progName)
-            in  queryServer serverParams queryMsg >>= \response ->
+            in  queryServer serverParams queryMsg `catch` (\(e :: IOException) -> throw (userError "can't communicate with Robottor program")) >>= \response ->
                 case response of
                     OKRobottorResponse        -> return ()
                     ErrorRobottorResponse err -> throwIO (userError ("error from robottor: " ++ T.unpack err))

@@ -229,9 +229,9 @@ performAction env (ExecuteMeasurementProgram me) =
           (\e -> return (StatusError (displayException (e :: IOException)), env))
 
 performAction env FetchAsyncData =
+    asyncAcquisitionRunning env >>= \asyncIsRunning ->
     modifyMVar dataMVar (\s -> return ([], s)) >>= \newData ->
     asyncAcquisitionErrorMessage env >>= \asyncErrorMsg ->
-    asyncAcquisitionRunning env >>= \asyncIsRunning ->
     return (dataResponse asyncErrorMsg asyncIsRunning (map reverse newData), env)
     where
         dataMVar = envAsyncDataMVar env
