@@ -268,7 +268,7 @@ performAction env IsAsyncAcquisitionRunning =
 startAsyncAcquisition :: Detector a => Environment a -> MeasurementElement -> IO (Async (), MVar [[AcquiredData]], MVar [Text])
 startAsyncAcquisition env me =
     ensureAsyncAcquisitionNotRunning env >>
-    availableRobotsAndPrograms robots >>= \robotInfo ->
+    usedRobotsAndTheirPrograms >>= \robotInfo ->
     evaluate (validateMeasurementElementThrows lightSources filterWheels motorizedStages robotInfo me) >>
     newMVar [] >>= \spectraMVar ->
     newMVar [] >>= \statusMVar ->
@@ -277,6 +277,8 @@ startAsyncAcquisition env me =
            return ()) >>= \asyncWorker ->
     return (asyncWorker, spectraMVar, statusMVar)
     where
+        robotsUsedInProgram = map fst (robotProgramsUsedIn me)
+        usedRobotsAndTheirPrograms = zip robotsUsedInProgram <$> mapM (listRobotPrograms robots) robotsUsedInProgram
         detector = envDetector env
         lightSources = envLightSources env
         filterWheels = envFilterWheels env
