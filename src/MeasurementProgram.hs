@@ -5,6 +5,7 @@ module MeasurementProgram (
 ) where
 
 import Control.Concurrent
+import Control.Concurrent.Async
 import Control.Exception
 import Control.Monad
 import Control.Monad.Trans.Except
@@ -31,8 +32,9 @@ import MiscUtils
 import Robot
 
 executeMeasurement :: Detector a => ProgramEnvironment a -> MeasurementElement -> IO ()
-executeMeasurement env me = executeMeasurementElement env (insertFastAcquisitionLoops me)
-                                `onException` (deactivateAllLightSources usedLightSources)
+executeMeasurement env me = withAsync (forever $ resetSystemSleepTimer >> threadDelay (round 60.0e6)) (\_ ->
+                                executeMeasurementElement env (insertFastAcquisitionLoops me)
+                                `onException` (deactivateAllLightSources usedLightSources))
     where
         lss = peLightSources env
         usedLightSourceNames = lightSourceNamesUsedIn me

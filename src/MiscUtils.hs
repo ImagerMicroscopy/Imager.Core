@@ -124,6 +124,17 @@ decodeJSONObject msg = case (decode msg) of
                            Just v -> v
                            _      -> throw (userError ("couldn't decode message " ++ (T.unpack . T.decodeUtf8 . LB.toStrict $ msg)))
 
+resetSystemSleepTimer :: IO ()
+#ifdef WINDOWS
+resetSystemSleepTimer = cSetThreadExecutionState gES_SYSTEM_REQUIRED >> return ()
+foreign import stdcall unsafe "Windows.h SetThreadExecutionState"
+    cSetThreadExecutionState :: Word32 -> IO Word32
+gES_SYSTEM_REQUIRED :: Word32
+gES_SYSTEM_REQUIRED = 0x00000001
+#else
+resetSystemSleepTimer = return ()
+#endif
+
 byteStringAsHex :: ByteString -> String
 byteStringAsHex = concat . intersperse " " . map showByte . B.unpack
     where

@@ -76,3 +76,5 @@ executable RaspCuvettor
   if (flag(withdummydetector))
       cpp-options:     -DWITH_DUMMYDETECTOR
       other-modules:   DummyDetector
+  if (os(windows))
+      cpp-options:     -DWINDOWS
