@@ -29,7 +29,8 @@ import Numeric
 import System.IO
 import System.IO.Unsafe
 import System.Clock
-import System.Hardware.Serialport
+import System.Hardware.Serialport hiding (timeout)
+import System.Timeout
 
 sequenceExcept :: [IO (Either String ())] -> IO (Either String ())
 sequenceExcept [] = return (Right ())
@@ -95,11 +96,14 @@ data QueryServerParams a = QueryServerParams {
 queryServer :: QueryServerParams a -> ByteString -> IO a
 queryServer (QueryServerParams addr port maxSize completeP messageParser) msg = withSocketsDo $
     getAddrInfo (Just hints) (Just addr) (Just (show port)) >>= \(serverAddr : _) ->
-    bracket (socket (addrFamily serverAddr) Stream defaultProtocol) (close) (\sock -> do
-        connect sock (addrAddress serverAddr)
-        NS.sendAll sock msg
-        receivedMessage <- recvMessage sock LB.empty
-        return (messageParser receivedMessage))
+    bracket (socket (addrFamily serverAddr) Stream defaultProtocol) (close) (\sock ->
+        timeout (round 2e6) ( do
+            connect sock (addrAddress serverAddr)
+            NS.sendAll sock msg
+            recvMessage sock LB.empty) >>= \tResult ->
+        case tResult of
+            Nothing  -> throwIO (userError ("timeout performing query to " ++ show addr ++ ":" ++ show port))
+            Just msg -> return (messageParser msg))
     where
         hints = defaultHints {addrSocketType = Stream , addrFamily = AF_INET}
         recvMessage :: Socket -> LB.ByteString -> IO LB.ByteString

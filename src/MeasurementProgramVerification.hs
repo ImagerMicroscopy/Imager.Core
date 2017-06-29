@@ -2,14 +2,11 @@
 module MeasurementProgramVerification (
     validateMeasurementElementThrows
   , validateMeasurementElement
-  , robotProgramsUsedIn
 ) where
 
 import Control.Exception
 import Data.Either
 import Data.List
-import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as M
 import Data.Maybe
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -94,13 +91,3 @@ validateIrradiation lightSources IrradiationParams{..} =
                  in if (T.null errMsg)
                     then Right ()
                     else Left ("invalid light source parameters for " ++ T.unpack ipLightSourceName ++ ": " ++ T.unpack errMsg)
-
-robotProgramsUsedIn :: MeasurementElement -> [(Text, [Text])]
-robotProgramsUsedIn me = M.toList (robotProgramsUsedIn' M.empty me)
-    where
-        robotProgramsUsedIn' :: Map Text [Text] -> MeasurementElement -> Map Text [Text]
-        robotProgramsUsedIn' m (MEExecuteRobotProgram robotName progName) =  M.insertWith (++) robotName [progName] m
-        robotProgramsUsedIn' m (MEDoTimes _ mes) = M.unionWith (++) m (M.unionsWith (++) (map (robotProgramsUsedIn' M.empty) mes))
-        robotProgramsUsedIn' m (METimeLapse _ _ mes) = M.unionWith (++) m (M.unionsWith (++) (map (robotProgramsUsedIn' M.empty) mes))
-        robotProgramsUsedIn' m (MEStageLoop _ _ mes) = M.unionWith (++) m (M.unionsWith (++) (map (robotProgramsUsedIn' M.empty) mes))
-        robotProgramsUsedIn' m _ = m

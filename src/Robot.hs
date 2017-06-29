@@ -33,6 +33,7 @@ instance ToJSON Robot where
 
 data RobottorRequest = ListRobottorPrograms
                      | ExecuteRobottorProgram !Text
+                     | AbortProgramExecution
                      deriving (Show)
 
 data RobottorResponse = OKRobottorResponse
@@ -43,6 +44,7 @@ data RobottorResponse = OKRobottorResponse
 instance ToJSON RobottorRequest where
   toJSON ListRobottorPrograms = object ["type" .= ("listprograms" :: Text)]
   toJSON (ExecuteRobottorProgram prog) = object ["type" .= ("executeprogram" :: Text), "programname" .= prog]
+  toJSON AbortProgramExecution = object ["type" .= ("abortprogramexecution" :: Text)]
 
 instance FromJSON RobottorResponse where
   parseJSON (Object v) =
@@ -84,37 +86,38 @@ closeRobots _ = return ()
 availableRobotsAndPrograms :: [Robot] -> IO [(Text, [Text])]
 availableRobotsAndPrograms rss =
     let robotNames = map robotName rss
-    in  zip robotNames <$> mapM (listRobotPrograms rss) robotNames
+    in  zip robotNames <$> mapM listRobotPrograms rss
 
 lookupRobot :: [Robot] -> Text -> Maybe Robot
 lookupRobot mrs name = case (filter ((==) name . robotName) mrs) of
                            []      -> Nothing
                            (m : _) -> Just m
+lookupRobotThrows :: [Robot] -> Text -> Robot
+lookupRobotThrows rs n = case lookupRobot rs n of
+                             Just r  -> r
+                             Nothing -> throw (userError ("no robot " ++ T.unpack n))
+
 isKnownRobot :: [Robot] -> Text -> Bool
 isKnownRobot mrs name = isJust (lookupRobot mrs name)
 
-listRobotPrograms :: [Robot] -> Text -> IO [Text]
-listRobotPrograms mrs name
-    | not (isKnownRobot mrs name) = throwIO (userError ("unknown robot " ++ T.unpack name))
-    | otherwise = let robot = fromJust (lookupRobot mrs name)
-                  in  listRobotPrograms' robot
-    where
-      listRobotPrograms' (Robottor _ ip port) =
-          let serverParams = QueryServerParams ip port (floor 1e6) isCompleteJSONObject decodeJSONObject
-              queryMsg = (LB.toStrict . encode) (ListRobottorPrograms)
-          in  (queryServer serverParams queryMsg >>= \(RobottorProgramListResponse ps) ->
-              return ps) `catch` \(e :: IOException) -> throw (userError "can't communicate with Robottor program")
+listRobotPrograms :: Robot -> IO [Text]
+listRobotPrograms (Robottor _ ip port) =
+    let serverParams = QueryServerParams ip port (floor 1e6) isCompleteJSONObject decodeJSONObject
+        queryMsg = (LB.toStrict . encode) ListRobottorPrograms
+    in  (queryServer serverParams queryMsg >>= \(RobottorProgramListResponse ps) ->
+      return ps) `catch` \(e :: IOException) -> throw (userError "can't communicate with Robottor program")
 
-executeRobotProgram :: [Robot] -> Text -> Text -> IO ()
-executeRobotProgram mrs name progName
-    | not (isKnownRobot mrs name) = throwIO (userError ("unknown robot " ++ T.unpack name))
-    | otherwise = let robot = fromJust (lookupRobot mrs name)
-                  in  executeRobotProgram' robot progName
-    where
-        executeRobotProgram' (Robottor _ ip port) progName =
-            let serverParams = QueryServerParams ip port (floor 1e6) isCompleteJSONObject decodeJSONObject
-                queryMsg = (LB.toStrict . encode) (ExecuteRobottorProgram progName)
-            in  queryServer serverParams queryMsg `catch` (\(e :: IOException) -> throw (userError "can't communicate with Robottor program")) >>= \response ->
-                case response of
-                    OKRobottorResponse        -> return ()
-                    ErrorRobottorResponse err -> throwIO (userError ("error from robottor: " ++ T.unpack err))
+executeRobotProgram :: Robot -> Text -> IO ()
+executeRobotProgram r@(Robottor _ ip port) progName = handleRobottorRequest r (ExecuteRobottorProgram progName)
+
+abortRobotProgramExecution :: Robot -> IO ()
+abortRobotProgramExecution r@(Robottor _ ip port) = handleRobottorRequest r AbortProgramExecution
+
+handleRobottorRequest :: Robot -> RobottorRequest -> IO ()
+handleRobottorRequest (Robottor _ ip port) req =
+    let serverParams = QueryServerParams ip port (floor 1e6) isCompleteJSONObject decodeJSONObject
+        queryMsg = (LB.toStrict . encode) req
+    in  queryServer serverParams queryMsg `catch` (\(e :: IOException) -> throw (userError "can't communicate with Robottor program")) >>= \response ->
+        case response of
+            OKRobottorResponse        -> return ()
+            ErrorRobottorResponse err -> throwIO (userError ("error from robottor: " ++ T.unpack err))

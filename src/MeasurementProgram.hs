@@ -2,6 +2,7 @@
 module MeasurementProgram (
     executeMeasurement
   , executeDetection
+  , robotProgramsUsedIn
 ) where
 
 import Control.Concurrent
@@ -12,9 +13,11 @@ import Control.Monad.Trans.Except
 import Data.Either
 import Data.List
 import Data.Monoid
-import Data.Text (Text)
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as M
 import Data.Set (Set)
 import qualified Data.Set as S
+import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as LT
 import qualified Data.Text.Format as T
@@ -34,11 +37,15 @@ import Robot
 executeMeasurement :: Detector a => ProgramEnvironment a -> MeasurementElement -> IO ()
 executeMeasurement env me = withAsync (forever $ resetSystemSleepTimer >> threadDelay (round 60.0e6)) (\_ ->
                                 executeMeasurementElement env (insertFastAcquisitionLoops me)
-                                `onException` (deactivateAllLightSources usedLightSources))
+                                `onException` (deactivateAllLightSources usedLightSources >>
+                                               mapM_ abortRobotProgramExecution usedRobots))
     where
         lss = peLightSources env
+        robots = peRobots env
         usedLightSourceNames = lightSourceNamesUsedIn me
         usedLightSources = map (lookupLightSource lss) usedLightSourceNames
+        usedRobotNames = map fst (robotProgramsUsedIn me)
+        usedRobots = map (lookupRobotThrows robots) usedRobotNames
 
 executeMeasurementElements :: Detector a => ProgramEnvironment a -> [MeasurementElement] -> IO ()
 executeMeasurementElements env es = mapM_ (executeMeasurementElement env) es
@@ -64,7 +71,7 @@ executeMeasurementElement env (MEWait dur) =
         threadDelay (round $ dur * 1e6))
 executeMeasurementElement env (MEExecuteRobotProgram rName pName) =
     withStatusMessage env (T.format "executing program {} on {}" (rName, pName)) (
-        executeRobotProgram robots rName pName)
+        executeRobotProgram (lookupRobotThrows robots rName) pName)
     where
         robots = peRobots env
 executeMeasurementElement env (MEDoTimes n es) =
@@ -180,6 +187,16 @@ lightSourceNamesUsedIn me = S.toList (lightSourceNamesUsedIn' S.empty me)
         lightSourceNamesUsedIn' s (METimeLapse _ _ mes) = s <> mconcat (map (lightSourceNamesUsedIn' S.empty) mes)
         lightSourceNamesUsedIn' s (MEStageLoop _ _ mes) = s <> mconcat (map (lightSourceNamesUsedIn' S.empty) mes)
         lightSourceNamesUsedIn' s _ = s
+
+robotProgramsUsedIn :: MeasurementElement -> [(Text, [Text])]
+robotProgramsUsedIn me = M.toList (robotProgramsUsedIn' M.empty me)
+    where
+        robotProgramsUsedIn' :: Map Text [Text] -> MeasurementElement -> Map Text [Text]
+        robotProgramsUsedIn' m (MEExecuteRobotProgram robotName progName) =  M.insertWith (++) robotName [progName] m
+        robotProgramsUsedIn' m (MEDoTimes _ mes) = M.unionWith (++) m (M.unionsWith (++) (map (robotProgramsUsedIn' M.empty) mes))
+        robotProgramsUsedIn' m (METimeLapse _ _ mes) = M.unionWith (++) m (M.unionsWith (++) (map (robotProgramsUsedIn' M.empty) mes))
+        robotProgramsUsedIn' m (MEStageLoop _ _ mes) = M.unionWith (++) m (M.unionsWith (++) (map (robotProgramsUsedIn' M.empty) mes))
+        robotProgramsUsedIn' m _ = m
 
 withStatusMessage :: ProgramEnvironment a -> LT.Text -> IO b -> IO b
 withStatusMessage env msg action =
