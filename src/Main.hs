@@ -94,18 +94,19 @@ messageHandler :: Detector a => MessageHandler (Environment a)
 messageHandler msg env =
     case (fromJSON msg) of
       Error e   -> return (ResponseJSON (object [("responsetype", String (T.pack ("invalidquery: " ++ e)))]), env)
-      Success v -> performAction env v >>= \(resp, newEnv) ->
+      Success v -> perform env v >>= \(resp, newEnv) ->
                    if (shouldBinaryEncode resp)
                      then return (ResponseBSList (binaryEncode resp), newEnv)
                      else return (ResponseLBS (encode resp), newEnv)
+    where
+       perform env v = (performAction env v) `catch` (\(e :: IOException) -> return (StatusError (displayException e), env))
 
 performAction :: Detector a => Environment a -> RequestMessage -> IO (ResponseMessage, Environment a)
 performAction env (AcquireData params) =
-    catch (startAsyncAcquisition env (MEDetection [params]) >>= \(asyncWorker, spectraMVar, statusMVar) ->
-           wait asyncWorker >>
-           takeMVar spectraMVar >>= \[[acquiredData]] ->
-           return (AcquiredDataResponse acquiredData, env))
-          (\e -> return (StatusError (displayException (e :: IOException)), env))
+    startAsyncAcquisition env (MEDetection [params]) >>= \(asyncWorker, spectraMVar, statusMVar) ->
+    wait asyncWorker >>
+    takeMVar spectraMVar >>= \[[acquiredData]] ->
+    return (AcquiredDataResponse acquiredData, env)
 
 performAction env ListWavelengths =
     getTime Monotonic >>= \timeStamp ->
@@ -140,93 +141,80 @@ performAction env (GetMotorizedStagePosition name) =
         mss = envMotorizedStages env
 
 performAction env (SetMotorizedStagePosition name ds) =
-    catch (setStagePositionLookup mss name ds >>
-           return (StatusOK, env))
-          (\e -> return (StatusError (displayException (e :: IOException)), env))
+    setStagePositionLookup mss name ds >> return (StatusOK, env)
     where
         mss = envMotorizedStages env
 
 performAction env (ListRobotPrograms name) =
-    catch (listRobotPrograms (lookupRobotThrows robots name) >>= \programs ->
-           return (RobotProgramsResponse programs, env))
-          (\e -> return (StatusError (displayException (e :: IOException)), env))
+    listRobotPrograms (lookupRobotThrows robots name) >>= \programs ->
+    return (RobotProgramsResponse programs, env)
     where
         robots = envRobots env
 
 performAction env GetDetectorLimits =
-    catch (ensureAsyncAcquisitionNotRunning env >>
-           getDetectorLimits det >>= \limits ->
-           case limits of
-               Left err -> return (StatusError err, env)
-               Right dl -> return (DetectorLimitsResponse dl, env))
-          (\e -> return (StatusError (displayException (e :: IOException)), env))
+    ensureAsyncAcquisitionNotRunning env >>
+    getDetectorLimits det >>= \limits ->
+    case limits of
+       Left err -> return (StatusError err, env)
+       Right dl -> return (DetectorLimitsResponse dl, env)
     where
         det = envDetector env
 
 performAction env (SetDetectorTemperature t) =
-    catch (ensureAsyncAcquisitionNotRunning env >>
-           setDetectorTemperature det t >>= \result ->
-           case result of
-               Left err -> return (StatusError err, env)
-               Right () -> return (StatusOK, env))
-          (\e -> return (StatusError (displayException (e :: IOException)), env))
+    ensureAsyncAcquisitionNotRunning env >>
+    setDetectorTemperature det t >>= \result ->
+    case result of
+       Left err -> return (StatusError err, env)
+       Right () -> return (StatusOK, env)
     where
         det = envDetector env
 
 performAction env GetDetectorTemperature =
-    catch (ensureAsyncAcquisitionNotRunning env >>
-           getDetectorTemperature det >>= \temp ->
-           case temp of
-               Left err -> return (StatusError err, env)
-               Right t -> return (DetectorTemperatureResponse t, env))
-          (\e -> return (StatusError (displayException (e :: IOException)), env))
+    getDetectorTemperature det >>= \temp ->
+    case temp of
+       Left err -> return (StatusError err, env)
+       Right t -> return (DetectorTemperatureResponse t, env)
     where
         det = envDetector env
 
 performAction env GetDetectorTemperatureSetpoint =
-    catch (ensureAsyncAcquisitionNotRunning env >>
-           getDetectorTemperatureSetpoint det >>= \temp ->
-           case temp of
-              Left err -> return (StatusError err, env)
-              Right t -> return (DetectorTemperatureSetpointResponse t, env))
-          (\e -> return (StatusError (displayException (e :: IOException)), env))
+    ensureAsyncAcquisitionNotRunning env >>
+    getDetectorTemperatureSetpoint det >>= \temp ->
+    case temp of
+      Left err -> return (StatusError err, env)
+      Right t -> return (DetectorTemperatureSetpointResponse t, env)
     where
         det = envDetector env
 
 performAction env (ActivateLightSource name channels powers) =
-    catch (ensureAsyncAcquisitionNotRunning env >>
-           return (lookupLightSource lightSources name) >>= \lightSource ->
-           activateLightSource lightSource channels powers >>
-           return (StatusOK, env))
-          (\e -> return (StatusError (displayException (e :: IOException)), env))
+    ensureAsyncAcquisitionNotRunning env >>
+    return (lookupLightSource lightSources name) >>= \lightSource ->
+    activateLightSource lightSource channels powers >>
+    return (StatusOK, env)
     where
         lightSources = envLightSources env
 
 performAction env (DeactivateLightSource name) =
-    catch (ensureAsyncAcquisitionNotRunning env >>
-           return (lookupLightSource lightSources name) >>=
-           deactivateLightSource >>
-           return (StatusOK, env))
-          (\e -> return (StatusError (displayException (e :: IOException)), env))
+    ensureAsyncAcquisitionNotRunning env >>
+    return (lookupLightSource lightSources name) >>=
+    deactivateLightSource >>
+    return (StatusOK, env)
     where
         lightSources = envLightSources env
 
 performAction env (TurnOffLightSource name) =
-    catch (ensureAsyncAcquisitionNotRunning env >>
-           return (lookupLightSource lightSources name) >>=
-           turnOffLightSource >>
-           return (StatusOK, env))
-          (\e -> return (StatusError (displayException (e :: IOException)), env))
+    return (lookupLightSource lightSources name) >>=
+    turnOffLightSource >>
+    return (StatusOK, env)
     where
         lightSources = envLightSources env
 
 performAction env Ping = return (Pong, env)
 
 performAction env (ExecuteMeasurementProgram me) =
-    catch (startAsyncAcquisition env me >>= \(asyncWorker, spectraMVar, statusMVar) ->
-           let newEnv = env {envAsyncDataMVar = spectraMVar, envAsyncStatusMessagesMVar = statusMVar, envAsyncProgramWorker = asyncWorker}
-           in return (StatusOK, newEnv))
-          (\e -> return (StatusError (displayException (e :: IOException)), env))
+    startAsyncAcquisition env me >>= \(asyncWorker, spectraMVar, statusMVar) ->
+    let newEnv = env {envAsyncDataMVar = spectraMVar, envAsyncStatusMessagesMVar = statusMVar, envAsyncProgramWorker = asyncWorker}
+    in  return (StatusOK, newEnv)
 
 performAction env FetchAsyncData =
     asyncAcquisitionRunning env >>= \asyncIsRunning ->
