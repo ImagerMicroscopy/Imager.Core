@@ -17,7 +17,7 @@ import Robot
 data MeasurementElement = MEDetection [DetectionParams]
                         | MEIrradiation !Double [IrradiationParams]
                         | MEWait Double
-                        | MEExecuteRobotProgram !Text !Text
+                        | MEExecuteRobotProgram !Text !Text !Bool
                         | MEDoTimes !Int [MeasurementElement]
                         | MEFastAcquisitionLoop Int DetectionParams
                         | METimeLapse !Int !Double [MeasurementElement]
@@ -63,7 +63,7 @@ instance FromJSON MeasurementElement where
           "detection"   -> MEDetection <$> v .: "detection"
           "irradiation" -> MEIrradiation <$> v .: "duration" <*> v .: "irradiation"
           "wait"        -> MEWait <$> v .: "duration"
-          "executerobotprogram" -> MEExecuteRobotProgram <$> v .: "robotname" <*> v .: "programname"
+          "executerobotprogram" -> MEExecuteRobotProgram <$> v .: "robotname" <*> v .: "programname" <*> v .: "waitforcompletion"
           "dotimes"     -> MEDoTimes <$> v .: "ntotal" <*> v .: "elements"
           "timelapse"   -> METimeLapse <$> v .: "ntotal" <*> v .: "timedelta" <*> v .: "elements"
           -- no FromJSON instance for MEFastAcquisitionLoop because it is automatically applied
@@ -74,7 +74,7 @@ instance ToJSON MeasurementElement where
   toEncoding (MEDetection dets) = pairs ("elementtype" .= ("detection" :: Text) <> "detection" .= dets)
   toEncoding (MEIrradiation dur ip) = pairs ("elementtype" .= ("irradiation" :: Text) <> "duration" .= dur <> "irradiation" .= ip)
   toEncoding (MEWait d) = pairs ("elementtype" .= ("wait" :: Text) <> "duration" .= d)
-  toEncoding (MEExecuteRobotProgram n p) = pairs ("elementtype" .= ("executerobotprogram" :: Text) <> "robotname" .= n <> "programname" .= p)
+  toEncoding (MEExecuteRobotProgram n p w) = pairs ("elementtype" .= ("executerobotprogram" :: Text) <> "robotname" .= n <> "programname" .= p <> "waitforcompletion" .= w)
   toEncoding (MEDoTimes n es) = pairs ("elementtype" .= ("dotimes" :: Text) <> "ntotal" .= n <> "elements" .= es)
   toEncoding (METimeLapse n td es) = pairs ("elementtype" .= ("timelapse" :: Text) <> "ntotal" .= n <> "timedelta" .= td <> "elements" .= es)
   toEncoding (MEFastAcquisitionLoop n det) = pairs ("elementtype" .= ("fastacquisitionloop" :: Text) <> "ntotal" .= n <> "detection" .= det)

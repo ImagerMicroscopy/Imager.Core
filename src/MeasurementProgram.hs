@@ -69,9 +69,9 @@ executeMeasurementElement env (MEIrradiation dur ips) =
 executeMeasurementElement env (MEWait dur) =
     withStatusMessage env (T.format "waiting {} s" (T.Only dur)) (
         threadDelay (round $ dur * 1e6))
-executeMeasurementElement env (MEExecuteRobotProgram rName pName) =
+executeMeasurementElement env (MEExecuteRobotProgram rName pName wait) =
     withStatusMessage env (T.format "executing program {} on {}" (rName, pName)) (
-        executeRobotProgram (lookupRobotThrows robots rName) pName)
+        executeRobotProgram (lookupRobotThrows robots rName) pName wait)
     where
         robots = peRobots env
 executeMeasurementElement env (MEDoTimes n es) =
@@ -192,7 +192,7 @@ robotProgramsUsedIn :: MeasurementElement -> [(Text, [Text])]
 robotProgramsUsedIn me = M.toList (robotProgramsUsedIn' M.empty me)
     where
         robotProgramsUsedIn' :: Map Text [Text] -> MeasurementElement -> Map Text [Text]
-        robotProgramsUsedIn' m (MEExecuteRobotProgram robotName progName) =  M.insertWith (++) robotName [progName] m
+        robotProgramsUsedIn' m (MEExecuteRobotProgram robotName progName _) =  M.insertWith (++) robotName [progName] m
         robotProgramsUsedIn' m (MEDoTimes _ mes) = M.unionWith (++) m (M.unionsWith (++) (map (robotProgramsUsedIn' M.empty) mes))
         robotProgramsUsedIn' m (METimeLapse _ _ mes) = M.unionWith (++) m (M.unionsWith (++) (map (robotProgramsUsedIn' M.empty) mes))
         robotProgramsUsedIn' m (MEStageLoop _ _ mes) = M.unionWith (++) m (M.unionsWith (++) (map (robotProgramsUsedIn' M.empty) mes))

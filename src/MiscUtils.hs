@@ -96,14 +96,10 @@ data QueryServerParams a = QueryServerParams {
 queryServer :: QueryServerParams a -> ByteString -> IO a
 queryServer (QueryServerParams addr port maxSize completeP messageParser) msg = withSocketsDo $
     getAddrInfo (Just hints) (Just addr) (Just (show port)) >>= \(serverAddr : _) ->
-    bracket (socket (addrFamily serverAddr) Stream defaultProtocol) (close) (\sock ->
-        timeout (round 2e6) ( do
-            connect sock (addrAddress serverAddr)
-            NS.sendAll sock msg
-            recvMessage sock LB.empty) >>= \tResult ->
-        case tResult of
-            Nothing  -> throwIO (userError ("timeout performing query to " ++ show addr ++ ":" ++ show port))
-            Just msg -> return (messageParser msg))
+    bracket (socket (addrFamily serverAddr) Stream defaultProtocol) (close) (\sock -> do
+        connect sock (addrAddress serverAddr)
+        NS.sendAll sock msg
+        messageParser <$> recvMessage sock LB.empty)
     where
         hints = defaultHints {addrSocketType = Stream , addrFamily = AF_INET}
         recvMessage :: Socket -> LB.ByteString -> IO LB.ByteString

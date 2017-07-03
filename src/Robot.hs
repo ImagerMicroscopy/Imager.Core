@@ -32,7 +32,7 @@ instance ToJSON Robot where
    toJSON s = object ["name" .= robotName s]
 
 data RobottorRequest = ListRobottorPrograms
-                     | ExecuteRobottorProgram !Text
+                     | ExecuteRobottorProgram !Text !Bool
                      | AbortProgramExecution
                      deriving (Show)
 
@@ -43,7 +43,7 @@ data RobottorResponse = OKRobottorResponse
 
 instance ToJSON RobottorRequest where
   toJSON ListRobottorPrograms = object ["type" .= ("listprograms" :: Text)]
-  toJSON (ExecuteRobottorProgram prog) = object ["type" .= ("executeprogram" :: Text), "programname" .= prog]
+  toJSON (ExecuteRobottorProgram prog wait) = object ["type" .= ("executeprogram" :: Text), "programname" .= prog, "waitforcompletion" .= wait]
   toJSON AbortProgramExecution = object ["type" .= ("abortprogramexecution" :: Text)]
 
 instance FromJSON RobottorResponse where
@@ -107,8 +107,8 @@ listRobotPrograms (Robottor _ ip port) =
     in  (queryServer serverParams queryMsg >>= \(RobottorProgramListResponse ps) ->
       return ps) `catch` \(e :: IOException) -> throw (userError "can't communicate with Robottor program")
 
-executeRobotProgram :: Robot -> Text -> IO ()
-executeRobotProgram r@(Robottor _ ip port) progName = handleRobottorRequest r (ExecuteRobottorProgram progName)
+executeRobotProgram :: Robot -> Text -> Bool -> IO ()
+executeRobotProgram r@(Robottor _ ip port) progName waitForCompletion = handleRobottorRequest r (ExecuteRobottorProgram progName waitForCompletion)
 
 abortRobotProgramExecution :: Robot -> IO ()
 abortRobotProgramExecution r@(Robottor _ ip port) = handleRobottorRequest r AbortProgramExecution
