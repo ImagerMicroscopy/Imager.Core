@@ -21,7 +21,7 @@ data MeasurementElement = MEDetection [DetectionParams]
                         | MEDoTimes !Int [MeasurementElement]
                         | MEFastAcquisitionLoop Int DetectionParams
                         | METimeLapse !Int !Double [MeasurementElement]
-                        | MEStageLoop !Text [(Text, StagePosition)] [MeasurementElement]
+                        | MEStageLoop !Text [PositionNameAndCoords] [MeasurementElement]
                         deriving (Show)
 
 data ProgramEnvironment a = ProgramEnvironment {
@@ -55,6 +55,9 @@ data FilterParams = FilterParams {
                         fpFilterWheelName :: !Text
                       , fpFilterName :: !Text
                     } deriving (Show, Eq)
+
+data PositionNameAndCoords = PositionNameAndCoords !Text !StagePosition
+                             deriving (Show)
 
 instance FromJSON MeasurementElement where
     parseJSON (Object v) =
@@ -108,9 +111,19 @@ instance ToJSON IrradiationParams where
 instance FromJSON FilterParams where
     parseJSON (Object v) =
         FilterParams <$> v .: "filterwheelname"
-                          <*> v .: "filtername"
+                     <*> v .: "filtername"
     parseJSON _ = fail "can't decode irradiation params"
 instance ToJSON FilterParams where
     toEncoding (FilterParams filterWheelName filterName) =
         pairs ("filterwheelname" .= filterWheelName <> "filtername" .= filterName)
+    toJSON _ = error "no toJSON"
+
+instance FromJSON PositionNameAndCoords where
+    parseJSON (Object v) =
+        PositionNameAndCoords <$> v .: "name"
+                              <*> v .: "coordinates"
+    parseJSON _ = fail "can't decode irradiation params"
+instance ToJSON PositionNameAndCoords where
+    toEncoding (PositionNameAndCoords name coords) =
+        pairs ("name" .= name <> "coordinates" .= coords)
     toJSON _ = error "no toJSON"

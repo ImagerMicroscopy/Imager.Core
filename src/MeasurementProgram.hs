@@ -124,7 +124,7 @@ executeMeasurementElement env (METimeLapse n dur es) =
                        else return ()
 executeMeasurementElement env (MEStageLoop sn poss es) =
     withStatusMessage env "stage loop" (
-        forM_ (zip [1..] poss) (\(index :: Int, (posName, pos)) ->
+        forM_ (zip [1..] poss) (\(index :: Int, (PositionNameAndCoords posName pos)) ->
             updateStatusMessage env (T.format "stage position {} of {} ({})" (index, nPos, posName)) >>
             setStagePosition sn pos >> executeMeasurementElements env es))
     where
