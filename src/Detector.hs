@@ -92,7 +92,7 @@ addDataToMVar mvar startTime newData =
         if (null previousData)
         then return [[d] | d <- adjustedData]
         else let nDetectionsAlreadyStored = length (head previousData)
-             in when (nDetectionsAlreadyStored > 100) (putStrLn "aborting due to data overflow" >> throwIO (userError "too many async data stored")) >>
+             in when (nDetectionsAlreadyStored > 250) (putStrLn "aborting due to data overflow" >> throwIO (userError "too many async data stored")) >>
                 return (zipWith (:) adjustedData previousData))
     where
         adjustedData = map toSecondsFromStart newData
