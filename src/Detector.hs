@@ -54,36 +54,33 @@ data DetectorLimits = DetectorLimits {
                     } deriving (Show)
 
 class Detector a where
-    acquireData :: a -> ExposureTime -> Gain -> NMeasurementsToAverage -> IO (Either String AcquiredData)
+    acquireData :: a -> ExposureTime -> Gain -> NMeasurementsToAverage -> IO AcquiredData
     acquireStreamingData :: a -> ExposureTime -> Gain -> NMeasurementsToAverage ->
                             NMeasurementsToPerform -> TimeSpec -> MVar [[AcquiredData]] -> IO ()
     acquireStreamingData det expTime gain nMeasurementsToAverage nMeasurements startTime dataMVar =
         forM_ [1 .. nMeasurements] (\_ ->
-            acquireData det expTime gain nMeasurementsToAverage >>= \dat ->
-            case dat of
-              Left e -> error e
-              Right acqData -> addDataToMVar dataMVar startTime [acqData])
+            acquireData det expTime gain nMeasurementsToAverage >>= \acqData ->
+            addDataToMVar dataMVar startTime [acqData])
 
-    getDetectorWavelengths :: a -> IO (Either String (Vector Double))
-    getDetectorWavelengths _ = return (Right V.empty)
+    getDetectorWavelengths :: a -> IO (Vector Double)
+    getDetectorWavelengths _ = return V.empty
 
-    setDetectorTemperature :: a -> Temperature -> IO (Either String ())
-    setDetectorTemperature _ _ = return (Right ())
-    getDetectorTemperature :: a -> IO (Either String Temperature)
-    getDetectorTemperature _ = return (Right 20.0)
-    getDetectorTemperatureSetpoint :: a -> IO (Either String Temperature)
-    getDetectorTemperatureSetpoint _ = return (Right 20.0)
+    setDetectorTemperature :: a -> Temperature -> IO ()
+    setDetectorTemperature _ _ = return ()
+    getDetectorTemperature :: a -> IO Temperature
+    getDetectorTemperature _ = return 20.0
+    getDetectorTemperatureSetpoint :: a -> IO Temperature
+    getDetectorTemperatureSetpoint _ = return 20.0
 
-    getGainRange :: a -> IO (Either String (Gain, Gain))
-    getGainRange _ = return $ Right (1.0, 1.0)
-    getExposureTimeRange :: a -> IO (Either String (ExposureTime, ExposureTime))
+    getGainRange :: a -> IO (Gain, Gain)
+    getGainRange _ = return (1.0, 1.0)
+    getExposureTimeRange :: a -> IO (ExposureTime, ExposureTime)
 
-getDetectorLimits :: (Detector a) => a -> IO (Either String DetectorLimits)
+getDetectorLimits :: (Detector a) => a -> IO DetectorLimits
 getDetectorLimits det =
-    runExceptT (
-        ExceptT (getGainRange det) >>= \(minGain, maxGain) ->
-        ExceptT (getExposureTimeRange det) >>= \(minExpTime, maxExpTime) ->
-        ExceptT (return $ Right (DetectorLimits minExpTime maxExpTime minGain maxGain 1 100)))
+    getGainRange det >>= \(minGain, maxGain) ->
+    getExposureTimeRange det >>= \(minExpTime, maxExpTime) ->
+    return (DetectorLimits minExpTime maxExpTime minGain maxGain 1 100)
 
 addDataToMVar :: MVar [[AcquiredData]] -> TimeSpec -> [AcquiredData] -> IO ()
 addDataToMVar mvar startTime newData =

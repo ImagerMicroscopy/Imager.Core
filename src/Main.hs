@@ -83,7 +83,7 @@ main =
     wait asyncProgramWorker >>
 
     withAvailableDetector (\det ->
-        getDetectorWavelengths det >>= \(Right wl) ->
+        getDetectorWavelengths det >>= \wl ->
         return (byteStringFromVector wl) >>= \encodedWl ->
         putStrLn "ready to measure!" >>
         let env = Environment lightSources filterWheels motorizedStages robots gpioHandles
@@ -154,35 +154,27 @@ performAction env (ListRobotPrograms name) =
 performAction env GetDetectorLimits =
     ensureAsyncAcquisitionNotRunning env >>
     getDetectorLimits det >>= \limits ->
-    case limits of
-       Left err -> return (StatusError err, env)
-       Right dl -> return (DetectorLimitsResponse dl, env)
+    return (DetectorLimitsResponse limits, env)
     where
         det = envDetector env
 
 performAction env (SetDetectorTemperature t) =
     ensureAsyncAcquisitionNotRunning env >>
-    setDetectorTemperature det t >>= \result ->
-    case result of
-       Left err -> return (StatusError err, env)
-       Right () -> return (StatusOK, env)
+    setDetectorTemperature det t >>
+    return (StatusOK, env)
     where
         det = envDetector env
 
 performAction env GetDetectorTemperature =
-    getDetectorTemperature det >>= \temp ->
-    case temp of
-       Left err -> return (StatusError err, env)
-       Right t -> return (DetectorTemperatureResponse t, env)
+    getDetectorTemperature det >>= \t ->
+    return (DetectorTemperatureResponse t, env)
     where
         det = envDetector env
 
 performAction env GetDetectorTemperatureSetpoint =
     ensureAsyncAcquisitionNotRunning env >>
-    getDetectorTemperatureSetpoint det >>= \temp ->
-    case temp of
-      Left err -> return (StatusError err, env)
-      Right t -> return (DetectorTemperatureSetpointResponse t, env)
+    getDetectorTemperatureSetpoint det >>= \t ->
+    return (DetectorTemperatureSetpointResponse t, env)
     where
         det = envDetector env
 

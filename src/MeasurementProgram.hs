@@ -146,9 +146,7 @@ executeDetection det lss fws DetectionParams{..} =
     enableLightSources lss dpIrradiation >>
     acquireData det dpExposureTime dpGain dpNSpectraToAverage >>= \acquiredData ->
     disableLightSources lss dpIrradiation >>
-    case acquiredData of
-        Left e -> throwIO (userError e)
-        Right d -> return d
+    return acquiredData
 
 executeFastDetectionLoop :: Detector a => a -> [LightSource] -> [FilterWheel] -> DetectionParams -> Int -> TimeSpec -> MVar [[AcquiredData]] -> IO ()
 executeFastDetectionLoop detector lightSources filterWheels detParams nTimesToPerform startTime dataMVar =
