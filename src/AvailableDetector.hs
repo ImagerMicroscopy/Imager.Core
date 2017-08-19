@@ -33,17 +33,13 @@ withAvailableDetector f =
   where
       getIDs = getDeviceIDs >>= \ids ->
                when (null ids) (error "no spectrometer ids found") >>
-               runExceptT (
-                    ExceptT (openDevice (head ids)) >>
-                    ExceptT (getSpectrometerFeatures (head ids)) >>= \(fID : _) ->
-                    ExceptT (getSpectrumProcessingFeatures (head ids)) >>= \pfIDs ->
-                    ExceptT (return (Right (head ids, fID, pfIDs)))) >>= \result ->
-               case result of
-                    Left _  -> error "no spectrometer found"
-                    Right (dID, fID, pfIDs) ->
-                        case pfIDs of
-                            []         -> return (dID, fID, Nothing)
-                            (pfID : _) -> return (dID, fID, Just pfID)
+               openDevice (head ids) >>
+               getSpectrometerFeatures (head ids) >>= \(fID : _) ->
+               getSpectrumProcessingFeatures (head ids) >>= \pfIDs ->
+               return (head ids, fID, pfIDs) >>= \result ->
+               case pfIDs of
+                   []         -> return (head ids, fID, Nothing)
+                   (pfID : _) -> return (head ids, fID, Just pfID)
       nonlinearityCorrection dID =
             V.toList <$> getNonlinearityCoeffs dID >>= \coeffs ->
             return (\x -> x / polyCorr x coeffs)

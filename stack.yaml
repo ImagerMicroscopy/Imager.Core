@@ -12,7 +12,7 @@ packages:
   extra-dep: true
 - location:
     git: https://pdedecker@bitbucket.org/pdedecker/hsoceanoptics.git
-    commit: 5ea63c07575e6814caa8d5ac2907ef46b68c8984
+    commit: 5540ca4aac349c4403dcbd2ff75e6b0c51e0281d
   extra-dep: true
 - location:
     git: https://pdedecker@bitbucket.org/pdedecker/hsgpio.git
