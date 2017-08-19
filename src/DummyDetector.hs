@@ -12,12 +12,12 @@ import Detector
 data DummyDetector = DummyDetector
 
 instance Detector DummyDetector where
-    acquireData :: DummyDetector -> ExposureTime -> Gain -> NMeasurementsToAverage -> IO (Either String AcquiredData)
+    acquireData :: DummyDetector -> ExposureTime -> Gain -> NMeasurementsToAverage -> IO AcquiredData
     acquireData _ _ _ _ =
         threadDelay 10000 >>
         getTime Monotonic >>= \timeStamp ->
         randoms <$> newStdGen >>= return . B.pack . take (512 * 512) >>= \datas ->
-        return (Right $ AcquiredData 512 512 timeStamp datas UINT8)
+        return (AcquiredData 512 512 timeStamp datas UINT8)
 
-    getExposureTimeRange :: DummyDetector -> IO (Either String (ExposureTime, ExposureTime))
-    getExposureTimeRange _ = return $ Right (30e-3, 30e-3)
+    getExposureTimeRange :: DummyDetector -> IO (ExposureTime, ExposureTime)
+    getExposureTimeRange _ = return (30e-3, 30e-3)
