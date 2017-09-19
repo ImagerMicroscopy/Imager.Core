@@ -45,30 +45,27 @@ binaryEncode (Wavelengths d) = encodeAcquiredData [[d]]
 binaryEncode _ = error "no binary encoding for this type"
 
 encodeAcquiredData :: [[AcquiredData]] -> [ByteString]
-encodeAcquiredData [] = [encodeHeader 22 0 0 0 (encodedNumType UINT16) []]
-encodeAcquiredData acqs = let header = encodeHeader messageLength nRows nCols nDatasetsOfEachType numType timeStamps
+encodeAcquiredData [] = [encodeHeader 22 0 0 (encodedNumType UINT16) []]
+encodeAcquiredData acqs = let header = encodeHeader messageLength nRows nCols numType timeStamps
                           in header : acqBytes
   where
-      messageLength = 24 + (length concatenatedAcqs) * 8 + sum (map B.length acqBytes)
+      messageLength = 19 + (length concatenatedAcqs) * 8 + sum (map B.length acqBytes)
       concatenatedAcqs = concat acqs
       timeStamps = map (timeSpecAsDouble . acqTimeStamp) concatenatedAcqs
       nRows = acqNRows (head concatenatedAcqs)
       nCols = acqNCols (head concatenatedAcqs)
-      nDatasetsOfEachType = length concatenatedAcqs `div` length acqs
       numType = encodedNumType $ acqNumType (head concatenatedAcqs)
       acqBytes = map acqData concatenatedAcqs
 
-encodeHeader :: Int -> Int -> Int -> Int -> Int -> [Double] -> ByteString
-encodeHeader messageLength nRows nCols nDatasetsOfEachType numType timeStamps =
+encodeHeader :: Int -> Int -> Int -> Int -> [Double] -> ByteString
+encodeHeader messageLength nRows nCols numType timeStamps =
     runPut $
-        putWord8 0 >> putWord8 0 >> putWord8 0 >>
         putWord16le 11014 >>
         putWord32le (fromIntegral messageLength) >>
         putWord32le (fromIntegral nRows) >>
         putWord32le (fromIntegral nCols) >>
         putWord8 (fromIntegral numType) >>
         putWord32le (fromIntegral $ length timeStamps) >>
-        putWord16le (fromIntegral nDatasetsOfEachType) >>
         mapM_ putFloat64le timeStamps
 
 encodedNumType :: NumberType -> Int
