@@ -40,6 +40,11 @@ data FilterWheelDesc = ThorlabsFW103HDesc {
                          , ix71DescPortName :: !String
                          , ix71DescFilters :: ![(Text, Int)]
                        }
+                     | SutterLambda10BDesc {
+                           sl10BDescName :: !Text
+                         , sl10BDescPortName :: !String
+                         , sl10BDescFilters :: [(Text, Int)]
+                       }
                      | DummyFilterWheelDesc {
                            dfwDescName :: !Text
                          , dfwDescFilters :: [(Text, Int)]
@@ -48,6 +53,7 @@ data FilterWheelDesc = ThorlabsFW103HDesc {
 
 data FilterWheel = ThorlabsFW103H !Text ![(Text, Int)] !SerialPort
                  | ThorlabsFW102C !Text ![(Text, Int)] !SerialPort
+                 | SutterLambda10B !Text ![(Text, Int)] !SerialPort
                  | OlympusIX71Dichroic !Text ![(Text, Int)] !(IORef (Bool, Int)) !SerialPort
                  | DummyFilterWheel !Text ![(Text, Int)]
 
@@ -69,12 +75,14 @@ withFilterWheels descs action =
 filterWheelName :: FilterWheel -> Text
 filterWheelName (ThorlabsFW103H name _ _) = name
 filterWheelName (ThorlabsFW102C name _ _) = name
+filterWheelName (SutterLambda10B name _ _ ) = name
 filterWheelName (OlympusIX71Dichroic name _ _ _) = name
 filterWheelName (DummyFilterWheel name _) = name
 
 filterWheelChannels :: FilterWheel -> [Text]
 filterWheelChannels (ThorlabsFW103H _ chs _) = map fst chs
 filterWheelChannels (ThorlabsFW102C _ chs _) = map fst chs
+filterWheelChannels (SutterLambda10B _ chs _) = map fst chs
 filterWheelChannels (OlympusIX71Dichroic _ chs _ _) = map fst chs
 filterWheelChannels (DummyFilterWheel _ chs) = map fst chs
 
@@ -93,6 +101,9 @@ openFilterWheels = mapM openFilterWheel
     openFilterWheel (ThorlabsFW102CDesc name portName chs) =
         let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS115200}) (TimeoutMillis 30000) SerialPortNoDebug
         in  ThorlabsFW102C name (validateChannels chs) <$> openSerialPort portName serialSettings
+    openFilterWheel (SutterLambda10BDesc name portName chs) =
+        let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS9600}) (TimeoutMillis 10000) SerialPortNoDebug
+        in  SutterLambda10B name (validateChannels chs) <$> openSerialPort portName serialSettings
     openFilterWheel (OlympusIX71DichroicDesc name portName chs) =
         let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS19200}) (TimeoutMillis 20000) SerialPortNoDebug
         in  openSerialPort portName serialSettings >>= \port ->
@@ -120,14 +131,12 @@ closeFilterWheels = mapM_ closeFilterWheels
   where
     closeFilterWheels (ThorlabsFW103H _ _ port) = closeSerialPort port
     closeFilterWheels (ThorlabsFW102C _ _ port) = closeSerialPort port
+    closeFilterWheels (SutterLambda10B _ _ port) = closeSerialPort port
     closeFilterWheels (OlympusIX71Dichroic _ _ _ port) = closeSerialPort port
     closeFilterWheels (DummyFilterWheel name _) = putStrLn ("Closed filter wheel " ++ T.unpack name)
 
 filterWheelHasChannel :: FilterWheel -> Text -> Bool
-filterWheelHasChannel (ThorlabsFW103H _ chs _) c = c `elem` (map fst chs)
-filterWheelHasChannel (ThorlabsFW102C _ chs _) c = c `elem` (map fst chs)
-filterWheelHasChannel (OlympusIX71Dichroic _ chs _ _) c = c `elem` (map fst chs)
-filterWheelHasChannel (DummyFilterWheel _ chs) c = c `elem` (map fst chs)
+filterWheelHasChannel w c = c `elem` (filterWheelChannels w)
 
 switchFilterWheel :: [FilterWheel] -> Text -> Text -> IO ()
 switchFilterWheel fws fwName fName =
@@ -151,6 +160,12 @@ switchToFilter fw chName | not (filterWheelHasChannel fw chName) = throwIO (user
         let filterIndex = fromJust (lookup chName chs)
         in flushSerialPort port >> serialWrite port (T.encodeUtf8 . T.pack $ "pos=" ++ show filterIndex) >>
            serialReadUntilChar port '>' >> return ()
+    switchToFilter' (SutterLambda10B _ chs port) chName =
+        let filterIndex = (fromIntegral . fromJust . lookup chName) chs
+            speed = 3
+            byte = (speed `shiftL` 4) .|. filterIndex
+        in flushSerialPort port >> serialWrite port (B.pack [byte]) >>
+          serialReadUntilChar port '\r' >> return ()
     switchToFilter' (OlympusIX71Dichroic _ chs currFilter port) chName =
         let filterIndex = fromJust (lookup chName chs)
         in  readIORef currFilter >>= \(haveInit, currFilterIdx) ->
