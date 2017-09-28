@@ -1,10 +1,10 @@
 {-# LANGUAGE BangPatterns, OverloadedStrings, NumDecimals #-}
 
 module LightSources (
-    LightSourceDesc(..)
-  , LightSource
-  , readAvailableLightSources
-  , withLightSources
+    lightSourceName
+  , lightSourceCanControlPower
+  , lightSourceAllowsMultipleChannels
+  , lightSourceChannels
   , lookupLightSource
   , activateLightSource
   , deactivateLightSource
@@ -14,7 +14,6 @@ module LightSources (
   , lookupMaybeLightSource
   , lookupEitherLightSource
   , validLightSourceChannelsAndPowers
-  , gpioPinsNeededForLightSources
 ) where
 
 import Control.Concurrent
@@ -42,182 +41,61 @@ import System.FilePath
 import System.IO
 import qualified System.Timeout as ST
 
-import GPIO
+import EquipmentMessaging
+import EquipmentTypes
 import MiscUtils
 import RCSerialPort
 
-data LightSourceDesc = GPIOLightSourceDesc {
-                           glsdName :: !Text
-                         , glsdPin :: !GPIOPin
-                         , glsdWaitDelay :: !Double
-                       }
-                     | CoherentLightSourceDesc {
-                           clsdName :: !Text
-                         , clsdSerialPortName :: !String
-                       }
-                     | LumencorLightSourceDesc {
-                           llsdName :: !Text
-                         , llsdSerialPortName :: !String
-                       }
-                     | AsahiLightSourceDesc {
-                           alsName :: !Text
-                         , alsSerialPortName :: !String
-                         , alsFilters :: ![(Text, (Int, Double))]
-                       }
-                     | ArduinoLightSourceDesc {
-                           ardName :: !Text
-                         , ardSerialPortName :: !String
-                         , ardChannels :: ![(Text, (Int, Double))]
-                       }
-                     | DummyLightSourceDesc {
-                           dlsdName :: !Text
-                       }
-                     deriving (Show, Read)
+data Level = High | Low 
+             deriving(Eq)
 
-data LightSource = GPIOLightSource !Text !GPIOPin !Double !GPIOHandles
-                 | CoherentLightSource !Text !SerialPort !(IORef (Bool, Double, Double)) !(IORef (Bool, Double))
-                 | LumencorLightSource !Text !SerialPort !(IORef Bool) !(IORef LumencorFilter)
-                 | AsahiLightSource !Text ![(Text, (Int, Double))] !SerialPort
-                 | ArduinoLightSource !Text ![(Text, (Int, Double))] !(IORef [(Int, Double)]) !SerialPort
-                 | DummyLightSource !Text
-
-data LumencorChannel = LCViolet | LCBlue | LCCyan | LCTeal
-                     | LCGreen | LCYellow | LCRed
-                       deriving (Eq)
-data LumencorFilter = LCGreenFilter | LCYellowFilter
-                      deriving (Eq)
-
-data ArduinoPinState = ArduinoInput | ArduinoOutput
-
-instance ToJSON LightSource where
-    toJSON ls = object ["name" .= lightSourceName ls, "channels" .= lightSourceChannels ls,
-                        "allowmultiplechannels" .= lightSourceAllowsMultipleChannels ls,
-                        "cancontrolpower" .= lightSourceCanControlPower ls]
-
-readAvailableLightSources :: IO [LightSourceDesc]
-readAvailableLightSources =
-    getExecutablePath >>= \exePath ->
-    readFile (takeDirectory exePath </> confFilename) >>=
-    return . read
-    where
-      confFilename = "lightsources.txt"
-
-lightSourceCanControlPower :: LightSource -> Bool
-lightSourceCanControlPower (GPIOLightSource _ _ _ _) = False
+lightSourceCanControlPower :: Equipment -> Bool
 lightSourceCanControlPower (ArduinoLightSource _ _ _ _) = False
 lightSourceCanControlPower _ = True
 
-lightSourceAllowsMultipleChannels :: LightSource -> Bool
+lightSourceAllowsMultipleChannels :: Equipment -> Bool
 lightSourceAllowsMultipleChannels (LumencorLightSource _ _ _ _) = True
 lightSourceAllowsMultipleChannels (ArduinoLightSource _ _ _ _) = True
 lightSourceAllowsMultipleChannels (DummyLightSource _) = True
 lightSourceAllowsMultipleChannels _ = False
 
-lightSourceName :: LightSource -> Text
-lightSourceName (GPIOLightSource name _ _ _) = name
+lightSourceName :: Equipment -> Text
 lightSourceName (CoherentLightSource name _ _ _) = name
 lightSourceName (LumencorLightSource name _ _ _) = name
 lightSourceName (AsahiLightSource name _ _) = name
 lightSourceName (ArduinoLightSource name _ _ _) = name
 lightSourceName (DummyLightSource name) = name
 
-lightSourceChannels :: LightSource -> [Text]
+lightSourceChannels :: Equipment -> [Text]
 lightSourceChannels (LumencorLightSource _ _ _ _) = lumencorChannels
 lightSourceChannels (DummyLightSource _) = dummyLightSourceChannels
 lightSourceChannels (AsahiLightSource _ chs _) = map fst chs
 lightSourceChannels (ArduinoLightSource _ chs _ _) = map fst chs
 lightSourceChannels _ = [""]
 
-lightSourceHasChannel :: LightSource -> Text -> Bool
+lightSourceHasChannel :: Equipment -> Text -> Bool
 lightSourceHasChannel ls ch = ch `elem` (lightSourceChannels ls)
 
-gpioPinsNeededForLightSources :: [LightSourceDesc] -> [GPIOPin]
-gpioPinsNeededForLightSources = map extractPin . filter isGPIOLightSource
-    where
-        extractPin = glsdPin
-        isGPIOLightSource (GPIOLightSourceDesc _ _ _) = True
-        isGPIOLightSource _ = False
-
-withLightSources :: GPIOHandles -> [LightSourceDesc] -> ([LightSource] -> IO a) -> IO a
-withLightSources handles descs action =
-    bracket (openLightSources handles descs) closeLightSources action
-
-openLightSources :: GPIOHandles -> [LightSourceDesc] -> IO [LightSource]
-openLightSources gpioHandles descs = sequence $ map openLightSource descs
-    where
-        openLightSource (GPIOLightSourceDesc name pin delay) = return (GPIOLightSource name pin delay gpioHandles)
-        openLightSource (CoherentLightSourceDesc name portName) =
-            let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS19200}) (TimeoutMillis 10000) SerialPortNoDebug
-            in  openSerialPort portName serialSettings >>= \port ->
-                newIORef (False, 0.0, 0.0) >>= \powerRange ->
-                newIORef (False, 0.0) >>= \currentPower ->
-                return (CoherentLightSource name port powerRange currentPower)
-        openLightSource (LumencorLightSourceDesc name portName) =
-            let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS9600}) (TimeoutMillis 10000) SerialPortNoDebug
-                port = openSerialPort portName serialSettings
-            in  LumencorLightSource name <$> port <*> newIORef False <*> newIORef LCGreenFilter
-        openLightSource (AsahiLightSourceDesc name portName chs) =
-            let serialSettings = RCSerialPortSettings defaultSerialSettings (TimeoutMillis 10000) SerialPortNoDebug
-            in  openSerialPort portName serialSettings >>= \port ->
-                ST.timeout 2e6 (readLampLife port) >>= \response ->
-                case response of
-                    Nothing -> throwIO (userError "timeout communicating with Asahi lamp")
-                    Just v -> putStrLn ("Asahi lamp has been on " ++ show v ++ " hours (recommended lamp life 500 hours, max lamp life 1000 hours)") >>
-                              return (AsahiLightSource name (validChannelNames chs (1, 8)) port)
-            where
-                readLampLife :: SerialPort -> IO Double
-                readLampLife port =
-                    flushSerialPort port >> serialWrite port "LIFE?\r\n" >> serialReadUntilChar port '\n' >>= -- response is of format "LF %d\r"
-                    return . read . filter (`elem` ("01234567890." :: String)) . byteStringAsString
-        openLightSource (ArduinoLightSourceDesc name portName chs) =
-            putStrLn "Connecting to Arduino" >>
-            let chs' = validChannelNames chs (2, 13)
-                serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS115200}) (TimeoutMillis 10000) SerialPortNoDebug
-            in  openSerialPort portName serialSettings >>= \port -> threadDelay (floor 2e6) >> -- delay needed, otherwise the arduino won't receive the messages.
-                setArduinoPinsState ArduinoOutput (map (fst . snd) chs) port >>
-                newIORef [] >>= \activeSet ->
-                return (ArduinoLightSource name chs activeSet port)
-        openLightSource (DummyLightSourceDesc name) = putStrLn ("opened light source " ++ T.unpack name) >> return (DummyLightSource name)
-        openLightSource _ = throwIO (userError "opening unknown type of light source")
-
-validChannelNames :: [(Text, (Int, Double))] -> (Int, Int) -> [(Text, (Int, Double))]
-validChannelNames chs (lowChanLim, highChanLim)
-    | any (T.null . fst) chs = throw (userError "cannot have empty filter/channel names")
-    | not (nodups (map fst chs) && nodups (map (fst . snd) chs)) = throw (userError "cannot have duplicate filter/channel names")
-    | not $ all (\n -> within n lowChanLim highChanLim) (map (fst . snd) chs) = throw (userError "invalid light source filter/channel index")
-    | not $ all (\n -> n >= 0.0) (map (snd . snd) chs) = throw (userError "negative shutter delay time")
-    | otherwise = chs
-
-closeLightSources :: [LightSource] -> IO ()
-closeLightSources = mapM_ closeLightSource
-    where
-        closeLightSource (GPIOLightSource _ _ _ _) = return ()
-        closeLightSource (CoherentLightSource _ port _ _) = closeSerialPort port
-        closeLightSource (LumencorLightSource _ port _ _) = closeSerialPort port
-        closeLightSource (AsahiLightSource _ _ port) = closeSerialPort port
-        closeLightSource (ArduinoLightSource _ chs _ port) = setArduinoPinsState ArduinoInput (map (fst . snd) chs) port >> closeSerialPort port
-        closeLightSource (DummyLightSource name) = putStr ("closed light source " ++ T.unpack name) >> return ()
-
-isKnownLightSource :: [LightSource] -> Text -> Bool
+isKnownLightSource :: [Equipment] -> Text -> Bool
 isKnownLightSource lss n = isJust $ lookupMaybeLightSource lss n
 
-lookupLightSource :: [LightSource] -> Text -> LightSource
+lookupLightSource :: [Equipment] -> Text -> Equipment
 lookupLightSource sources name =
     case (lookupMaybeLightSource sources name) of
         Nothing -> throw (userError "invalid light source name")
         Just l  -> l
 
-lookupMaybeLightSource :: [LightSource] -> Text -> Maybe LightSource
+lookupMaybeLightSource :: [Equipment] -> Text -> Maybe Equipment
 lookupMaybeLightSource lightSources name =
     listToMaybe . filter ((==) (T.toCaseFold name) . T.toCaseFold . lightSourceName) $ lightSources
 
-lookupEitherLightSource :: [LightSource] -> Text -> Either String LightSource
+lookupEitherLightSource :: [Equipment] -> Text -> Either String Equipment
 lookupEitherLightSource lightSources name =
     case (lookupMaybeLightSource lightSources name) of
         Just l -> Right l
         Nothing -> Left "no such light source"
 
-validLightSourceChannelsAndPowers :: LightSource -> [Text] -> [Double] -> Text
+validLightSourceChannelsAndPowers :: Equipment -> [Text] -> [Double] -> Text
 validLightSourceChannelsAndPowers ls channels powers
     | length channels /= length powers = "must have same number of channels and powers"
     | (length channels > 1) && (not (lightSourceAllowsMultipleChannels ls)) = "light source does not allow multiple channels"
@@ -227,7 +105,7 @@ validLightSourceChannelsAndPowers ls channels powers
     | nub channels /= channels = "duplicate channels requested"
     | otherwise = T.empty
 
-activateLightSource :: LightSource -> [Text] -> [Double] -> IO ()
+activateLightSource :: Equipment -> [Text] -> [Double] -> IO ()
 activateLightSource ls channels powers
   | (not . T.null) (validLightSourceChannelsAndPowers ls channels powers) = throwIO (userError "invalid light source parameters")
   | otherwise = ST.timeout timeoutDuration (activateLightSource' ls channels powers) >>= \result ->
@@ -235,7 +113,6 @@ activateLightSource ls channels powers
                     Nothing -> throwIO (userError ("timeout activating light source " ++ (T.unpack $ lightSourceName ls)))
                     Just v -> return v
   where
-    activateLightSource' (GPIOLightSource _ pin delay handles) _ _ = setPinLevel handles pin High >> threadDelay (floor $ 1e6 * delay) >> return ()
     activateLightSource' (DummyLightSource name) chs ps = putStrLn ("activated " ++ T.unpack name ++ " with channels " ++ show chs ++ " with powers " ++ show ps) >> return ()
     activateLightSource' ls@(CoherentLightSource _ _ _ _) _ [power] = activateCoherentLightSource ls power
     activateLightSource' ls@(LumencorLightSource _ _ _ _) chs ps = activateLumencorLightSource ls (map lumencorChannelFromName chs) ps
@@ -244,7 +121,7 @@ activateLightSource ls channels powers
     activateLightSource' _ _ _ = throwIO (userError "activating unknown light source")
     timeoutDuration = floor (2.0e6)
 
-activateCoherentLightSource :: LightSource -> Double -> IO ()
+activateCoherentLightSource :: Equipment -> Double -> IO ()
 activateCoherentLightSource (CoherentLightSource _ port powerRange currentPower) power =
     needToSetPower >>= \needPower ->
     when (needPower) (setPower power) >>
@@ -278,7 +155,7 @@ activateCoherentLightSource (CoherentLightSource _ port powerRange currentPower)
         sendAndReadResponse :: ByteString -> IO ByteString
         sendAndReadResponse msg = flushSerialPort port >> serialWrite port msg >> serialReadUntilChar port '\n'
 
-activateLumencorLightSource :: LightSource -> [LumencorChannel] -> [Double] -> IO ()
+activateLumencorLightSource :: Equipment -> [LumencorChannel] -> [Double] -> IO ()
 activateLumencorLightSource (LumencorLightSource _ port haveInitRef currFilterRef) channels powers =
     readIORef haveInitRef >>= \haveInit ->
     when (not haveInit) (   -- init RS232 and arbitrarily select the green filter
@@ -301,7 +178,7 @@ activateLumencorLightSource (LumencorLightSource _ port haveInitRef currFilterRe
                          | LCYellow `elem` channels = Just LCYellowFilter
                          | otherwise                = Nothing
 
-activateAsahiLightSource :: LightSource -> Text -> Double -> IO ()
+activateAsahiLightSource :: Equipment -> Text -> Double -> IO ()
 activateAsahiLightSource (AsahiLightSource _ chs port) filter power =
     case (lookup filter chs) of
         Nothing -> throwIO (userError ("missing filter " ++ T.unpack filter))
@@ -311,7 +188,7 @@ activateAsahiLightSource (AsahiLightSource _ chs port) filter power =
             handleAsahiMessage port ("LI=" ++ (show . toInteger . round $ power) ++ "\r\n") >> --set power
             handleAsahiMessage port "S=1\r\n"
 
-activateArduinoLightSource :: LightSource -> [Text] -> [Double] -> IO ()
+activateArduinoLightSource :: Equipment -> [Text] -> [Double] -> IO ()
 activateArduinoLightSource (ArduinoLightSource _ availChs activePinRef port) chs _ =
     case (concatMaybes $ map (\ch -> lookup ch availChs) chs) of
         Nothing -> throwIO (userError "unknown arduino channel")
@@ -319,8 +196,7 @@ activateArduinoLightSource (ArduinoLightSource _ availChs activePinRef port) chs
             setArduinoPinsLevel port pins High >>
             modifyIORef' activePinRef (\s -> nub (s ++ pins))
 
-deactivateLightSource :: LightSource -> IO ()
-deactivateLightSource (GPIOLightSource _ pin delay handles) = setPinLevel handles pin Low >> threadDelay (floor $ 1e6 * delay)
+deactivateLightSource :: Equipment -> IO ()
 deactivateLightSource (CoherentLightSource _ port _ _) = flushSerialPort port >> serialWrite port "L=0\r" >> serialReadUntilChar port '\n' >> return ()
 deactivateLightSource (LumencorLightSource _ port _ currFilterRef) =
     readIORef currFilterRef >>= \currFilter ->
@@ -333,10 +209,10 @@ deactivateLightSource (ArduinoLightSource _ chs activePinRef port) =
 deactivateLightSource (DummyLightSource name) = putStrLn ("deactivated " ++ T.unpack name)
 deactivateLightSource _ = throwIO (userError "deactivating unknown type of light source")
 
-deactivateAllLightSources :: [LightSource] -> IO ()
+deactivateAllLightSources :: [Equipment] -> IO ()
 deactivateAllLightSources sources = mapM_ deactivateLightSource sources
 
-turnOffLightSource :: LightSource -> IO ()
+turnOffLightSource :: Equipment -> IO ()
 turnOffLightSource (AsahiLightSource _ _ port) = serialWrite port "PW0\r\n" >> return ()
 turnOffLightSource _ = throwIO (userError "can't turn off this light source")
 
@@ -407,22 +283,6 @@ lumencorDisableMessage filter =
         filterSelectByte LCGreenFilter = 0x7F
         filterSelectByte LCYellowFilter = 0x6F
 
-handleAsahiMessage :: SerialPort -> String -> IO ()
-handleAsahiMessage port ss =
-    flushSerialPort port >> serialWrite port (T.encodeUtf8 $ T.pack ss) >> serialReadUntilChar port '\n' >>= \response ->
-    if (response == "OK\r\n")
-    then return ()
-    else throwIO (userError ("sent " ++ ss ++ "to asahi, received " ++ (T.unpack $ T.decodeUtf8 response)))
-
-handleArduinoMessage :: SerialPort -> String -> IO ()
-handleArduinoMessage port ss =
-    flushSerialPort port >> serialWrite port (T.encodeUtf8 . T.pack $ ss) >>
-    ST.timeout (floor 1e6) (serialReadUntilChar port '\r') >>= \response ->
-    case response of
-        Just "OK\r" -> return ()
-        Just e -> throwIO (userError ("arduino responded \"" ++ T.unpack (T.decodeUtf8 e) ++ "\""))
-        Nothing -> throwIO (userError "timeout communicating with the arduino")
-
 setArduinoPinsLevel :: SerialPort -> [(Int, Double)] -> Level -> IO ()
 setArduinoPinsLevel port ps level =
     let pins = map fst ps
@@ -432,12 +292,3 @@ setArduinoPinsLevel port ps level =
         levelStr = if (level == High) then "high" else "low"
     in  forM_ (zip pins actualDelays) (\(p, delay) ->
             handleArduinoMessage port ("set " ++ levelStr ++ " pin " ++ show p ++ " wait " ++ show delay ++ "\r"))
-
-setArduinoPinsState :: ArduinoPinState -> [Int] -> SerialPort -> IO ()
-setArduinoPinsState state ps port =
-    forM_ ps $ \p ->
-        handleArduinoMessage port ("set " ++ stateStr ++ " pin " ++ show p ++ "\r")
-    where
-        stateStr = case state of
-                    ArduinoInput -> "input"
-                    ArduinoOutput -> "output"

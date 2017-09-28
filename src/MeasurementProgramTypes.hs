@@ -9,6 +9,7 @@ import Data.Text (Text)
 import System.Clock
 
 import Detector
+import EquipmentTypes
 import LightSources
 import FilterWheel
 import MotorizedStage
@@ -27,10 +28,10 @@ data MeasurementElement = MEDetection [DetectionParams]
 data ProgramEnvironment a = ProgramEnvironment {
                                 peDetector :: a
                               , peStartTime :: TimeSpec
-                              , peLightSources :: [LightSource]
-                              , peFilterWheels :: [FilterWheel]
-                              , peMotorizedStages :: [MotorizedStage]
-                              , peRobots :: [Robot]
+                              , peLightSources :: [Equipment]
+                              , peFilterWheels :: [Equipment]
+                              , peMotorizedStages :: [Equipment]
+                              , peRobots :: [Equipment]
                               , peDataMVar :: MVar [[AcquiredData]]
                               , peStatusMVar :: MVar [Text]
                             }

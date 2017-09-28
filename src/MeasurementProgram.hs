@@ -26,6 +26,7 @@ import Data.Time.LocalTime
 import System.Clock
 
 import Detector
+import EquipmentTypes
 import FilterWheel
 import LightSources
 import MeasurementProgramTypes
@@ -140,7 +141,7 @@ insertFastAcquisitionLoops (METimeLapse n dur es) = METimeLapse n dur (map inser
 insertFastAcquisitionLoops (MEStageLoop n pos es) = MEStageLoop n pos (map insertFastAcquisitionLoops es)
 insertFastAcquisitionLoops m = m
 
-executeDetection :: Detector a => a -> [LightSource] -> [FilterWheel] -> DetectionParams -> IO AcquiredData
+executeDetection :: Detector a => a -> [Equipment] -> [Equipment] -> DetectionParams -> IO AcquiredData
 executeDetection det lss fws DetectionParams{..} =
     switchToFilters fws dpFilterParams >>
     enableLightSources lss dpIrradiation >>
@@ -148,7 +149,7 @@ executeDetection det lss fws DetectionParams{..} =
     disableLightSources lss dpIrradiation >>
     return acquiredData
 
-executeFastDetectionLoop :: Detector a => a -> [LightSource] -> [FilterWheel] -> DetectionParams -> Int -> TimeSpec -> MVar [[AcquiredData]] -> IO ()
+executeFastDetectionLoop :: Detector a => a -> [Equipment] -> [Equipment] -> DetectionParams -> Int -> TimeSpec -> MVar [[AcquiredData]] -> IO ()
 executeFastDetectionLoop detector lightSources filterWheels detParams nTimesToPerform startTime dataMVar =
     switchToFilters filterWheels (dpFilterParams detParams) >>
     enableLightSources lightSources (dpIrradiation detParams) >>
@@ -156,21 +157,21 @@ executeFastDetectionLoop detector lightSources filterWheels detParams nTimesToPe
                     (dpNSpectraToAverage detParams) nTimesToPerform startTime dataMVar >>
     disableLightSources lightSources (dpIrradiation detParams)
 
-executeIrradiation :: [LightSource] -> [FilterWheel] -> [IrradiationParams] -> Double -> IO ()
+executeIrradiation :: [Equipment] -> [Equipment] -> [IrradiationParams] -> Double -> IO ()
 executeIrradiation lightSources fws ips dur =
     enableLightSources lightSources ips >>
     when (dur > 0.0) (threadDelay (floor $ dur * 1.0e6)) >>
     disableLightSources lightSources ips
 
-switchToFilters :: [FilterWheel] -> [FilterParams] -> IO ()
+switchToFilters :: [Equipment] -> [FilterParams] -> IO ()
 switchToFilters fws fps =
     forM_ fps (\(FilterParams fwName fw) -> switchFilterWheel fws fwName fw)
 
-enableLightSources :: [LightSource] -> [IrradiationParams] -> IO ()
+enableLightSources :: [Equipment] -> [IrradiationParams] -> IO ()
 enableLightSources lss params =
     forM_ params (\(IrradiationParams sourceName channel power) ->  activateLightSource (lookupLightSource lss sourceName) channel power)
 
-disableLightSources :: [LightSource] -> [IrradiationParams] -> IO ()
+disableLightSources :: [Equipment] -> [IrradiationParams] -> IO ()
 disableLightSources lss params =
     forM_ params (\(IrradiationParams sourceName _ _) -> deactivateLightSource (lookupLightSource lss sourceName))
 

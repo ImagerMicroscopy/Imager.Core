@@ -24,7 +24,8 @@ import System.IO.Unsafe
 
 import MiscUtils
 import Detector
-import GPIO
+import EquipmentEncoding
+import EquipmentTypes
 import MeasurementProgram
 import MeasurementProgramTypes
 import LightSources
@@ -33,12 +34,10 @@ import MotorizedStage
 import Robot
 
 data Environment a = Environment {
-                      envLightSources :: [LightSource]
-                    , envFilterWheels :: [FilterWheel]
-                    , envMotorizedStages :: [MotorizedStage]
-                    , envRobots :: [Robot]
-                    , envGPIOHandles :: !GPIOHandles
-                    , envAvailablePins :: [GPIOPin]
+                      envLightSources :: [Equipment]
+                    , envFilterWheels :: [Equipment]
+                    , envMotorizedStages :: [Equipment]
+                    , envRobots :: [Equipment]
                     , envDetector :: a
                     , envEncodedSpectrometerWavelengths :: !SB.ByteString
                     , envAsyncDataMVar :: MVar [[AcquiredData]]
@@ -138,10 +137,10 @@ data ResponseMessage = StatusOK
                      | StatusNoNewAsyncDataComing
                      | AcquiredDataResponse !AcquiredData
                      | Wavelengths !AcquiredData
-                     | AvailableLightSources ![LightSource]
-                     | AvailableFilterWheels ![FilterWheel]
-                     | AvailableMotorizedStages ![MotorizedStage]
-                     | AvailableRobots ![Robot]
+                     | AvailableLightSources ![Equipment]
+                     | AvailableFilterWheels ![Equipment]
+                     | AvailableMotorizedStages ![Equipment]
+                     | AvailableRobots ![Equipment]
                      | MotorizedStagePosition !(Double, Double, Double)
                      | RobotProgramsResponse ![Text]
                      | DetectorLimitsResponse !DetectorLimits

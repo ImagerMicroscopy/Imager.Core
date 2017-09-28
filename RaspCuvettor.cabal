@@ -49,9 +49,12 @@ executable RaspCuvettor
                      , vector
                      , filepath
                      , SimpleJSONServer
-                     , GPIO
   other-modules:       CuvettorTypes
                      , BinaryEncoding
+                     , EquipmentMessaging
+                     , EquipmentTypes
+                     , EquipmentInitialization
+                     , EquipmentEncoding
                      , FilterWheel
                      , LightSources
                      , MotorizedStage

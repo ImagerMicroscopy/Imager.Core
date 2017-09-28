@@ -13,23 +13,8 @@ import System.FilePath
 import System.Hardware.Serialport
 import System.IO
 
+import EquipmentTypes
 import MiscUtils
-
-data RobotDesc = RobottorDesc {
-                              roDescName :: !Text
-                            , roDescIPAddress :: !String
-                            , roDescPortNum :: !Int
-                          }
-                        deriving (Show, Read)
-
-data Robot = Robottor {
-                          roName :: !Text
-                        , roIPAddress :: !String
-                        , roPortNum :: !Int
-                       }
-
-instance ToJSON Robot where
-   toJSON s = object ["name" .= robotName s]
 
 data RobottorRequest = ListRobottorPrograms
                      | ExecuteRobottorProgram !Text !Bool
@@ -59,61 +44,40 @@ instance FromJSON RobottorResponse where
         _             -> fail "can't decode robottor response type"
   parseJSON _ = fail "can't decode robottor response"
 
-readAvailableRobots :: IO [RobotDesc]
-readAvailableRobots =
-   getExecutablePath >>= \exePath ->
-   readFile (takeDirectory exePath </> confFilename) >>=
-   return . read
-   where
-     confFilename = "robots.txt"
-
-robotName :: Robot -> Text
+robotName :: Equipment -> Text
 robotName (Robottor name _ _) = name
 
-withRobots :: [RobotDesc] -> ([Robot] -> IO a) -> IO a
-withRobots descs action =
-    bracket (openRobots descs) closeRobots action
-
-openRobots :: [RobotDesc] -> IO [Robot]
-openRobots = mapM openRobot
-    where
-        openRobot (RobottorDesc name ip port) = return (Robottor name ip port)
-        openRobot _ = throwIO (userError "opening unknown type of microscope robot")
-
-closeRobots :: [Robot] -> IO ()
-closeRobots _ = return ()
-
-availableRobotsAndPrograms :: [Robot] -> IO [(Text, [Text])]
+availableRobotsAndPrograms :: [Equipment] -> IO [(Text, [Text])]
 availableRobotsAndPrograms rss =
     let robotNames = map robotName rss
     in  zip robotNames <$> mapM listRobotPrograms rss
 
-lookupRobot :: [Robot] -> Text -> Maybe Robot
+lookupRobot :: [Equipment] -> Text -> Maybe Equipment
 lookupRobot mrs name = case (filter ((==) name . robotName) mrs) of
                            []      -> Nothing
                            (m : _) -> Just m
-lookupRobotThrows :: [Robot] -> Text -> Robot
+lookupRobotThrows :: [Equipment] -> Text -> Equipment
 lookupRobotThrows rs n = case lookupRobot rs n of
                              Just r  -> r
                              Nothing -> throw (userError ("no robot " ++ T.unpack n))
 
-isKnownRobot :: [Robot] -> Text -> Bool
+isKnownRobot :: [Equipment] -> Text -> Bool
 isKnownRobot mrs name = isJust (lookupRobot mrs name)
 
-listRobotPrograms :: Robot -> IO [Text]
+listRobotPrograms :: Equipment -> IO [Text]
 listRobotPrograms (Robottor _ ip port) =
     let serverParams = QueryServerParams ip port (floor 1e6) isCompleteJSONObject decodeJSONObject
         queryMsg = (LB.toStrict . encode) ListRobottorPrograms
     in  (queryServer serverParams queryMsg >>= \(RobottorProgramListResponse ps) ->
       return ps) `catch` \(e :: IOException) -> throw (userError "can't communicate with Robottor program")
 
-executeRobotProgram :: Robot -> Text -> Bool -> IO ()
+executeRobotProgram :: Equipment -> Text -> Bool -> IO ()
 executeRobotProgram r@(Robottor _ ip port) progName waitForCompletion = handleRobottorRequest r (ExecuteRobottorProgram progName waitForCompletion)
 
-abortRobotProgramExecution :: Robot -> IO ()
+abortRobotProgramExecution :: Equipment -> IO ()
 abortRobotProgramExecution r@(Robottor _ ip port) = handleRobottorRequest r AbortProgramExecution
 
-handleRobottorRequest :: Robot -> RobottorRequest -> IO ()
+handleRobottorRequest :: Equipment -> RobottorRequest -> IO ()
 handleRobottorRequest (Robottor _ ip port) req =
     let serverParams = QueryServerParams ip port (floor 1e6) isCompleteJSONObject decodeJSONObject
         queryMsg = (LB.toStrict . encode) req

@@ -14,66 +14,17 @@ import System.FilePath
 import qualified System.Timeout as ST
 import Text.Printf
 
+import EquipmentTypes
 import MiscUtils
 import RCSerialPort
 
 type StagePosition = (Double, Double, Double)
 
-data MotorizedStageDesc = PriorDesc {
-                              psDescName :: !Text
-                            , psDescPortName :: !String
-                          }
-                        | DummyStageDesc {
-                              dsName :: !Text
-                          }
-                        deriving (Show, Read)
-
-data MotorizedStage = PriorStage {
-                          psName :: !Text
-                        , psPort :: !(MVar SerialPort)
-                      }
-                    | DummyStage !Text
-
-instance ToJSON MotorizedStage where
-  toJSON s = object ["name" .= motorizedStageName s]
-
-readAvailableMotorizedStages :: IO [MotorizedStageDesc]
-readAvailableMotorizedStages =
-  getExecutablePath >>= \exePath ->
-  readFile (takeDirectory exePath </> confFilename) >>=
-  return . read
-  where
-    confFilename = "motorizedstages.txt"
-
-withMotorizedStages :: [MotorizedStageDesc] -> ([MotorizedStage] -> IO a) -> IO a
-withMotorizedStages descs action =
-    bracket (openMotorizedStages descs) closeMotorizedStages action
-
-motorizedStageName :: MotorizedStage -> Text
+motorizedStageName :: Equipment -> Text
 motorizedStageName (PriorStage name _) = name
 motorizedStageName (DummyStage name) = name
 
-openMotorizedStages :: [MotorizedStageDesc] -> IO [MotorizedStage]
-openMotorizedStages = mapM openMotorizedStage
-    where
-        openMotorizedStage (PriorDesc name portName) =
-            let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS9600}) (TimeoutMillis 30000) SerialPortNoDebug
-            in  openSerialPort portName serialSettings >>= \port ->
-                serialWrite port "COMP 1\r" >> serialReadUntilChar port '\r' >>= \resp ->
-                if ((resp /= "0\r") && (resp /= "R\r"))
-                then throwIO (userError "unexpected reply from prior stage")
-                else putStrLn "Connected to Prior stage" >> PriorStage name <$> newMVar port
-        openMotorizedStage (DummyStageDesc name) =
-            putStrLn ("dummy stage " ++ (T.unpack name) ++ " open") >>
-            return (DummyStage name)
-
-closeMotorizedStages :: [MotorizedStage] -> IO ()
-closeMotorizedStages = mapM_ closeMotorizedStage'
-    where
-      closeMotorizedStage' (PriorStage _ portVar) = withMVar portVar $ (\port -> closeSerialPort port)
-      closeMotorizedStage' (DummyStage n) = putStrLn ("dummy stage " ++ (T.unpack n) ++ " closed")
-
-getStagePositionLookup :: [MotorizedStage] -> Text -> IO (Either String StagePosition)
+getStagePositionLookup :: [Equipment] -> Text -> IO (Either String StagePosition)
 getStagePositionLookup mss name =
     case eligibleStages of
       [s] -> getStagePosition s
@@ -82,13 +33,13 @@ getStagePositionLookup mss name =
     where
       eligibleStages = filter ((== name) . motorizedStageName) mss
 
-getStagePosition :: MotorizedStage -> IO (Either String StagePosition)
+getStagePosition :: Equipment -> IO (Either String StagePosition)
 getStagePosition s = ST.timeout 20e6 (getStagePosition' s) >>= \result ->
                      case result of
                         Nothing -> return (Left "timeout getting stage position")
                         Just v  -> return (Right v)
     where
-      getStagePosition' :: MotorizedStage -> IO StagePosition
+      getStagePosition' :: Equipment -> IO StagePosition
       getStagePosition' (DummyStage n) = putStrLn ("read position of " ++ T.unpack n) >> return (0.0, 0.0, 0.0)
       getStagePosition' (PriorStage _ portVar) = withMVar portVar $ \port ->
           (,,) <$> readNumberP port "PX\r" <*> readNumberP port "PY\r" <*> readNumberP port "PZ\r"
@@ -98,7 +49,7 @@ getStagePosition s = ST.timeout 20e6 (getStagePosition' s) >>= \result ->
                                      serialReadUntilChar port '\r' >>=
                                      return . read . T.unpack . T.decodeUtf8
 
-setStagePositionLookup :: [MotorizedStage] -> Text -> StagePosition -> IO ()
+setStagePositionLookup :: [Equipment] -> Text -> StagePosition -> IO ()
 setStagePositionLookup mss name ds =
     case eligibleStages of
       [s] -> setStagePosition s ds
@@ -107,7 +58,7 @@ setStagePositionLookup mss name ds =
     where
       eligibleStages = filter ((== name) . motorizedStageName) mss
 
-setStagePosition :: MotorizedStage -> StagePosition -> IO ()
+setStagePosition :: Equipment -> StagePosition -> IO ()
 setStagePosition p pos =
     ST.timeout 20e6 (setStagePosition' p pos) >>= \result ->
     case result of

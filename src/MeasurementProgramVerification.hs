@@ -11,6 +11,7 @@ import Data.Maybe
 import Data.Text (Text)
 import qualified Data.Text as T
 
+import EquipmentTypes
 import FilterWheel
 import LightSources
 import MeasurementProgramTypes
@@ -20,12 +21,12 @@ import Robot
 
 type RobotInfo = (Text, [Text]) -- robot name, robot programs
 
-validateMeasurementElementThrows :: [LightSource] -> [FilterWheel] -> [MotorizedStage] -> [RobotInfo] -> MeasurementElement -> ()
+validateMeasurementElementThrows :: [Equipment] -> [Equipment] -> [Equipment] -> [RobotInfo] -> MeasurementElement -> ()
 validateMeasurementElementThrows lss fws mss rss me = case (validateMeasurementElement lss fws mss rss me) of
                                         Left e -> throw (userError e)
                                         Right () -> ()
 
-validateMeasurementElement :: [LightSource] -> [FilterWheel] -> [MotorizedStage] -> [RobotInfo] -> MeasurementElement -> Either String ()
+validateMeasurementElement :: [Equipment] -> [Equipment] -> [Equipment] -> [RobotInfo] -> MeasurementElement -> Either String ()
 validateMeasurementElement lss fws _ _ (MEDetection dets)
     | null dets = Left "no detection specified"
     | otherwise = sequenceEither (map (validateDetection lss fws) dets)
@@ -61,7 +62,7 @@ validateMeasurementElement lss fws sts rss (MEStageLoop stageName pos es)
     where
         stageNames = map motorizedStageName sts
 
-validateDetection :: [LightSource] -> [FilterWheel] -> DetectionParams -> Either String ()
+validateDetection :: [Equipment] -> [Equipment] -> DetectionParams -> Either String ()
 validateDetection lightSources filterWheels DetectionParams{..} =
     if ((within dpExposureTime 3.8e-3 10) && (within dpNSpectraToAverage 1 1000)
        && (all isRight $ map (validateIrradiation lightSources) dpIrradiation) && filtersAreValid)
@@ -78,12 +79,12 @@ validateDetection lightSources filterWheels DetectionParams{..} =
                 Nothing -> False
                 Just (availableFilters) -> fName `elem` availableFilters
 
-validateDetectionThrows :: [LightSource] -> [FilterWheel] -> DetectionParams -> IO ()
+validateDetectionThrows :: [Equipment] -> [Equipment] -> DetectionParams -> IO ()
 validateDetectionThrows lss fws ps = case (validateDetection lss fws ps) of
                                         Left e -> throwIO (userError e)
                                         Right () -> return ()
 
-validateIrradiation :: [LightSource] -> IrradiationParams -> Either String ()
+validateIrradiation :: [Equipment] -> IrradiationParams -> Either String ()
 validateIrradiation lightSources IrradiationParams{..} =
     case (lookupMaybeLightSource lightSources ipLightSourceName) of
       Nothing -> Left "invalid light source name"

@@ -25,7 +25,8 @@ import System.Clock
 import CuvettorTypes
 import Detector
 import AvailableDetector
-import GPIO
+import EquipmentTypes
+import EquipmentInitialization
 import SimpleJSONServer
 import MeasurementProgram
 import MeasurementProgramTypes
@@ -37,14 +38,6 @@ import MiscUtils
 import BinaryEncoding
 import FilterWheel
 
-extraPins :: [GPIOPin]
--- #ifdef WITH_OCEANOPTICS
---extraPins = [spectrometerTriggerPin]
---spectrometerTriggerPin = Pin11
--- #else
-extraPins = []
--- #endif
-
 handlerTimeout :: Int
 handlerTimeout = 2 * 1000000
 
@@ -55,27 +48,8 @@ serverSettings = defaultSettings {ssBindToAllInterfaces = False,
 
 main :: IO ()
 main =
-    readAvailableLightSources >>= \availableLightSources ->
-    return (nub (extraPins ++ (gpioPinsNeededForLightSources availableLightSources))) >>= \requiredGPIOPins ->
-
-    readAvailableFilterWheels >>= \availableFilterWheels ->
-    readAvailableMotorizedStages >>= \availableStages ->
-    readAvailableRobots >>= \availableRobots ->
-
-    withGPIOPins (zip requiredGPIOPins (repeat $ Output Low)) (\gpioHandles ->
-    putStrLn ("opened GPIO pins: " ++ concat (map show requiredGPIOPins)) >>
-
-    withLightSources gpioHandles availableLightSources (\lightSources ->
-    putStrLn ("opened light sources") >>
-
-    withFilterWheels availableFilterWheels (\filterWheels ->
-    putStrLn ("opened filter wheels") >>
-
-    withMotorizedStages availableStages (\motorizedStages ->
-    putStrLn ("opened motorized stages") >>
-
-    withRobots availableRobots (\robots ->
-    putStrLn ("opened robots") >>
+    readAvailableEquipment >>= \descs ->
+    withEquipment descs $ \availableEquipment ->
 
     newMVar [] >>= \asyncSpectraMVar ->
     newMVar [] >>= \asyncStatusMessagesMVar ->
@@ -86,9 +60,13 @@ main =
         getDetectorWavelengths det >>= \wl ->
         return (byteStringFromVector wl) >>= \encodedWl ->
         putStrLn "ready to measure!" >>
-        let env = Environment lightSources filterWheels motorizedStages robots gpioHandles
-              extraPins det encodedWl asyncSpectraMVar asyncStatusMessagesMVar asyncProgramWorker
-        in runServer 3200 messageHandler env serverSettings))))))
+        let lightSources = filter isLightSource availableEquipment
+            filterWheels = filter isFilterWheel availableEquipment
+            motorizedStages = filter isMotorizedStage availableEquipment
+            robots = filter isRobot availableEquipment
+            env = Environment lightSources filterWheels motorizedStages robots
+                      det encodedWl asyncSpectraMVar asyncStatusMessagesMVar asyncProgramWorker
+        in runServer 3200 messageHandler env serverSettings)
 
 messageHandler :: Detector a => MessageHandler (Environment a)
 messageHandler msg env =
