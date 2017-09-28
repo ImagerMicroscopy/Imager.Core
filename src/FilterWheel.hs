@@ -14,16 +14,16 @@ import Data.Either
 import Data.IORef
 import Data.List
 import Data.Maybe
-import Data.Serialize hiding(flush)
+import Data.Serialize
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import System.Environment
 import System.FilePath
-import System.Hardware.Serialport
 import qualified System.Timeout as ST
 
 import MiscUtils
+import RCSerialPort
 
 data FilterWheelDesc = ThorlabsFW103HDesc {
                            fw103DescName :: !Text
@@ -82,23 +82,26 @@ openFilterWheels :: [FilterWheelDesc] -> IO [FilterWheel]
 openFilterWheels = mapM openFilterWheel
   where
     openFilterWheel (ThorlabsFW103HDesc name portName chs) =
-        openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS115200}) >>= \port ->
-        putStr "initializing Thorlabs FW103H filter wheel..." >>
-        forM_ fw103HStartupMessages (\msg -> send port msg >> threadDelay (floor 25e3)) >>
-        send port fw103HStopUpdatesMessage >> send port fw103HMoveHomeMessage >>
-        fw103HWaitUntilHomingStops port >>
-        putStrLn "done!" >>
-        return (ThorlabsFW103H name (validateChannels chs) port)
+        let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS115200}) (TimeoutMillis 10000) SerialPortNoDebug
+        in  openSerialPort portName serialSettings >>= \port ->
+            putStr "initializing Thorlabs FW103H filter wheel..." >>
+            forM_ fw103HStartupMessages (\msg -> serialWrite port msg >> threadDelay (floor 25e3)) >>
+            serialWrite port fw103HStopUpdatesMessage >> serialWrite port fw103HMoveHomeMessage >>
+            fw103HWaitUntilHomingStops port >>
+            putStrLn "done!" >>
+            return (ThorlabsFW103H name (validateChannels chs) port)
     openFilterWheel (ThorlabsFW102CDesc name portName chs) =
-        ThorlabsFW102C name (validateChannels chs) <$> openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS115200})
+        let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS115200}) (TimeoutMillis 30000) SerialPortNoDebug
+        in  ThorlabsFW102C name (validateChannels chs) <$> openSerialPort portName serialSettings
     openFilterWheel (OlympusIX71DichroicDesc name portName chs) =
-        putStr "initializing IX71 motorized dichroic..." >>
-        openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS19200}) >>= \port ->
-        send port "1LOG IN\r" >> readFromSerialUntilChar port '\r' >>= \response ->
-        when (response /= "1LOG +\r") (
-            putStrLn ("unexpected response from Olymus IX71 DM: " ++ show response) >> putStrLn "press return to close" >> getLine >> error "failed") >>
-        putStrLn "done!" >> newIORef (False, 0) >>= \currFilterRef ->
-        return (OlympusIX71Dichroic name (validateChannels chs) currFilterRef port)
+        let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS19200}) (TimeoutMillis 20000) SerialPortNoDebug
+        in  openSerialPort portName serialSettings >>= \port ->
+            putStr "initializing IX71 motorized dichroic..." >>
+            serialWrite port "1LOG IN\r" >> serialReadUntilChar port '\r' >>= \response ->
+            when (response /= "1LOG +\r") (
+                putStrLn ("unexpected response from Olymus IX71 DM: " ++ show response) >> putStrLn "press return to close" >> getLine >> error "failed") >>
+            putStrLn "done!" >> newIORef (False, 0) >>= \currFilterRef ->
+            return (OlympusIX71Dichroic name (validateChannels chs) currFilterRef port)
     openFilterWheel (DummyFilterWheelDesc name chs) =
         putStrLn ("Opened dummy filter wheel " ++ T.unpack name ++ " with filters " ++ show chs) >> return (DummyFilterWheel name (validateChannels chs))
     validateChannels :: [(Text, Int)] -> [(Text, Int)]
@@ -115,9 +118,9 @@ openFilterWheels = mapM openFilterWheel
 closeFilterWheels :: [FilterWheel] -> IO ()
 closeFilterWheels = mapM_ closeFilterWheels
   where
-    closeFilterWheels (ThorlabsFW103H _ _ port) = closeSerial port
-    closeFilterWheels (ThorlabsFW102C _ _ port) = closeSerial port
-    closeFilterWheels (OlympusIX71Dichroic _ _ _ port) = closeSerial port
+    closeFilterWheels (ThorlabsFW103H _ _ port) = closeSerialPort port
+    closeFilterWheels (ThorlabsFW102C _ _ port) = closeSerialPort port
+    closeFilterWheels (OlympusIX71Dichroic _ _ _ port) = closeSerialPort port
     closeFilterWheels (DummyFilterWheel name _) = putStrLn ("Closed filter wheel " ++ T.unpack name)
 
 filterWheelHasChannel :: FilterWheel -> Text -> Bool
@@ -142,18 +145,18 @@ switchToFilter fw chName | not (filterWheelHasChannel fw chName) = throwIO (user
     switchToFilter' (ThorlabsFW103H _ chs port) chName =
         let filterIndex = fromJust (lookup chName chs)
             wheelPos = (409600 `div` 6) * filterIndex -- Thorlabs:  1 turn represents 360 degrees which is 409600 micro steps
-        in  flush port >> send port (fw103HMoveAbsoluteMessage wheelPos) >>
+        in  flushSerialPort port >> serialWrite port (fw103HMoveAbsoluteMessage wheelPos) >>
             fw103HWaitUntilMotionStops port wheelPos
     switchToFilter' (ThorlabsFW102C _ chs port) chName =
         let filterIndex = fromJust (lookup chName chs)
-        in flush port >> send port (T.encodeUtf8 . T.pack $ "pos=" ++ show filterIndex) >>
-           readFromSerialUntilChar port '>' >> return ()
+        in flushSerialPort port >> serialWrite port (T.encodeUtf8 . T.pack $ "pos=" ++ show filterIndex) >>
+           serialReadUntilChar port '>' >> return ()
     switchToFilter' (OlympusIX71Dichroic _ chs currFilter port) chName =
         let filterIndex = fromJust (lookup chName chs)
         in  readIORef currFilter >>= \(haveInit, currFilterIdx) ->
             when ((not haveInit) || (currFilterIdx /= filterIndex)) (
-                flush port >> send port (T.encodeUtf8 . T.pack $ "1MU " ++ show (filterIndex + 1) ++ "\r") >>
-                readFromSerialUntilChar port '\r' >>= \result ->
+                flushSerialPort port >> serialWrite port (T.encodeUtf8 . T.pack $ "1MU " ++ show (filterIndex + 1) ++ "\r") >>
+                serialReadUntilChar port '\r' >>= \result ->
                 case result of
                     "1MU +\r" -> writeIORef currFilter (True, filterIndex) >> return ()
                     v         -> throwIO (userError ("unknown response from ix71 dichroic turret: " ++ show v)))
@@ -167,8 +170,8 @@ fw103HMoveAbsoluteMessage pos = runPut $
 
 fw103HWaitUntilMotionStops :: SerialPort -> Int -> IO ()
 fw103HWaitUntilMotionStops port targetPos =
-    send port fw103HGetStatusMessage >>
-    readAtLeastNBytesFromSerial port 20 >>= \response ->
+    serialWrite port fw103HGetStatusMessage >>
+    serialReadNBytes port 20 >>= \response ->
     let Right status = runGet getWord32le ((B.take 4 . B.drop 16) response)
         isInMotion = (0x00F0 .&. status) /= 0
         isHoming = (0x0200 .&. status) /= 0

@@ -32,19 +32,19 @@ import Data.IORef
 import Data.List
 import Data.Maybe
 import Data.Monoid
-import Data.Serialize hiding(flush)
+import Data.Serialize
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Data.Word
 import System.Environment
 import System.FilePath
-import System.Hardware.Serialport
 import System.IO
 import qualified System.Timeout as ST
 
 import GPIO
 import MiscUtils
+import RCSerialPort
 
 data LightSourceDesc = GPIOLightSourceDesc {
                            glsdName :: !Text
@@ -147,33 +147,36 @@ openLightSources gpioHandles descs = sequence $ map openLightSource descs
     where
         openLightSource (GPIOLightSourceDesc name pin delay) = return (GPIOLightSource name pin delay gpioHandles)
         openLightSource (CoherentLightSourceDesc name portName) =
-            openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS19200}) >>= \port ->
-            newIORef (False, 0.0, 0.0) >>= \powerRange ->
-            newIORef (False, 0.0) >>= \currentPower ->
-            return (CoherentLightSource name port powerRange currentPower)
+            let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS19200}) (TimeoutMillis 10000) SerialPortNoDebug
+            in  openSerialPort portName serialSettings >>= \port ->
+                newIORef (False, 0.0, 0.0) >>= \powerRange ->
+                newIORef (False, 0.0) >>= \currentPower ->
+                return (CoherentLightSource name port powerRange currentPower)
         openLightSource (LumencorLightSourceDesc name portName) =
-            let port = openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS9600})
-            in LumencorLightSource name <$> port <*> newIORef False <*> newIORef LCGreenFilter
+            let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS9600}) (TimeoutMillis 10000) SerialPortNoDebug
+                port = openSerialPort portName serialSettings
+            in  LumencorLightSource name <$> port <*> newIORef False <*> newIORef LCGreenFilter
         openLightSource (AsahiLightSourceDesc name portName chs) =
-            putStrLn "Connecting to Asahi lamp..." >>
-            openSerialWithErrorMsg portName defaultSerialSettings >>= \port ->
-            ST.timeout 2e6 (readLampLife port) >>= \response ->
-            case response of
-                Nothing -> throwIO (userError "timeout communicating with Asahi lamp")
-                Just v -> putStrLn ("Asahi lamp has been on " ++ show v ++ " hours (recommended lamp life 500 hours, max lamp life 1000 hours)") >>
-                          return (AsahiLightSource name (validChannelNames chs (1, 8)) port)
+            let serialSettings = RCSerialPortSettings defaultSerialSettings (TimeoutMillis 10000) SerialPortNoDebug
+            in  openSerialPort portName serialSettings >>= \port ->
+                ST.timeout 2e6 (readLampLife port) >>= \response ->
+                case response of
+                    Nothing -> throwIO (userError "timeout communicating with Asahi lamp")
+                    Just v -> putStrLn ("Asahi lamp has been on " ++ show v ++ " hours (recommended lamp life 500 hours, max lamp life 1000 hours)") >>
+                              return (AsahiLightSource name (validChannelNames chs (1, 8)) port)
             where
                 readLampLife :: SerialPort -> IO Double
                 readLampLife port =
-                    flush port >> send port "LIFE?\r\n" >> readFromSerialUntilChar port '\n' >>= -- response is of format "LF %d\r"
+                    flushSerialPort port >> serialWrite port "LIFE?\r\n" >> serialReadUntilChar port '\n' >>= -- response is of format "LF %d\r"
                     return . read . filter (`elem` ("01234567890." :: String)) . byteStringAsString
         openLightSource (ArduinoLightSourceDesc name portName chs) =
             putStrLn "Connecting to Arduino" >>
             let chs' = validChannelNames chs (2, 13)
-            in openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed=CS115200}) >>= \port -> threadDelay (floor 2e6) >> -- delay needed, otherwise the arduino won't receive the messages.
-               setArduinoPinsState ArduinoOutput (map (fst . snd) chs) port >>
-               newIORef [] >>= \activeSet ->
-               return (ArduinoLightSource name chs activeSet port)
+                serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS115200}) (TimeoutMillis 10000) SerialPortNoDebug
+            in  openSerialPort portName serialSettings >>= \port -> threadDelay (floor 2e6) >> -- delay needed, otherwise the arduino won't receive the messages.
+                setArduinoPinsState ArduinoOutput (map (fst . snd) chs) port >>
+                newIORef [] >>= \activeSet ->
+                return (ArduinoLightSource name chs activeSet port)
         openLightSource (DummyLightSourceDesc name) = putStrLn ("opened light source " ++ T.unpack name) >> return (DummyLightSource name)
         openLightSource _ = throwIO (userError "opening unknown type of light source")
 
@@ -189,10 +192,10 @@ closeLightSources :: [LightSource] -> IO ()
 closeLightSources = mapM_ closeLightSource
     where
         closeLightSource (GPIOLightSource _ _ _ _) = return ()
-        closeLightSource (CoherentLightSource _ port _ _) = closeSerial port
-        closeLightSource (LumencorLightSource _ port _ _) = closeSerial port
-        closeLightSource (AsahiLightSource _ _ port) = closeSerial port
-        closeLightSource (ArduinoLightSource _ chs _ port) = setArduinoPinsState ArduinoInput (map (fst . snd) chs) port >> closeSerial port
+        closeLightSource (CoherentLightSource _ port _ _) = closeSerialPort port
+        closeLightSource (LumencorLightSource _ port _ _) = closeSerialPort port
+        closeLightSource (AsahiLightSource _ _ port) = closeSerialPort port
+        closeLightSource (ArduinoLightSource _ chs _ port) = setArduinoPinsState ArduinoInput (map (fst . snd) chs) port >> closeSerialPort port
         closeLightSource (DummyLightSource name) = putStr ("closed light source " ++ T.unpack name) >> return ()
 
 isKnownLightSource :: [LightSource] -> Text -> Bool
@@ -273,25 +276,25 @@ activateCoherentLightSource (CoherentLightSource _ port powerRange currentPower)
         parseQuery :: ByteString -> IO Double
         parseQuery q = sendAndReadResponse q >>= return . read . filter (`elem` ('.' : ['0' .. '9'])) . T.unpack . T.decodeUtf8
         sendAndReadResponse :: ByteString -> IO ByteString
-        sendAndReadResponse msg = flush port >> send port msg >> readFromSerialUntilChar port '\n'
+        sendAndReadResponse msg = flushSerialPort port >> serialWrite port msg >> serialReadUntilChar port '\n'
 
 activateLumencorLightSource :: LightSource -> [LumencorChannel] -> [Double] -> IO ()
 activateLumencorLightSource (LumencorLightSource _ port haveInitRef currFilterRef) channels powers =
     readIORef haveInitRef >>= \haveInit ->
     when (not haveInit) (   -- init RS232 and arbitrarily select the green filter
-        send port lumencorEnableRS232Message >>
+        serialWrite port lumencorEnableRS232Message >>
         changeFilter LCGreenFilter >>
         writeIORef haveInitRef True) >>
     readIORef currFilterRef >>= \currFilter ->
     when ((isJust filterForChannel) && (currFilter /= fromJust filterForChannel)) (
          changeFilter $ fromJust filterForChannel) >>
     readIORef currFilterRef >>= \possiblyUpdatedFilter ->
-    send port (lumencorIntensityMessage channels powers) >>
-    send port (lumencorEnableMessage channels possiblyUpdatedFilter) >>
+    serialWrite port (lumencorIntensityMessage channels powers) >>
+    serialWrite port (lumencorEnableMessage channels possiblyUpdatedFilter) >>
     return ()
     where
         changeFilter filter =
-            send port (lumencorFilterMessage filter) >>
+            serialWrite port (lumencorFilterMessage filter) >>
             threadDelay (floor (0.3 * 1.0e6)) >>
             writeIORef currFilterRef filter
         filterForChannel | LCGreen `elem` channels  = Just LCGreenFilter
@@ -318,10 +321,10 @@ activateArduinoLightSource (ArduinoLightSource _ availChs activePinRef port) chs
 
 deactivateLightSource :: LightSource -> IO ()
 deactivateLightSource (GPIOLightSource _ pin delay handles) = setPinLevel handles pin Low >> threadDelay (floor $ 1e6 * delay)
-deactivateLightSource (CoherentLightSource _ port _ _) = flush port >> send port "L=0\r" >> readFromSerialUntilChar port '\n' >> return ()
+deactivateLightSource (CoherentLightSource _ port _ _) = flushSerialPort port >> serialWrite port "L=0\r" >> serialReadUntilChar port '\n' >> return ()
 deactivateLightSource (LumencorLightSource _ port _ currFilterRef) =
     readIORef currFilterRef >>= \currFilter ->
-    send port (lumencorDisableMessage currFilter) >> return ()
+    serialWrite port (lumencorDisableMessage currFilter) >> return ()
 deactivateLightSource (AsahiLightSource _ _ port) = handleAsahiMessage port "S=0\r\n"
 deactivateLightSource (ArduinoLightSource _ chs activePinRef port) =
     readIORef activePinRef >>= \activePins ->
@@ -334,7 +337,7 @@ deactivateAllLightSources :: [LightSource] -> IO ()
 deactivateAllLightSources sources = mapM_ deactivateLightSource sources
 
 turnOffLightSource :: LightSource -> IO ()
-turnOffLightSource (AsahiLightSource _ _ port) = send port "PW0\r\n" >> return ()
+turnOffLightSource (AsahiLightSource _ _ port) = serialWrite port "PW0\r\n" >> return ()
 turnOffLightSource _ = throwIO (userError "can't turn off this light source")
 
 dummyLightSourceChannels :: [Text]
@@ -406,15 +409,15 @@ lumencorDisableMessage filter =
 
 handleAsahiMessage :: SerialPort -> String -> IO ()
 handleAsahiMessage port ss =
-    flush port >> send port (T.encodeUtf8 $ T.pack ss) >> readFromSerialUntilChar port '\n' >>= \response ->
+    flushSerialPort port >> serialWrite port (T.encodeUtf8 $ T.pack ss) >> serialReadUntilChar port '\n' >>= \response ->
     if (response == "OK\r\n")
     then return ()
     else throwIO (userError ("sent " ++ ss ++ "to asahi, received " ++ (T.unpack $ T.decodeUtf8 response)))
 
 handleArduinoMessage :: SerialPort -> String -> IO ()
 handleArduinoMessage port ss =
-    flush port >> send port (T.encodeUtf8 . T.pack $ ss) >>
-    ST.timeout (floor 1e6) (readFromSerialUntilChar port '\r') >>= \response ->
+    flushSerialPort port >> serialWrite port (T.encodeUtf8 . T.pack $ ss) >>
+    ST.timeout (floor 1e6) (serialReadUntilChar port '\r') >>= \response ->
     case response of
         Just "OK\r" -> return ()
         Just e -> throwIO (userError ("arduino responded \"" ++ T.unpack (T.decodeUtf8 e) ++ "\""))

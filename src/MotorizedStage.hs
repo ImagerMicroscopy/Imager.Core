@@ -11,11 +11,11 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import System.Environment
 import System.FilePath
-import System.Hardware.Serialport
 import qualified System.Timeout as ST
 import Text.Printf
 
 import MiscUtils
+import RCSerialPort
 
 type StagePosition = (Double, Double, Double)
 
@@ -57,16 +57,12 @@ openMotorizedStages :: [MotorizedStageDesc] -> IO [MotorizedStage]
 openMotorizedStages = mapM openMotorizedStage
     where
         openMotorizedStage (PriorDesc name portName) =
-            putStrLn "Connecting to Prior stage..." >>
-            ST.timeout 2e6 (
-              openSerialWithErrorMsg portName (defaultSerialSettings {commSpeed = CS9600}) >>= \port ->
-              send port "COMP 1\r" >> readFromSerialUntilChar port '\r' >>= \resp ->
-              if ((resp /= "0\r") && (resp /= "R\r"))
-              then throwIO (userError "unexpected reply from prior stage")
-              else PriorStage name <$> newMVar port) >>= \result ->
-            case result of
-              Nothing -> throwIO (userError "timeout connecting to the prior stage")
-              Just r -> putStrLn "Connected to Prior stage" >> return r
+            let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS9600}) (TimeoutMillis 30000) SerialPortNoDebug
+            in  openSerialPort portName serialSettings >>= \port ->
+                serialWrite port "COMP 1\r" >> serialReadUntilChar port '\r' >>= \resp ->
+                if ((resp /= "0\r") && (resp /= "R\r"))
+                then throwIO (userError "unexpected reply from prior stage")
+                else putStrLn "Connected to Prior stage" >> PriorStage name <$> newMVar port
         openMotorizedStage (DummyStageDesc name) =
             putStrLn ("dummy stage " ++ (T.unpack name) ++ " open") >>
             return (DummyStage name)
@@ -74,7 +70,7 @@ openMotorizedStages = mapM openMotorizedStage
 closeMotorizedStages :: [MotorizedStage] -> IO ()
 closeMotorizedStages = mapM_ closeMotorizedStage'
     where
-      closeMotorizedStage' (PriorStage _ portVar) = withMVar portVar $ (\port -> closeSerial port)
+      closeMotorizedStage' (PriorStage _ portVar) = withMVar portVar $ (\port -> closeSerialPort port)
       closeMotorizedStage' (DummyStage n) = putStrLn ("dummy stage " ++ (T.unpack n) ++ " closed")
 
 getStagePositionLookup :: [MotorizedStage] -> Text -> IO (Either String StagePosition)
@@ -98,8 +94,8 @@ getStagePosition s = ST.timeout 20e6 (getStagePosition' s) >>= \result ->
           (,,) <$> readNumberP port "PX\r" <*> readNumberP port "PY\r" <*> readNumberP port "PZ\r"
           where
             readNumberP :: SerialPort -> ByteString -> IO Double
-            readNumberP port query = flush port >> send port query >>
-                                     readFromSerialUntilChar port '\r' >>=
+            readNumberP port query = flushSerialPort port >> serialWrite port query >>
+                                     serialReadUntilChar port '\r' >>=
                                      return . read . T.unpack . T.decodeUtf8
 
 setStagePositionLookup :: [MotorizedStage] -> Text -> StagePosition -> IO ()
@@ -122,7 +118,7 @@ setStagePosition p pos =
             putStrLn ("set position of " ++ T.unpack n ++ " to " ++ show ds)
         setStagePosition' (PriorStage _ portVar) (x, y, z) =
             (withMVar portVar $ \port ->
-                flush port >> send port posStr >> readFromSerialUntilChar port '\r') >>= \resp ->
+                flushSerialPort port >> serialWrite port posStr >> serialReadUntilChar port '\r') >>= \resp ->
             case resp of
               "R\r" -> return ()
               _     -> throwIO (userError "unexpected response from stage")

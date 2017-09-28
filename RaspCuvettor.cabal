@@ -58,6 +58,7 @@ executable RaspCuvettor
                      , MeasurementProgram
                      , MeasurementProgramTypes
                      , MeasurementProgramVerification
+                     , RCSerialPort
                      , Robot
                      , Detector
                      , AvailableDetector
