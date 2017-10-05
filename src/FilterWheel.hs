@@ -92,21 +92,19 @@ openFilterWheels = mapM openFilterWheel
     openFilterWheel (ThorlabsFW103HDesc name portName chs) =
         let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS115200}) (TimeoutMillis 10000) SerialPortNoDebug
         in  openSerialPort portName serialSettings >>= \port ->
-            putStr "initializing Thorlabs FW103H filter wheel..." >>
             forM_ fw103HStartupMessages (\msg -> serialWrite port msg >> threadDelay (floor 25e3)) >>
             serialWrite port fw103HStopUpdatesMessage >> serialWrite port fw103HMoveHomeMessage >>
             fw103HWaitUntilHomingStops port >>
-            putStrLn "done!" >>
-            return (ThorlabsFW103H name (validateChannels chs) port)
+            return (ThorlabsFW103H name (validateChannels (0, 5) chs) port)
     openFilterWheel (ThorlabsFW102CDesc name portName chs) =
         let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS115200}) (TimeoutMillis 30000) SerialPortNoDebug
-        in  ThorlabsFW102C name (validateChannels chs) <$> openSerialPort portName serialSettings
+        in  ThorlabsFW102C name (validateChannels (0, 5) chs) <$> openSerialPort portName serialSettings
     openFilterWheel (SutterLambda10BDesc name portName chs) =
         let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS128000}) (TimeoutMillis 10000) SerialPortDebugBinary
         in  openSerialPort portName serialSettings >>= \port ->
             serialWriteByte port 238 >> serialReadUntilChar port '\r'>>
             serialWriteByte port 253 >> serialReadUntilChar port '\r' >>
-            return (SutterLambda10B name (validateChannels chs) port)
+            return (SutterLambda10B name (validateChannels (0, 9) chs) port)
     openFilterWheel (OlympusIX71DichroicDesc name portName chs) =
         let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS19200}) (TimeoutMillis 20000) SerialPortNoDebug
         in  openSerialPort portName serialSettings >>= \port ->
@@ -115,18 +113,19 @@ openFilterWheels = mapM openFilterWheel
             when (response /= "1LOG +\r") (
                 putStrLn ("unexpected response from Olymus IX71 DM: " ++ show response) >> putStrLn "press return to close" >> getLine >> error "failed") >>
             putStrLn "done!" >> newIORef (False, 0) >>= \currFilterRef ->
-            return (OlympusIX71Dichroic name (validateChannels chs) currFilterRef port)
+            return (OlympusIX71Dichroic name (validateChannels (0, 5) chs) currFilterRef port)
     openFilterWheel (DummyFilterWheelDesc name chs) =
-        putStrLn ("Opened dummy filter wheel " ++ T.unpack name ++ " with filters " ++ show chs) >> return (DummyFilterWheel name (validateChannels chs))
-    validateChannels :: [(Text, Int)] -> [(Text, Int)]
-    validateChannels chs | haveDuplicates chs = error ("duplicate channels in " ++ show chs)
-                         | invalidFilterIndices chs = error ("invalid filter indices in "  ++ show chs)
-                         | invalidFilterNames chs = error ("invalid filter names in " ++ show chs)
-                         | otherwise = chs
+        putStrLn ("Opened dummy filter wheel " ++ T.unpack name ++ " with filters " ++ show chs) >> return (DummyFilterWheel name (validateChannels (0, 5) chs))
+    validateChannels :: (Int, Int) -> [(Text, Int)] -> [(Text, Int)]
+    validateChannels idxLimits chs
+        | haveDuplicates chs = error ("duplicate channels in " ++ show chs)
+        | invalidFilterIndices idxLimits chs = error ("invalid filter indices in "  ++ show chs)
+        | invalidFilterNames chs = error ("invalid filter names in " ++ show chs)
+        | otherwise = chs
       where
         haveDuplicates chs = not ((nodups (map fst chs)) && (nodups (map snd chs)))
         nodups xs = (nub xs) == xs
-        invalidFilterIndices = any (\(_, i) -> not (within i 0 5))
+        invalidFilterIndices (minIdx, maxIdx) = any (\(_, i) -> not (within i minIdx maxIdx))
         invalidFilterNames = any (\(n, _) -> T.null n)
 
 closeFilterWheels :: [FilterWheel] -> IO ()
