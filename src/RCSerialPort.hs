@@ -12,6 +12,7 @@ module RCSerialPort (
   , openSerialPort
   , closeSerialPort
   , serialWrite
+  , serialWriteByte
   , serialReadUntilTerminator
   , serialReadUntilChar
   , serialReadNBytes
@@ -66,11 +67,15 @@ serialWrite :: SerialPort -> ByteString -> IO ()
 serialWrite port bs
     | B.null bs = return ()
     | otherwise = SP.send (spPort port) bs >>= \nBytesSent ->
+                  possiblyPrintMessage (spPortName port) (spDebugMode port) "SENT" (B.take nBytesSent bs) >>
                   serialWrite port (B.drop nBytesSent bs)
+
+serialWriteByte :: SerialPort -> Word8 -> IO ()
+serialWriteByte port b = serialWrite port (B.pack [b])
 
 serialReadUntilTerminator :: SerialPort -> Word8 -> IO ByteString
 serialReadUntilTerminator p terminator = serialRead p satisfiedP
-    where satisfiedP bs = B.last bs == terminator
+    where satisfiedP bs = not (B.null bs) && (B.last bs == terminator)
 
 serialReadUntilChar :: SerialPort -> Char -> IO ByteString
 serialReadUntilChar p c = serialReadUntilTerminator p (fromIntegral . fromEnum $ c)
@@ -93,13 +98,14 @@ serialRead port satisfiedP =
             B.append accum <$> SP.recv port 4096 >>= \newAccum ->
             if (not $ satisfiedP newAccum)
               then readWorker p satisfiedP newAccum deadline
-              else possiblyPrintMessage portName debugMode newAccum >> return newAccum
-        possiblyPrintMessage :: Text -> SerialPortDebugMode -> ByteString -> IO ()
-        possiblyPrintMessage portName dbgMode msg =
-            case dbgMode of
-                SerialPortNoDebug     -> return ()
-                SerialPortDebugBinary -> T.print "{}:RECEIVED {}" (portName, byteStringAsHex msg)
-                SerialPortDebugText   -> T.print "{}:RECEIVED {}" (portName, T.decodeUtf8 msg)
+              else possiblyPrintMessage portName debugMode "RECEIVED" newAccum >> return newAccum
+
+possiblyPrintMessage :: Text -> SerialPortDebugMode -> Text -> ByteString -> IO ()
+possiblyPrintMessage portName dbgMode prefix msg =
+    case dbgMode of
+        SerialPortNoDebug     -> return ()
+        SerialPortDebugBinary -> T.print "{}: {} {}\n" (portName, prefix, byteStringAsHex msg)
+        SerialPortDebugText   -> T.print "{}: {} {}\n" (portName, prefix, T.decodeUtf8 msg)
 
 flushSerialPort :: SerialPort -> IO ()
 flushSerialPort (SerialPort port _ _ _) = SP.flush port

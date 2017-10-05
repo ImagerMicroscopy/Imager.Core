@@ -102,8 +102,11 @@ openFilterWheels = mapM openFilterWheel
         let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS115200}) (TimeoutMillis 30000) SerialPortNoDebug
         in  ThorlabsFW102C name (validateChannels chs) <$> openSerialPort portName serialSettings
     openFilterWheel (SutterLambda10BDesc name portName chs) =
-        let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS9600}) (TimeoutMillis 10000) SerialPortNoDebug
-        in  SutterLambda10B name (validateChannels chs) <$> openSerialPort portName serialSettings
+        let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS128000}) (TimeoutMillis 10000) SerialPortDebugBinary
+        in  openSerialPort portName serialSettings >>= \port ->
+            serialWriteByte port 238 >> serialReadUntilChar port '\r'>>
+            serialWriteByte port 253 >> serialReadUntilChar port '\r' >>
+            return (SutterLambda10B name (validateChannels chs) port)
     openFilterWheel (OlympusIX71DichroicDesc name portName chs) =
         let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS19200}) (TimeoutMillis 20000) SerialPortNoDebug
         in  openSerialPort portName serialSettings >>= \port ->

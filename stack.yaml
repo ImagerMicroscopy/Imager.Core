@@ -24,7 +24,7 @@ packages:
   extra-dep: true
 - location:
     git: https://pdedecker@bitbucket.org/pdedecker/serialport.git
-    commit: 535d9de636b3299f3e7565988944fb9ead7c55d6
+    commit: de4d586e44c3157f4971a2cd9a6c215bb116c3eb
   extra-dep: true
 
 # Packages to be pulled from upstream that are not in the resolver (e.g., acme-missiles-0.3)

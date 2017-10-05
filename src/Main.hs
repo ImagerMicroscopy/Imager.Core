@@ -99,7 +99,8 @@ messageHandler msg env =
                      then return (ResponseBSList (binaryEncode resp), newEnv)
                      else return (ResponseLBS (encode resp), newEnv)
     where
-       perform env v = (performAction env v) `catch` (\(e :: IOException) -> return (StatusError (displayException e), env))
+       perform env v = (performAction env v) `catch` (\(e :: IOException) -> putStrLn (displayException e) >>
+                                                                             return (StatusError (displayException e), env))
 
 performAction :: Detector a => Environment a -> RequestMessage -> IO (ResponseMessage, Environment a)
 performAction env (AcquireData params) =
