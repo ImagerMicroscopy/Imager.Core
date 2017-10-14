@@ -15,14 +15,15 @@ import FilterWheel
 import MotorizedStage
 import Robot
 
-data MeasurementElement = MEDetection [DetectionParams]
-                        | MEIrradiation !Double [IrradiationParams]
-                        | MEWait Double
+data MeasurementElement = MEDetection ![DetectionParams]
+                        | MEIrradiation !Double ![IrradiationParams]
+                        | MEWait !Double
                         | MEExecuteRobotProgram !Text !Text !Bool
-                        | MEDoTimes !Int [MeasurementElement]
-                        | MEFastAcquisitionLoop Int DetectionParams
-                        | METimeLapse !Int !Double [MeasurementElement]
-                        | MEStageLoop !Text [PositionNameAndCoords] [MeasurementElement]
+                        | MEDoTimes !Int ![MeasurementElement]
+                        | MEFastAcquisitionLoop !Int !DetectionParams
+                        | METimeLapse !Int !Double ![MeasurementElement]
+                        | MEStageLoop !Text ![PositionNameAndCoords] ![MeasurementElement]
+                        | MERelativeStageLoop !Text !RelativeStageLoopParams ![MeasurementElement]
                         deriving (Show)
 
 data ProgramEnvironment a = ProgramEnvironment {
@@ -60,6 +61,16 @@ data FilterParams = FilterParams {
 data PositionNameAndCoords = PositionNameAndCoords !Text !StagePosition
                              deriving (Show)
 
+data RelativeStageLoopParams = RelativeStageLoopParams {
+                                   rslpDeltaX :: !Double
+                                 , rslpDeltaY :: !Double
+                                 , rslpDeltaZ :: !Double
+                                 , rslpAdditionalPlanesX :: !(Int, Int)
+                                 , rslpAdditionalPlanesY :: !(Int, Int)
+                                 , rslpAdditionalPlanesZ :: !(Int, Int)
+                               }
+                               deriving (Show)
+
 instance FromJSON MeasurementElement where
     parseJSON (Object v) =
         v .: "elementtype" >>= \(typ :: Text) ->
@@ -72,6 +83,7 @@ instance FromJSON MeasurementElement where
           "timelapse"   -> METimeLapse <$> v .: "ntotal" <*> v .: "timedelta" <*> v .: "elements"
           -- no FromJSON instance for MEFastAcquisitionLoop because it is automatically applied
           "stageloop"   -> MEStageLoop <$> v .: "stagename" <*> v .: "positions" <*> v .: "elements"
+          "relativestageloop" -> MERelativeStageLoop <$> v .: "stagename" <*> v .: "params" <*> v .: "elements"
           _             -> fail "can't decode measurement element type"
     parseJSON _ = fail "can't decode measurement element"
 instance ToJSON MeasurementElement where
@@ -83,6 +95,7 @@ instance ToJSON MeasurementElement where
   toEncoding (METimeLapse n td es) = pairs ("elementtype" .= ("timelapse" :: Text) <> "ntotal" .= n <> "timedelta" .= td <> "elements" .= es)
   toEncoding (MEFastAcquisitionLoop n det) = pairs ("elementtype" .= ("fastacquisitionloop" :: Text) <> "ntotal" .= n <> "detection" .= det)
   toEncoding (MEStageLoop n pos es) = pairs ("elementtype" .= ("stageloop" :: Text) <> "stagename" .= n <> "positions" .= pos <> "elements" .= es)
+  toEncoding (MERelativeStageLoop n ps es) = pairs ("elementtype" .= ("relativestageloop" :: Text) <> "stagename" .= n <> "params" .= ps <> "elements" .= es)
   toJSON _ = error "no toJSON"
 
 instance FromJSON DetectionParams where
@@ -113,7 +126,7 @@ instance FromJSON FilterParams where
     parseJSON (Object v) =
         FilterParams <$> v .: "filterwheelname"
                      <*> v .: "filtername"
-    parseJSON _ = fail "can't decode irradiation params"
+    parseJSON _ = fail "can't decode FilterParams params"
 instance ToJSON FilterParams where
     toEncoding (FilterParams filterWheelName filterName) =
         pairs ("filterwheelname" .= filterWheelName <> "filtername" .= filterName)
@@ -123,8 +136,23 @@ instance FromJSON PositionNameAndCoords where
     parseJSON (Object v) =
         PositionNameAndCoords <$> v .: "name"
                               <*> v .: "coordinates"
-    parseJSON _ = fail "can't decode irradiation params"
+    parseJSON _ = fail "can't decode PositionNameAndCoords params"
 instance ToJSON PositionNameAndCoords where
     toEncoding (PositionNameAndCoords name coords) =
         pairs ("name" .= name <> "coordinates" .= coords)
+    toJSON _ = error "no toJSON"
+
+instance FromJSON RelativeStageLoopParams where
+    parseJSON (Object v) =
+        RelativeStageLoopParams <$> v .: "deltax"
+                                <*> v .: "deltay"
+                                <*> v .: "deltaz"
+                                <*> v .: "additionalplanesx"
+                                <*> v .: "additionalplanesy"
+                                <*> v .: "additionalplanesz"
+    parseJSON _ = fail "can't decode RelativeStageLoopParams"
+instance ToJSON RelativeStageLoopParams where
+    toEncoding (RelativeStageLoopParams dx dy dz px py pz) =
+        pairs ("deltax" .= dx <> "deltay" .= dy <> "deltaz" .= dz <>
+               "additionalplanesx" .= px <> "additionalplanesy" .= py <> "additionalplanesz" .= pz)
     toJSON _ = error "no toJSON"

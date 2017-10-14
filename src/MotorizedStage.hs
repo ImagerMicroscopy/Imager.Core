@@ -24,20 +24,8 @@ motorizedStageName :: Equipment -> Text
 motorizedStageName (PriorStage name _) = name
 motorizedStageName (DummyStage name) = name
 
-getStagePositionLookup :: [Equipment] -> Text -> IO (Either String StagePosition)
-getStagePositionLookup mss name =
-    case eligibleStages of
-      [s] -> getStagePosition s
-      []  -> return (Left ("no stage named " ++ (T.unpack name)))
-      _   -> return (Left ("more than one stage with the same name"))
-    where
-      eligibleStages = filter ((== name) . motorizedStageName) mss
-
-getStagePosition :: Equipment -> IO (Either String StagePosition)
-getStagePosition s = ST.timeout 20e6 (getStagePosition' s) >>= \result ->
-                     case result of
-                        Nothing -> return (Left "timeout getting stage position")
-                        Just v  -> return (Right v)
+getStagePosition :: Equipment -> IO StagePosition
+getStagePosition = getStagePosition'
     where
       getStagePosition' :: Equipment -> IO StagePosition
       getStagePosition' (DummyStage n) = putStrLn ("read position of " ++ T.unpack n) >> return (0.0, 0.0, 0.0)
@@ -49,14 +37,18 @@ getStagePosition s = ST.timeout 20e6 (getStagePosition' s) >>= \result ->
                                      serialReadUntilChar port '\r' >>=
                                      return . read . T.unpack . T.decodeUtf8
 
-setStagePositionLookup :: [Equipment] -> Text -> StagePosition -> IO ()
-setStagePositionLookup mss name ds =
-    case eligibleStages of
-      [s] -> setStagePosition s ds
-      []  -> throwIO (userError ("no stage named " ++ (T.unpack name)))
-      _   -> throwIO (userError ("more than one stage with the same name"))
+lookupStage :: [Equipment] -> Text -> Equipment
+lookupStage mss name = case eligibleStages of
+                        [s] -> s
+                        []  -> throw (userError ("no stage named " ++ (T.unpack name)))
+                        _   -> throw (userError ("more than one stage with the same name"))
     where
       eligibleStages = filter ((== name) . motorizedStageName) mss
+
+setStagePositionLookup :: [Equipment] -> Text -> StagePosition -> IO ()
+setStagePositionLookup mss name ds =
+    let s = lookupStage mss name
+    in  setStagePosition s ds
 
 setStagePosition :: Equipment -> StagePosition -> IO ()
 setStagePosition p pos =

@@ -61,6 +61,17 @@ validateMeasurementElement lss fws sts rss (MEStageLoop stageName pos es)
     | otherwise = sequenceEither (map (validateMeasurementElement lss fws sts rss) es)
     where
         stageNames = map motorizedStageName sts
+validateMeasurementElement lss fws sts rss (MERelativeStageLoop stageName (RelativeStageLoopParams dx dy dz (bx, ax) (by, ay) (bz, az)) es)
+    | T.null stageName = Left ("no stage name")
+    | stageName `notElem` stageNames = Left ("can't find stage named " ++ T.unpack stageName)
+    | null es = Left "relative stage loop but no actions"
+    | (dx < 0) || (dy < 0) || (dz < 0) = Left "invalid additional planes distance"
+    | (bx < 0) || (ax < 0) = Left "invalid additional planes x"
+    | (by < 0) || (ay < 0) = Left "invalid additional planes y"
+    | (bz < 0) || (az < 0) = Left "invalid additional planes z"
+    | otherwise = sequenceEither (map (validateMeasurementElement lss fws sts rss) es)
+    where
+        stageNames = map motorizedStageName sts
 
 validateDetection :: [Equipment] -> [Equipment] -> DetectionParams -> Either String ()
 validateDetection lightSources filterWheels DetectionParams{..} =

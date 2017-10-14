@@ -127,12 +127,25 @@ executeMeasurementElement env (MEStageLoop sn poss es) =
     withStatusMessage env "stage loop" (
         forM_ (zip [1..] poss) (\(index :: Int, (PositionNameAndCoords posName pos)) ->
             updateStatusMessage env (T.format "stage position {} of {} ({})" (index, nPos, posName)) >>
-            setStagePosition sn pos >> executeMeasurementElements env es))
+            setStagePosition stage pos >> executeMeasurementElements env es))
     where
-        stages = peMotorizedStages env
+        stage = lookupStage (peMotorizedStages env) sn
         nPos = length poss
-        setStagePosition :: Text -> StagePosition -> IO ()
-        setStagePosition stageName pos = setStagePositionLookup stages stageName pos
+
+executeMeasurementElement env (MERelativeStageLoop sn (RelativeStageLoopParams dx dy dz (bx, ax) (by, ay) (bz, az)) es) =
+    withStatusMessage env "relative stage loop" (
+        getStagePosition stage >>= \currPos ->
+        let poss = (allPositions currPos)
+        in  forM_ (zip [1..] (allPositions currPos)) (\(index :: Int, pos) ->
+                updateStatusMessage env (T.format "relative stage position {} of {}" (index, length poss)) >>
+                setStagePosition stage pos >> executeMeasurementElements env es))
+    where
+        stage = lookupStage (peMotorizedStages env) sn
+        planesx = map ((*) dx . fromIntegral) [negate bx .. ax] :: [Double]
+        planesy = map ((*) dy . fromIntegral) [negate by .. ay]
+        planesz = map ((*) dz . fromIntegral) [negate bz .. az]
+        allPositions :: StagePosition -> [StagePosition]
+        allPositions (x, y, z) = [(x + x', y + y', z + z') | x' <- planesx, y' <- planesy, z' <- planesz]
 
 insertFastAcquisitionLoops :: MeasurementElement -> MeasurementElement
 insertFastAcquisitionLoops (MEDoTimes n [MEDetection [d]]) = MEFastAcquisitionLoop n d

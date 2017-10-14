@@ -112,12 +112,10 @@ performAction env ListRobots = return (AvailableRobots robots, env)
         robots = envRobots env
 
 performAction env (GetMotorizedStagePosition name) =
-    getStagePositionLookup mss name >>= \result ->
-    case result of
-        Left err -> return (StatusError err, env)
-        Right ds -> return (MotorizedStagePosition ds, env)
+    getStagePosition stage >>= \pos ->
+    return (MotorizedStagePosition pos, env)
     where
-        mss = envMotorizedStages env
+        stage = lookupStage (envMotorizedStages env) name
 
 performAction env (SetMotorizedStagePosition name ds) =
     setStagePositionLookup mss name ds >> return (StatusOK, env)

@@ -98,7 +98,7 @@ initializeDevice (OlympusIX71DichroicDesc name portName chs) =
         putStrLn "done!" >> newIORef (False, 0) >>= \currFilterRef ->
         return (OlympusIX71Dichroic name (validateChannels (0, 5) chs) currFilterRef port)
 initializeDevice (DummyFilterWheelDesc name chs) =
-    putStrLn ("Opened dummy filter wheel " ++ T.unpack name ++ " with filters " ++ show chs) >> return (DummyFilterWheel name (validateChannels chs))
+    putStrLn ("Opened dummy filter wheel " ++ T.unpack name ++ " with filters " ++ show chs) >> return (DummyFilterWheel name (validateChannels (0,5) chs))
 initializeDevice (PriorDesc name portName) =
     let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS9600}) (TimeoutMillis 30000) SerialPortNoDebug
     in  openSerialPort portName serialSettings >>= \port ->
