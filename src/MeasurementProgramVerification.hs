@@ -22,63 +22,80 @@ import Robot
 type RobotInfo = (Text, [Text]) -- robot name, robot programs
 
 validateMeasurementElementThrows :: [Equipment] -> [Equipment] -> [Equipment] -> [RobotInfo] -> MeasurementElement -> ()
-validateMeasurementElementThrows lss fws mss rss me = case (validateMeasurementElement lss fws mss rss me) of
-                                        Left e -> throw (userError e)
-                                        Right () -> ()
+validateMeasurementElementThrows lss fws mss rss me = case (foldMeasurementElement (validateMeasurementElement lss fws mss rss) me) of
+                                                          (e : xs) -> throw (userError e)
+                                                          []       -> ()
 
-validateMeasurementElement :: [Equipment] -> [Equipment] -> [Equipment] -> [RobotInfo] -> MeasurementElement -> Either String ()
+-- should not inspect contained MeasurementElements
+-- empty list for no error
+validateMeasurementElement :: [Equipment] -> [Equipment] -> [Equipment] -> [RobotInfo] -> MeasurementElement -> [String]
 validateMeasurementElement lss fws _ _ (MEDetection dets)
-    | null dets = Left "no detection specified"
-    | otherwise = sequenceEither (map (validateDetection lss fws) dets)
+    | null dets = ["no detection specified"]
+    | otherwise = concat $ (map (validateDetection lss fws) dets)
 validateMeasurementElement lss _ _ _ (MEIrradiation dur ips)
-    | (dur < 0.0) || (dur > 3600) = Left ("invalid irradiation duration: " ++ show dur)
-    | otherwise = sequenceEither (map (validateIrradiation lss) ips)
+    | (dur < 0.0) || (dur > 3600) = ["invalid irradiation duration: " ++ show dur]
+    | otherwise = concat $ (map (validateIrradiation lss) ips)
 validateMeasurementElement _ _ _ _ (MEWait dur)
-    | (dur < 0.0) || (dur > 3600) = Left ("invalid wait duration: " ++ show dur)
-    | otherwise = Right ()
+    | (dur < 0.0) || (dur > 3600) = ["invalid wait duration: " ++ show dur]
+    | otherwise = []
 validateMeasurementElement _ _ _ rss (MEExecuteRobotProgram rName pName _)
-    | not (rName `elem` (map fst rss)) = Left ("unknown robot " ++ T.unpack rName)
+    | not (rName `elem` (map fst rss)) = ["unknown robot " ++ T.unpack rName]
     | let progs = fromJust (lookup rName rss)
-      in  not (pName `elem` progs) = Left ("unknown robot program " ++ T.unpack pName)
-    | otherwise = Right ()
+      in  not (pName `elem` progs) = ["unknown robot program " ++ T.unpack pName]
+    | otherwise = []
 validateMeasurementElement lss fws sts rss (MEDoTimes n es)
-    | (n < 0) || (n > (floor 10e6)) = Left ("invalid number of times to repeat: " ++ show n)
-    | null es = Left "do times loop but no actions"
-    | otherwise = sequenceEither (map (validateMeasurementElement lss fws sts rss) es)
+    | (n < 0) || (n > (floor 10e6)) = ["invalid number of times to repeat: " ++ show n]
+    | null es = ["do times loop but no actions"]
+    | otherwise = []
 validateMeasurementElement lss fws _ _ (MEFastAcquisitionLoop n det)
-    | (n < 0) || (n > (floor 10e6)) = Left ("invalid number of times to repeat: " ++ show n)
+    | (n < 0) || (n > (floor 10e6)) = ["invalid number of times to repeat: " ++ show n]
     | otherwise = validateDetection lss fws det
 validateMeasurementElement lss fws sts rss (METimeLapse n dur es)
-    | (n < 0) || (n > (floor 10e6)) = Left ("invalid number of times to repeat: " ++ show n)
-    | (dur < 0.0) || (dur > 3600 * 2) = Left ("invalid time lapse duration: " ++ show dur)
-    | null es = Left "timelapse loop but no actions"
-    | otherwise = sequenceEither (map (validateMeasurementElement lss fws sts rss) es)
+    | (n < 0) || (n > (floor 10e6)) = ["invalid number of times to repeat: " ++ show n]
+    | (dur < 0.0) || (dur > 3600 * 2) = ["invalid time lapse duration: " ++ show dur]
+    | null es = ["timelapse loop but no elements"]
+    | otherwise = []
 validateMeasurementElement lss fws sts rss (MEStageLoop stageName pos es)
-    | null pos = Left ("no positions in stage loop")
-    | T.null stageName = Left ("no stage name")
-    | stageName `notElem` stageNames = Left ("can't find stage named " ++ T.unpack stageName)
-    | null es = Left "stage loop but no actions"
-    | otherwise = sequenceEither (map (validateMeasurementElement lss fws sts rss) es)
+    | null pos = ["no positions in stage loop"]
+    | T.null stageName = ["no stage name"]
+    | stageName `notElem` stageNames = ["can't find stage named " ++ T.unpack stageName]
+    | null es = ["stage loop but no elements"]
+    | otherwise = []
     where
         stageNames = map motorizedStageName sts
 validateMeasurementElement lss fws sts rss (MERelativeStageLoop stageName (RelativeStageLoopParams dx dy dz (bx, ax) (by, ay) (bz, az)) es)
-    | T.null stageName = Left ("no stage name")
-    | stageName `notElem` stageNames = Left ("can't find stage named " ++ T.unpack stageName)
-    | null es = Left "relative stage loop but no actions"
-    | (dx < 0) || (dy < 0) || (dz < 0) = Left "invalid additional planes distance"
-    | (bx < 0) || (ax < 0) = Left "invalid additional planes x"
-    | (by < 0) || (ay < 0) = Left "invalid additional planes y"
-    | (bz < 0) || (az < 0) = Left "invalid additional planes z"
-    | otherwise = sequenceEither (map (validateMeasurementElement lss fws sts rss) es)
+    | T.null stageName = ["no stage name"]
+    | stageName `notElem` stageNames = ["can't find stage named " ++ T.unpack stageName]
+    | null es = ["relative stage loop but no elements"]
+    | (dx < 0) || (dy < 0) || (dz < 0) = ["invalid additional planes distance"]
+    | (bx < 0) || (ax < 0) = ["invalid additional planes x"]
+    | (by < 0) || (ay < 0) = ["invalid additional planes y"]
+    | (bz < 0) || (az < 0) = ["invalid additional planes z"]
+    | otherwise = []
     where
         stageNames = map motorizedStageName sts
 
-validateDetection :: [Equipment] -> [Equipment] -> DetectionParams -> Either String ()
+-- apply f to all contained MeasurementElements and combine the results
+foldMeasurementElement :: (Monoid a) => (MeasurementElement -> a) -> MeasurementElement -> a
+foldMeasurementElement f me = foldMeasurementElement' f mempty me
+    where
+        foldMeasurementElement' :: (Monoid a) => (MeasurementElement -> a) -> a -> MeasurementElement -> a
+        foldMeasurementElement' f ac m@(MEDoTimes _ es)             = mconcat (ac : f m : childVals f es)
+        foldMeasurementElement' f ac m@(METimeLapse _ _ es)         = mconcat (ac : f m : childVals f es)
+        foldMeasurementElement' f ac m@(MEStageLoop _ _ es)         = mconcat (ac : f m : childVals f es)
+        foldMeasurementElement' f ac m@(MERelativeStageLoop _ _ es) = mconcat (ac : f m : childVals f es)
+        foldMeasurementElement' f ac m = ac `mappend` (f m)
+        childVals :: (Monoid a) => (MeasurementElement -> a) -> [MeasurementElement] -> [a]
+        childVals f mes = map (foldMeasurementElement f) mes
+
+-- empty list as value means no error
+validateDetection :: [Equipment] -> [Equipment] -> DetectionParams -> [String]
 validateDetection lightSources filterWheels DetectionParams{..} =
     if ((within dpExposureTime 3.8e-3 10) && (within dpNSpectraToAverage 1 1000)
-       && (all isRight $ map (validateIrradiation lightSources) dpIrradiation) && filtersAreValid)
-    then Right ()
-    else Left "invalid detection params"
+       && (null . concat . map (validateIrradiation lightSources) $ dpIrradiation)
+       && filtersAreValid)
+    then []
+    else ["invalid detection params"]
     where
         filterParams = dpFilterParams
         filtersAreValid = noEmptyFilterWheelNames && noEmptyFilterNames && noDupFilterWheels && all filterExists filterParams
@@ -90,16 +107,11 @@ validateDetection lightSources filterWheels DetectionParams{..} =
                 Nothing -> False
                 Just (availableFilters) -> fName `elem` availableFilters
 
-validateDetectionThrows :: [Equipment] -> [Equipment] -> DetectionParams -> IO ()
-validateDetectionThrows lss fws ps = case (validateDetection lss fws ps) of
-                                        Left e -> throwIO (userError e)
-                                        Right () -> return ()
-
-validateIrradiation :: [Equipment] -> IrradiationParams -> Either String ()
+validateIrradiation :: [Equipment] -> IrradiationParams -> [String]
 validateIrradiation lightSources IrradiationParams{..} =
     case (lookupMaybeLightSource lightSources ipLightSourceName) of
-      Nothing -> Left "invalid light source name"
+      Nothing -> ["invalid light source name"]
       Just ls -> let errMsg = validLightSourceChannelsAndPowers ls ipLightSourceChannel ipPower
                  in if (T.null errMsg)
-                    then Right ()
-                    else Left ("invalid light source parameters for " ++ T.unpack ipLightSourceName ++ ": " ++ T.unpack errMsg)
+                    then []
+                    else ["invalid light source parameters for " ++ T.unpack ipLightSourceName ++ ": " ++ T.unpack errMsg]
