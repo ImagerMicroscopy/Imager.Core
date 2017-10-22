@@ -2,7 +2,6 @@
 module MeasurementProgram (
     executeMeasurement
   , executeDetection
-  , robotProgramsUsedIn
 ) where
 
 import Control.Concurrent
@@ -45,8 +44,7 @@ executeMeasurement env me = withAsync (forever $ resetSystemSleepTimer >> thread
         robots = peRobots env
         usedLightSourceNames = lightSourceNamesUsedIn me
         usedLightSources = map (lookupLightSource lss) usedLightSourceNames
-        usedRobotNames = map fst (robotProgramsUsedIn me)
-        usedRobots = map (lookupRobotThrows robots) usedRobotNames
+        usedRobots = map (lookupRobotThrows robots) (robotNamesUsedIn me)
 
 executeMeasurementElements :: Detector a => ProgramEnvironment a -> [MeasurementElement] -> IO ()
 executeMeasurementElements env es = mapM_ (executeMeasurementElement env) es
@@ -200,15 +198,12 @@ lightSourceNamesUsedIn me = S.toList (lightSourceNamesUsedIn' S.empty me)
         lightSourceNamesUsedIn' s (MEStageLoop _ _ mes) = s <> mconcat (map (lightSourceNamesUsedIn' S.empty) mes)
         lightSourceNamesUsedIn' s _ = s
 
-robotProgramsUsedIn :: MeasurementElement -> [(Text, [Text])]
-robotProgramsUsedIn me = M.toList (robotProgramsUsedIn' M.empty me)
+robotNamesUsedIn :: MeasurementElement -> [Text]
+robotNamesUsedIn = foldMeasurementElement f
     where
-        robotProgramsUsedIn' :: Map Text [Text] -> MeasurementElement -> Map Text [Text]
-        robotProgramsUsedIn' m (MEExecuteRobotProgram robotName progName _) =  M.insertWith (++) robotName [progName] m
-        robotProgramsUsedIn' m (MEDoTimes _ mes) = M.unionWith (++) m (M.unionsWith (++) (map (robotProgramsUsedIn' M.empty) mes))
-        robotProgramsUsedIn' m (METimeLapse _ _ mes) = M.unionWith (++) m (M.unionsWith (++) (map (robotProgramsUsedIn' M.empty) mes))
-        robotProgramsUsedIn' m (MEStageLoop _ _ mes) = M.unionWith (++) m (M.unionsWith (++) (map (robotProgramsUsedIn' M.empty) mes))
-        robotProgramsUsedIn' m _ = m
+        f :: MeasurementElement -> [Text]
+        f (MEExecuteRobotProgram rName _ _) = [rName]
+        f _ = []
 
 withStatusMessage :: ProgramEnvironment a -> LT.Text -> IO b -> IO b
 withStatusMessage env msg action =

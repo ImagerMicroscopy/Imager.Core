@@ -2,12 +2,14 @@
 module MeasurementProgramVerification (
     validateMeasurementElementThrows
   , validateMeasurementElement
+  , foldMeasurementElement
 ) where
 
 import Control.Exception
 import Data.Either
 import Data.List
 import Data.Maybe
+import Control.Monad
 import Data.Text (Text)
 import qualified Data.Text as T
 
@@ -21,14 +23,18 @@ import Robot
 
 type RobotInfo = (Text, [Text]) -- robot name, robot programs
 
-validateMeasurementElementThrows :: [Equipment] -> [Equipment] -> [Equipment] -> [RobotInfo] -> MeasurementElement -> ()
-validateMeasurementElementThrows lss fws mss rss me = case (foldMeasurementElement (validateMeasurementElement lss fws mss rss) me) of
-                                                          (e : xs) -> throw (userError e)
-                                                          []       -> ()
+validateMeasurementElementThrows :: [Equipment] -> [Equipment] -> [Equipment] -> [Equipment] -> MeasurementElement -> IO ()
+validateMeasurementElementThrows lss fws mss rss me =
+    verifyRobotElements rss me >>= \robotsResult ->
+    when (not $ null robotsResult) (
+        throwIO (userError $ head robotsResult)) >>
+    case (foldMeasurementElement (validateMeasurementElement lss fws mss rss) me) of
+                                                          (e : xs) -> throwIO (userError e)
+                                                          []       -> return ()
 
 -- should not inspect contained MeasurementElements
 -- empty list for no error
-validateMeasurementElement :: [Equipment] -> [Equipment] -> [Equipment] -> [RobotInfo] -> MeasurementElement -> [String]
+validateMeasurementElement :: [Equipment] -> [Equipment] -> [Equipment] -> [Equipment] -> MeasurementElement -> [String]
 validateMeasurementElement lss fws _ _ (MEDetection dets)
     | null dets = ["no detection specified"]
     | otherwise = concat $ (map (validateDetection lss fws) dets)
@@ -38,11 +44,7 @@ validateMeasurementElement lss _ _ _ (MEIrradiation dur ips)
 validateMeasurementElement _ _ _ _ (MEWait dur)
     | (dur < 0.0) || (dur > 3600) = ["invalid wait duration: " ++ show dur]
     | otherwise = []
-validateMeasurementElement _ _ _ rss (MEExecuteRobotProgram rName pName _)
-    | not (rName `elem` (map fst rss)) = ["unknown robot " ++ T.unpack rName]
-    | let progs = fromJust (lookup rName rss)
-      in  not (pName `elem` progs) = ["unknown robot program " ++ T.unpack pName]
-    | otherwise = []
+validateMeasurementElement _ _ _ rss (MEExecuteRobotProgram rName pName _) = []
 validateMeasurementElement lss fws sts rss (MEDoTimes n es)
     | (n < 0) || (n > (floor 10e6)) = ["invalid number of times to repeat: " ++ show n]
     | null es = ["do times loop but no actions"]
@@ -74,6 +76,26 @@ validateMeasurementElement lss fws sts rss (MERelativeStageLoop stageName (Relat
     | otherwise = []
     where
         stageNames = map motorizedStageName sts
+
+verifyRobotElements :: [Equipment] -> MeasurementElement -> IO [String]
+verifyRobotElements  rss me
+        = do
+          pExists <- programsExist
+          rAllows <- robotsAllowExecution
+          if (not pExists)
+          then return ["referring to unknown program"]
+          else if (not rAllows)
+               then return ["robot does not allow remote execution"]
+               else return []
+    where
+        availableRobotNames = map robotName rss
+        robotsAndProgramsInProgram = map (\(MEExecuteRobotProgram rName pName _) -> (lookupRobotThrows rss rName, pName)) robotElements
+        usedRobots = map fst robotsAndProgramsInProgram
+        robotsAllowExecution = and <$> mapM robotAcceptsExternalCommands usedRobots
+        programsExist = and <$> (mapM (\(robot, pName) -> (pName `elem`) <$> listRobotPrograms robot) robotsAndProgramsInProgram)
+        robotElements = foldMeasurementElement f me
+        f m@(MEExecuteRobotProgram _ _ _) = [m]
+        f _ = []
 
 -- apply f to all contained MeasurementElements and combine the results
 foldMeasurementElement :: (Monoid a) => (MeasurementElement -> a) -> MeasurementElement -> a
