@@ -97,7 +97,6 @@ abortRobotProgramExecution r = _handleRobottorRequest r AbortProgramExecution
 
 robotAcceptsExternalCommands :: Equipment -> IO Bool
 robotAcceptsExternalCommands r =
-    putStrLn "testing ext" >>
     handleRobottorRequest r AllowsProgramExecution >>= \(AllowsProgramExecutionResponse b) -> return b
 
 robotIsExecuting :: Equipment -> IO Bool

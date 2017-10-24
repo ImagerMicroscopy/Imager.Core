@@ -83,7 +83,7 @@ initializeDevice (ThorlabsFW102CDesc name portName chs) =
     let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS115200}) (TimeoutMillis 30000) SerialPortNoDebug
     in  ThorlabsFW102C name (validateChannels (0, 5) chs) <$> openSerialPort portName serialSettings
 initializeDevice (SutterLambda10BDesc name portName chs) =
-    let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS128000}) (TimeoutMillis 10000) SerialPortDebugBinary
+    let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS128000}) (TimeoutMillis 10000) SerialPortNoDebug
     in  openSerialPort portName serialSettings >>= \port ->
         serialWriteByte port 238 >> serialReadUntilChar port '\r'>>
         serialWriteByte port 253 >> serialReadUntilChar port '\r' >>
