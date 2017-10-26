@@ -37,8 +37,10 @@ import Robot
 executeMeasurement :: Detector a => ProgramEnvironment a -> MeasurementElement -> IO ()
 executeMeasurement env me = withAsync (forever $ resetSystemSleepTimer >> threadDelay (round 60.0e6)) (\_ ->
                                 executeMeasurementElement env (insertFastAcquisitionLoops me)
-                                `onException` (deactivateAllLightSources usedLightSources >>
-                                               mapM_ abortRobotProgramExecution usedRobots))
+                                `catch` (\e -> deactivateAllLightSources usedLightSources >>
+                                               mapM_ abortRobotProgramExecution usedRobots >>
+                                               putStrLn (displayException e) >>
+                                               throwIO (e :: SomeException)))
     where
         lss = peLightSources env
         robots = peRobots env
