@@ -12,24 +12,26 @@ type ImageProcessingFunc = (Vector Word16, (Int, Int)) -> (Vector Word16 , (Int,
 type CoordinateRearrangementFunc = (Int, Int) -> (Int, Int) -> (Int, Int)
 
 rotateCW :: ImageProcessingFunc
-rotateCW (v, (nRows, nCols)) = (rearrangeImage rotateCWIndex v (nRows, nCols), (nCols, nRows))
+rotateCW (v, (nRows, nCols)) = (rearrangeImage rotateCWIndex' v (nRows, nCols), (nCols, nRows))
 
 rotateCCW :: ImageProcessingFunc
-rotateCCW (v, (nRows, nCols)) = (rearrangeImage rotateCCWIndex v (nRows, nCols), (nCols, nRows))
+rotateCCW (v, (nRows, nCols)) = (rearrangeImage rotateCCWIndex' v (nRows, nCols), (nCols, nRows))
 
 rearrangeImage :: CoordinateRearrangementFunc -> Vector Word16 -> (Int, Int) -> Vector Word16
-rearrangeImage f v (nRows, nCols) = V.create $
-    MV.new (nRows * nCols) >>= \mVec ->
-    forM_ [0 .. (nRows * nCols - 1)] (\idx ->
-        let newIndex = (rowColToLinear nCols . f (nRows, nCols) . linearToRowCol nRows) idx
-        in  MV.write mVec newIndex (v V.! idx)) >>
-    return mVec
+rearrangeImage f v (nRows, nCols) =
+    V.generate (nRows * nCols) (\idx ->
+        let oldIndex = (rowColToLinear nRows . f (nCols, nRows) . linearToRowCol nCols) idx
+        in  (v V.! oldIndex))
 
-rotateCWIndex :: CoordinateRearrangementFunc
+rotateCWIndex :: CoordinateRearrangementFunc    -- calculates where the pixel at (row, col) goes in the rotated image. (nRows, nCols) from original image!
 rotateCWIndex (nRows, nCols) (row, col) = (nCols - 1 - col, row)
-
-rotateCCWIndex  :: CoordinateRearrangementFunc
+rotateCCWIndex  :: CoordinateRearrangementFunc  -- calculates where the pixel at (row, col) goes in the rotated image. (nRows, nCols) from original image!
 rotateCCWIndex (nRows, nCols) (row, col) = (col, nRows - 1 - row)
+
+rotateCWIndex' :: CoordinateRearrangementFunc    -- calculates where the pixel at (row, col) in the rotated image was in the original image. (nRows, nCols) from rotated image!
+rotateCWIndex' = rotateCCWIndex
+rotateCCWIndex'  :: CoordinateRearrangementFunc  -- calculates where the pixel at (row, col) in the rotated image was in the original image. (nRows, nCols) from rotated image!
+rotateCCWIndex' = rotateCWIndex
 
 rowColToLinear :: Int -> (Int, Int) -> Int
 rowColToLinear !nRows (!row, !col) = col * nRows + row
