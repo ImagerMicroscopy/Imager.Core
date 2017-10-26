@@ -49,7 +49,8 @@ executable RaspCuvettor
                      , vector
                      , filepath
                      , SimpleJSONServer
-  other-modules:       CuvettorTypes
+  other-modules:       CameraImageProcessing
+                     , CuvettorTypes
                      , BinaryEncoding
                      , EquipmentMessaging
                      , EquipmentTypes

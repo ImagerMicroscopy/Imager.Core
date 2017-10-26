@@ -20,25 +20,47 @@ import qualified Data.Vector.Storable.Mutable as MV
 import Detector
 import SCCamera
 import MiscUtils
+import CameraImageProcessing
 
 data SCCamDetector = SCCamDetector {
                          sccCamName :: !Text
+                       , sccImageProcessing :: ![ImageProcessingFunc]
                      }
+
+data ImageProcessingOperation = IPORotateCW | IPORotateCCW
+                                deriving (Show, Read)
+
+processingFunc :: ImageProcessingOperation -> ImageProcessingFunc
+processingFunc IPORotateCW = rotateCW
+processingFunc IPORotateCCW = rotateCCW
+
+processAcquiredImages :: [ImageProcessingFunc] -> MeasuredImages -> MeasuredImages
+processAcquiredImages [] ims = ims
+processAcquiredImages fs (MeasuredImages nRows nCols v) =
+    let f = foldr (.) id fs
+        nPixels = nRows * nCols
+        nIms = (V.length v) `div` nPixels
+        ims = take nIms (map (\s -> V.slice 0 nPixels v) [0, nPixels ..])
+        processedIms = map f (zip ims (repeat (nRows, nCols)))
+        (newNRows, newNCols) = snd (head processedIms)
+        newV = V.concat (map fst processedIms)
+    in  MeasuredImages newNRows newNCols newV--MeasuredImages newNRows newNCols newV
 
 instance Detector SCCamDetector where
     acquireData :: SCCamDetector -> ExposureTime -> Gain -> NMeasurementsToAverage -> IO AcquiredData
-    acquireData (SCCamDetector camName) expTime emGain nAvg =
+    acquireData (SCCamDetector camName procF) expTime emGain nAvg =
         setExposureTime camName expTime >>
         setEMGain camName emGain >>
-        acquireImages camName 1 nAvg >>= \(MeasuredImages nRows nCols vec) ->
+        acquireImages camName 1 nAvg >>= \images ->
         getTime Monotonic >>= \timeStamp ->
-        let bytes = byteStringFromVector vec
+        let (MeasuredImages nRows nCols vec) = processAcquiredImages procF images
+            bytes = byteStringFromVector vec
             numType = UINT16
         in return (AcquiredData nRows nCols timeStamp bytes numType)
 
     acquireStreamingData :: SCCamDetector -> ExposureTime -> Gain -> NMeasurementsToAverage ->
                             NMeasurementsToPerform -> TimeSpec -> MVar [[AcquiredData]] -> IO ()
-    acquireStreamingData (SCCamDetector camName) expTime gain nAvg nMeasurements startTime dataMVar =
+    acquireStreamingData (SCCamDetector camName procF) expTime gain nAvg nMeasurements startTime dataMVar =
         getSensorDimensions camName >>= \(nRows, nCols) ->
         MV.new (nRows * nCols * nImagesInBuffer * 2) >>= \buffer ->
         MV.unsafeWith buffer (\bufPtr ->
@@ -57,8 +79,9 @@ instance Detector SCCamDetector where
                         (-1) -> threadDelay (floor 50e3) >> fetchImages nImagesRemaining (bufPtr, nRows, nCols) dataMVar
                         i    -> getTime Monotonic >>= \timeStamp ->
                                 getImageAtIndexInBuffer bufPtr (nRows, nCols) i >>= \imageData ->
-                                addDataToMVar dataMVar startTime [AcquiredData nRows nCols timeStamp (byteStringFromVector imageData) UINT16] >>
-                                fetchImages (nImagesRemaining - 1) (bufPtr, nRows, nCols) dataMVar
+                                let (MeasuredImages newNRows newNCols pVec) = processAcquiredImages procF (MeasuredImages nRows nCols imageData)
+                                in  addDataToMVar dataMVar startTime [AcquiredData newNRows newNCols timeStamp (byteStringFromVector pVec) UINT16] >>
+                                    fetchImages (nImagesRemaining - 1) (bufPtr, nRows, nCols) dataMVar
             nImagesInBuffer = 20
             getImageAtIndexInBuffer :: Ptr Word16 -> (Int, Int) -> Int -> IO (V.Vector Word16)
             getImageAtIndexInBuffer bufPtr (nRows, nCols) index =
@@ -69,14 +92,14 @@ instance Detector SCCamDetector where
                     V.freeze image
 
     setDetectorTemperature :: SCCamDetector -> Temperature -> IO ()
-    setDetectorTemperature (SCCamDetector camName) t = setTemperature camName t
+    setDetectorTemperature (SCCamDetector camName _) t = setTemperature camName t
     getDetectorTemperature :: SCCamDetector -> IO Temperature
-    getDetectorTemperature (SCCamDetector camName) = readTemperature camName
+    getDetectorTemperature (SCCamDetector camName _) = readTemperature camName
     getDetectorTemperatureSetpoint :: SCCamDetector -> IO Temperature
-    getDetectorTemperatureSetpoint (SCCamDetector camName) = readTemperatureSetpoint camName
+    getDetectorTemperatureSetpoint (SCCamDetector camName _) = readTemperatureSetpoint camName
 
     getGainRange :: SCCamDetector -> IO (Gain, Gain)
-    getGainRange (SCCamDetector camName) = readEMGainRange camName
+    getGainRange (SCCamDetector camName _) = readEMGainRange camName
 
     getExposureTimeRange :: SCCamDetector -> IO (ExposureTime, ExposureTime)
-    getExposureTimeRange (SCCamDetector camName) = readExposureTimeRange camName
+    getExposureTimeRange (SCCamDetector camName _) = readExposureTimeRange camName
