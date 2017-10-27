@@ -21,6 +21,8 @@ import Foreign.Marshal.Alloc
 import Foreign.Storable
 import System.IO.Unsafe
 
+import SCCamera
+
 data ImageVectorAndSize = ImageVectorAndSize {
                                  ivsVector :: !(Vector Word16)
                                , ivsSize   :: !(Int, Int)
@@ -31,7 +33,6 @@ data ImageSizeAndCoordinate = ImageSizeAndCoordinate {
                               }
 
 type CoordinateRearrangementFunc = ImageSizeAndCoordinate -> ImageSizeAndCoordinate
-type ExternalRearrangementFunc = (Ptr Word16 -> CInt -> CInt -> Ptr Word16 -> Ptr CInt -> Ptr CInt -> IO ())
 
 rearrangeImage :: CoordinateRearrangementFunc -> ImageVectorAndSize -> ImageVectorAndSize
 rearrangeImage f (ImageVectorAndSize v (nRows, nCols)) = ImageVectorAndSize newVec (nRowsNew, nColsNew)
@@ -81,12 +82,3 @@ rearrangeImageExternalW f (ImageVectorAndSize v (nRows, nCols))= unsafePerformIO
         (,) <$> peek newNRowsPtr <*> peek newNColsPtr)))) >>= \(newNRows, newNCols) ->
     V.unsafeFreeze newIm >>= \newVec ->
     return (ImageVectorAndSize newVec ((fromIntegral newNRows), (fromIntegral newNCols)))
-
-foreign import ccall unsafe "RotateImageCW"
-    cRotateImageCW :: Ptr Word16 -> CInt -> CInt -> Ptr Word16 -> Ptr CInt -> Ptr CInt -> IO ()
-foreign import ccall unsafe "RotateImageCCW"
-    cRotateImageCCW :: Ptr Word16 -> CInt -> CInt -> Ptr Word16 -> Ptr CInt -> Ptr CInt -> IO ()
-foreign import ccall unsafe "FlipImageHorizontal"
-    cFlipImageHorizontal :: Ptr Word16 -> CInt -> CInt -> Ptr Word16 -> Ptr CInt -> Ptr CInt -> IO ()
-foreign import ccall unsafe "FlipImageVertical"
-    cFlipImageVertical :: Ptr Word16 -> CInt -> CInt -> Ptr Word16 -> Ptr CInt -> Ptr CInt -> IO ()
