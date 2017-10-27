@@ -30,7 +30,7 @@ getStagePosition = getStagePosition'
       getStagePosition' :: Equipment -> IO StagePosition
       getStagePosition' (DummyStage n) = putStrLn ("read position of " ++ T.unpack n) >> return (0.0, 0.0, 0.0)
       getStagePosition' (PriorStage _ portVar) = withMVar portVar $ \port ->
-          (,,) <$> readNumberP port "PX\r" <*> readNumberP port "PY\r" <*> readNumberP port "PZ\r"
+          (,,) <$> readNumberP port "PX\r" <*> readNumberP port "PY\r" <*> ((/10) <$> readNumberP port "PZ\r")
           where
             readNumberP :: SerialPort -> ByteString -> IO Double
             readNumberP port query = flushSerialPort port >> serialWrite port query >>
@@ -66,4 +66,4 @@ setStagePosition p pos =
               "R\r" -> return ()
               _     -> throwIO (userError "unexpected response from stage")
             where
-              posStr = T.encodeUtf8 . T.pack $ printf "G %d, %d, %d\r" (round x :: Int) (round y :: Int) (round z :: Int)
+              posStr = T.encodeUtf8 . T.pack $ printf "G %d, %d, %d\r" (round x :: Int) (round y :: Int) (round (z * 10) :: Int)
