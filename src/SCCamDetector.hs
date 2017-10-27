@@ -28,11 +28,14 @@ data SCCamDetector = SCCamDetector {
                      }
 
 data ImageProcessingOperation = IPORotateCW | IPORotateCCW
+                              | IPOFlipHorizontal | IPOFlipVertical
                                 deriving (Show, Read)
 
 processingFunc :: ImageProcessingOperation -> ImageProcessingFunc
 processingFunc IPORotateCW = rotateCW
 processingFunc IPORotateCCW = rotateCCW
+processingFunc IPOFlipHorizontal = flipHorizontal
+processingFunc IPOFlipVertical = flipVertical
 
 processAcquiredImages :: [ImageProcessingFunc] -> MeasuredImages -> MeasuredImages
 processAcquiredImages [] ims = ims
