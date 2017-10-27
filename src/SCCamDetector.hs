@@ -24,27 +24,26 @@ import CameraImageProcessing
 
 data SCCamDetector = SCCamDetector {
                          sccCamName :: !Text
-                       , sccImageProcessing :: ![CoordinateRearrangementFunc]
+                       , sccImageProcessing :: ![ExternalRearrangementFunc]
                      }
 
 data ImageProcessingOperation = IPORotateCW | IPORotateCCW
                               | IPOFlipHorizontal | IPOFlipVertical
                                 deriving (Show, Read)
 
-processingFunc :: ImageProcessingOperation -> CoordinateRearrangementFunc
-processingFunc IPORotateCW = rotateCWIndex'
-processingFunc IPORotateCCW = rotateCCWIndex'
-processingFunc IPOFlipHorizontal = flipHorizontalIndex'
-processingFunc IPOFlipVertical = flipVerticalIndex'
+processingFunc :: ImageProcessingOperation -> ExternalRearrangementFunc
+processingFunc IPORotateCW = cRotateImageCW
+processingFunc IPORotateCCW = cRotateImageCCW
+processingFunc IPOFlipHorizontal = cFlipImageHorizontal
+processingFunc IPOFlipVertical = cFlipImageVertical
 
-processAcquiredImages :: [CoordinateRearrangementFunc] -> MeasuredImages -> MeasuredImages
+processAcquiredImages :: [ExternalRearrangementFunc] -> MeasuredImages -> MeasuredImages
 processAcquiredImages [] ims = ims
 processAcquiredImages fs (MeasuredImages nRows nCols v) =
-    let f = foldr (.) id fs
-        nPixels = nRows * nCols
+    let nPixels = nRows * nCols
         nIms = (V.length v) `div` nPixels
         ims = take nIms (map (\im -> ImageVectorAndSize im (nRows, nCols)) . map (\s -> V.slice 0 nPixels v) $ [0, nPixels ..])
-        rearrangedIms = map (rearrangeImage f) ims
+        rearrangedIms = map (rearrangeImageExternal fs) ims
         (newNRows, newNCols) = ivsSize (head rearrangedIms)
         newV = V.concat (map ivsVector rearrangedIms)
     in  MeasuredImages newNRows newNCols newV--MeasuredImages newNRows newNCols newV
