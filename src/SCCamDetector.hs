@@ -24,29 +24,29 @@ import CameraImageProcessing
 
 data SCCamDetector = SCCamDetector {
                          sccCamName :: !Text
-                       , sccImageProcessing :: ![ImageProcessingFunc]
+                       , sccImageProcessing :: ![CoordinateRearrangementFunc]
                      }
 
 data ImageProcessingOperation = IPORotateCW | IPORotateCCW
                               | IPOFlipHorizontal | IPOFlipVertical
                                 deriving (Show, Read)
 
-processingFunc :: ImageProcessingOperation -> ImageProcessingFunc
-processingFunc IPORotateCW = rotateCW
-processingFunc IPORotateCCW = rotateCCW
-processingFunc IPOFlipHorizontal = flipHorizontal
-processingFunc IPOFlipVertical = flipVertical
+processingFunc :: ImageProcessingOperation -> CoordinateRearrangementFunc
+processingFunc IPORotateCW = rotateCWIndex'
+processingFunc IPORotateCCW = rotateCCWIndex'
+processingFunc IPOFlipHorizontal = flipHorizontalIndex'
+processingFunc IPOFlipVertical = flipVerticalIndex'
 
-processAcquiredImages :: [ImageProcessingFunc] -> MeasuredImages -> MeasuredImages
+processAcquiredImages :: [CoordinateRearrangementFunc] -> MeasuredImages -> MeasuredImages
 processAcquiredImages [] ims = ims
 processAcquiredImages fs (MeasuredImages nRows nCols v) =
     let f = foldr (.) id fs
         nPixels = nRows * nCols
         nIms = (V.length v) `div` nPixels
-        ims = take nIms (map (\s -> V.slice 0 nPixels v) [0, nPixels ..])
-        processedIms = map f (zip ims (repeat (nRows, nCols)))
-        (newNRows, newNCols) = snd (head processedIms)
-        newV = V.concat (map fst processedIms)
+        ims = take nIms (map (\im -> ImageVectorAndSize im (nRows, nCols)) . map (\s -> V.slice 0 nPixels v) $ [0, nPixels ..])
+        rearrangedIms = map (rearrangeImage f) ims
+        (newNRows, newNCols) = ivsSize (head rearrangedIms)
+        newV = V.concat (map ivsVector rearrangedIms)
     in  MeasuredImages newNRows newNCols newV--MeasuredImages newNRows newNCols newV
 
 instance Detector SCCamDetector where

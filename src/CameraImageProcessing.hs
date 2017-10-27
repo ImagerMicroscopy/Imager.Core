@@ -1,5 +1,13 @@
 {-# LANGUAGE BangPatterns #-}
-module CameraImageProcessing where
+module CameraImageProcessing (
+    ImageVectorAndSize (..)
+  , CoordinateRearrangementFunc
+  , rearrangeImage
+  , rotateCWIndex'
+  , rotateCCWIndex'
+  , flipHorizontalIndex'
+  , flipVerticalIndex'
+  ) where
 
 import Control.Monad
 import Control.Monad.ST
@@ -8,32 +16,33 @@ import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
 import qualified Data.Vector.Storable.Mutable as MV
 
-type ImageProcessingFunc = (Vector Word16, (Int, Int)) -> (Vector Word16 , (Int, Int))
-type CoordinateRearrangementFunc = (Int, Int) -> (Int, Int) -> (Int, Int)
+data ImageVectorAndSize = ImageVectorAndSize {
+                                 ivsVector :: !(Vector Word16)
+                               , ivsSize   :: !(Int, Int)
+                             }
+data ImageSizeAndCoordinate = ImageSizeAndCoordinate {
+                                  iscSize       :: !(Int, Int)
+                                , iscCoordinate :: !(Int, Int)
+                              }
 
-rotateCW :: ImageProcessingFunc
-rotateCW (v, (nRows, nCols)) = (rearrangeImage rotateCWIndex' v (nRows, nCols) (nCols, nRows), (nCols, nRows))
-rotateCCW :: ImageProcessingFunc
-rotateCCW (v, (nRows, nCols)) = (rearrangeImage rotateCCWIndex' v (nRows, nCols) (nCols, nRows), (nCols, nRows))
-flipHorizontal :: ImageProcessingFunc
-flipHorizontal (v, (nRows, nCols)) = (rearrangeImage flipHorizontalIndex' v (nRows, nCols) (nRows, nCols), (nRows, nCols))
-flipVertical :: ImageProcessingFunc
-flipVertical (v, (nRows, nCols)) = (rearrangeImage flipVerticalIndex' v (nRows, nCols) (nRows, nCols), (nRows, nCols))
+type CoordinateRearrangementFunc = ImageSizeAndCoordinate -> ImageSizeAndCoordinate
 
-rearrangeImage :: CoordinateRearrangementFunc -> Vector Word16 -> (Int, Int) -> (Int, Int) -> Vector Word16
-rearrangeImage f v (nRows, nCols) (nRowsNew, nColsNew) =
-    V.generate (nRows * nCols) (\idx ->
-        let oldIndex = (rowColToLinear nRows . f (nRowsNew, nColsNew) . linearToRowCol nRowsNew) idx
-        in  (v V.! oldIndex))
+rearrangeImage :: CoordinateRearrangementFunc -> ImageVectorAndSize -> ImageVectorAndSize
+rearrangeImage f (ImageVectorAndSize v (nRows, nCols)) = ImageVectorAndSize newVec (nRowsNew, nColsNew)
+    where
+        ImageSizeAndCoordinate (nRowsNew, nColsNew) _ = f (ImageSizeAndCoordinate (nRows, nCols) (0, 0))
+        newVec = V.generate (nRowsNew * nColsNew) (\idx ->
+                     let oldIndex = (rowColToLinear nRows . iscCoordinate . f . ImageSizeAndCoordinate (nRowsNew, nColsNew) . linearToRowCol nRowsNew) idx
+                     in  (v V.! oldIndex))
 
 rotateCWIndex :: CoordinateRearrangementFunc    -- calculates where the pixel at (row, col) goes in the rotated image. (nRows, nCols) from original image!
-rotateCWIndex (nRows, nCols) (row, col) = (nCols - 1 - col, row)
+rotateCWIndex (ImageSizeAndCoordinate (nRows, nCols) (row, col)) = ImageSizeAndCoordinate (nCols, nRows) (nCols - 1 - col, row)
 rotateCCWIndex  :: CoordinateRearrangementFunc  -- calculates where the pixel at (row, col) goes in the rotated image. (nRows, nCols) from original image!
-rotateCCWIndex (nRows, nCols) (row, col) = (col, nRows - 1 - row)
+rotateCCWIndex (ImageSizeAndCoordinate (nRows, nCols) (row, col)) = ImageSizeAndCoordinate (nCols, nRows) (col, nRows - 1 - row)
 flipHorizontalIndex :: CoordinateRearrangementFunc  -- calculates where the pixel at (row, col) goes in the flipped image. (nRows, nCols) from original image!
-flipHorizontalIndex (nRows, nCols) (row, col) = (row, nCols - 1 - col)
+flipHorizontalIndex (ImageSizeAndCoordinate (nRows, nCols) (row, col)) = ImageSizeAndCoordinate (nRows, nCols) (row, nCols - 1 - col)
 flipVerticalIndex :: CoordinateRearrangementFunc  -- calculates where the pixel at (row, col) goes in the flipped image. (nRows, nCols) from original image!
-flipVerticalIndex (nRows, nCols) (row, col) = (nRows - 1 - row, col)
+flipVerticalIndex (ImageSizeAndCoordinate (nRows, nCols) (row, col)) = ImageSizeAndCoordinate (nRows, nCols) (nRows - 1 - row, col)
 
 rotateCWIndex' :: CoordinateRearrangementFunc    -- calculates where the pixel at (row, col) in the rotated image was in the original image. (nRows, nCols) from rotated image!
 rotateCWIndex' = rotateCCWIndex
