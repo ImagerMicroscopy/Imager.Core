@@ -47,7 +47,7 @@ serverSettings = defaultSettings {ssBindToAllInterfaces = False,
                                   ssMaxMessageSize = round 2e6}
 
 main :: IO ()
-main =
+main = wait =<< async (
     readAvailableEquipment >>= \descs ->
     withEquipment descs $ \availableEquipment ->
 
@@ -66,7 +66,7 @@ main =
             robots = filter isRobot availableEquipment
             env = Environment lightSources filterWheels motorizedStages robots
                       det encodedWl asyncSpectraMVar asyncStatusMessagesMVar asyncProgramWorker
-        in runServer 3200 messageHandler env serverSettings)
+        in runServer 3200 messageHandler env serverSettings))
 
 messageHandler :: Detector a => MessageHandler (Environment a)
 messageHandler msg env =
