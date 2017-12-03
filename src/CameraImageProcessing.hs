@@ -21,6 +21,7 @@ import Foreign.Marshal.Alloc
 import Foreign.Storable
 import System.IO.Unsafe
 
+import AcquiredDataTypes
 import SCCamera
 
 data ImageVectorAndSize = ImageVectorAndSize {

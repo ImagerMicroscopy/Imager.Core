@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns, ScopedTypeVariables, DeriveGeneric, DeriveAnyClass #-}
+{-# LANGUAGE BangPatterns, ScopedTypeVariables #-}
 
 module Detector (
     AcquiredData (..)
@@ -25,24 +25,13 @@ import System.Clock
 import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
 
+import AcquiredDataTypes
+
 type ExposureTime = Double
 type Gain = Double
 type Temperature = Double
 type NMeasurementsToAverage = Int
 type NMeasurementsToPerform = Int
-
-data NumberType = UINT8
-                | UINT16
-                | FP64
-                deriving (Show)
-
-data AcquiredData = AcquiredData {
-                        acqNRows :: !Int
-                      , acqNCols :: !Int
-                      , acqTimeStamp :: !TimeSpec
-                      , acqData :: !ByteString
-                      , acqNumType :: !NumberType
-                  } deriving (Show, Generic, NFData)
 
 data DetectorLimits = DetectorLimits {
                           dlMinExposureTime :: !ExposureTime
@@ -96,8 +85,3 @@ addDataToMVar mvar startTime newData =
         toSecondsFromStart acqDat =
             let t = acqTimeStamp acqDat
             in acqDat {acqTimeStamp = diffTimeSpec t startTime}
-
-instance NFData NumberType where
-    rnf t = t `seq` ()
-instance NFData TimeSpec where
-    rnf t = t `seq` ()
