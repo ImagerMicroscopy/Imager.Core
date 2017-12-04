@@ -33,7 +33,7 @@ data ProgramEnvironment a = ProgramEnvironment {
                               , peFilterWheels :: [Equipment]
                               , peMotorizedStages :: [Equipment]
                               , peRobots :: [Equipment]
-                              , peDataMVar :: MVar [[AcquiredData]]
+                              , peDataMVar :: MVar [AcquiredData]
                               , peStatusMVar :: MVar [Text]
                             }
 

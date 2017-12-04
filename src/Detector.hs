@@ -5,16 +5,18 @@ module Detector (
   , NumberType (..)
   , Detector (..)
   , DetectorLimits (..)
+  , AsyncData (..)
   , ExposureTime
   , Gain
   , Temperature
   , NMeasurementsToAverage
   , NMeasurementsToPerform
   , getDetectorLimits
-  , addDataToMVar
 ) where
 
 import Control.Concurrent
+import Control.Concurrent.Async
+import Control.Concurrent.Chan
 import Control.DeepSeq
 import Control.Exception
 import Control.Monad
@@ -42,14 +44,22 @@ data DetectorLimits = DetectorLimits {
                         , dlMaxAveraging :: !Int
                     } deriving (Show)
 
+data AsyncData = AsyncData !AcquiredData
+               | AsyncFinished
+               | AsyncError
+
 class Detector a where
     acquireData :: a -> ExposureTime -> Gain -> NMeasurementsToAverage -> IO AcquiredData
     acquireStreamingData :: a -> ExposureTime -> Gain -> NMeasurementsToAverage ->
-                            NMeasurementsToPerform -> TimeSpec -> MVar [[AcquiredData]] -> IO ()
-    acquireStreamingData det expTime gain nMeasurementsToAverage nMeasurements startTime dataMVar =
-        forM_ [1 .. nMeasurements] (\_ ->
-            acquireData det expTime gain nMeasurementsToAverage >>= \acqData ->
-            addDataToMVar dataMVar startTime [acqData])
+                            NMeasurementsToPerform -> IO (Async (), Chan AsyncData)
+    acquireStreamingData det expTime gain nMeasurementsToAverage nMeasurements =
+        newChan >>= \chan ->
+        async ((acquire chan >> writeChan chan AsyncFinished) `onException` writeChan chan AsyncError) >>= \as ->
+        return (as, chan)
+        where
+            acquire chan = forM_ [1 .. nMeasurements] (\_ ->
+                               acquireData det expTime gain nMeasurementsToAverage >>= \acqData ->
+                               writeChan chan (AsyncData acqData))
 
     getDetectorWavelengths :: a -> IO (Vector Double)
     getDetectorWavelengths _ = return V.empty
@@ -70,18 +80,3 @@ getDetectorLimits det =
     getGainRange det >>= \(minGain, maxGain) ->
     getExposureTimeRange det >>= \(minExpTime, maxExpTime) ->
     return (DetectorLimits minExpTime maxExpTime minGain maxGain 1 100)
-
-addDataToMVar :: MVar [[AcquiredData]] -> TimeSpec -> [AcquiredData] -> IO ()
-addDataToMVar mvar startTime newData =
-    newData `deepseq` (return ()) >>
-    modifyMVar_ mvar (\previousData ->
-        if (null previousData)
-        then return [[d] | d <- adjustedData]
-        else let nDetectionsAlreadyStored = length (head previousData)
-             in when (nDetectionsAlreadyStored > 250) (putStrLn "aborting due to data overflow" >> throwIO (userError "too many async data stored")) >>
-                return (zipWith (:) adjustedData previousData))
-    where
-        adjustedData = map toSecondsFromStart newData
-        toSecondsFromStart acqDat =
-            let t = acqTimeStamp acqDat
-            in acqDat {acqTimeStamp = diffTimeSpec t startTime}

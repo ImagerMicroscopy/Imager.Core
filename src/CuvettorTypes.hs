@@ -40,7 +40,7 @@ data Environment a = Environment {
                     , envRobots :: [Equipment]
                     , envDetector :: a
                     , envEncodedSpectrometerWavelengths :: !SB.ByteString
-                    , envAsyncDataMVar :: MVar [[AcquiredData]]
+                    , envAsyncDataMVar :: MVar [AcquiredData]
                     , envAsyncStatusMessagesMVar :: MVar [Text]
                     , envAsyncProgramWorker :: Async ()
 }
@@ -147,7 +147,7 @@ data ResponseMessage = StatusOK
                      | DetectorTemperatureResponse !Double
                      | DetectorTemperatureSetpointResponse !Double
                      | Pong
-                     | AsyncAcquiredData ![[AcquiredData]]
+                     | AsyncAcquiredData ![AcquiredData]
                      | AsyncStatusMessages ![Text]
                      | AsyncAcquisitionIsRunning !Bool
                      deriving (Generic)

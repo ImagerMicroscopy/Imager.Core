@@ -3,6 +3,9 @@
 module SCCamDetector where
 
 import Control.Concurrent
+import Control.Concurrent.Async
+import Control.Concurrent.Chan
+import Control.DeepSeq
 import Control.Exception
 import Control.Monad.Trans.Except
 import Data.ByteString (ByteString)
@@ -60,28 +63,35 @@ instance Detector SCCamDetector where
         in return (AcquiredData nRows nCols timeStamp bytes numType)
 
     acquireStreamingData :: SCCamDetector -> ExposureTime -> Gain -> NMeasurementsToAverage ->
-                            NMeasurementsToPerform -> TimeSpec -> MVar [[AcquiredData]] -> IO ()
-    acquireStreamingData (SCCamDetector camName procF) expTime gain nAvg nMeasurements startTime dataMVar =
+                            NMeasurementsToPerform -> IO (Async (), Chan AsyncData)
+    acquireStreamingData (SCCamDetector camName procF) expTime gain nAvg nMeasurements =
         getSensorDimensions camName >>= \(nRows, nCols) ->
-        MV.new (nRows * nCols * nImagesInBuffer * 2) >>= \buffer ->
-        MV.unsafeWith buffer (\bufPtr ->
-        (flip finally) (abortAsyncAcquisition camName) (
-            setExposureTime camName expTime >>
-            setEMGain camName gain >>
-            startAsyncAcquisition camName nAvg (bufPtr, nRows * nCols * nImagesInBuffer) >>
-            fetchImages nMeasurements (bufPtr, nRows, nCols) dataMVar))
+        setExposureTime camName expTime >>
+        setEMGain camName gain >>
+        newChan >>= \chan ->
+        async ((MV.new (nRows * nCols * nImagesInBuffer * 2) >>= \buffer ->
+                MV.unsafeWith buffer (\bufPtr ->
+                startAsyncAcquisition camName nAvg (bufPtr, nRows * nCols * nImagesInBuffer) >>
+                putStrLn "async running" >>
+                fetchImages nMeasurements (bufPtr, nRows, nCols) chan) >>
+                writeChan chan AsyncFinished)
+                   `onException` (writeChan chan AsyncError >>
+                                  abortAsyncAcquisition camName)) >>= \as ->
+        return (as, chan)
         where
-            fetchImages :: Int -> (Ptr Word16, Int, Int) -> MVar [[AcquiredData]] -> IO ()
-            fetchImages nImagesRemaining (bufPtr, nRows, nCols) dataMVar
+            fetchImages :: Int -> (Ptr Word16, Int, Int) -> Chan AsyncData -> IO ()
+            fetchImages nImagesRemaining (bufPtr, nRows, nCols) chan
                 | nImagesRemaining == 0 = return ()
                 | otherwise =
                     getIndexOfLastImageAsyncAcquired camName >>= \idx ->
                     case idx of
-                        (-1) -> threadDelay (floor 50e3) >> fetchImages nImagesRemaining (bufPtr, nRows, nCols) dataMVar
+                        (-1) -> threadDelay (floor 50e3) >> fetchImages nImagesRemaining (bufPtr, nRows, nCols) chan
                         i    -> getTime Monotonic >>= \timeStamp ->
                                 getImageAtIndexInBuffer bufPtr (nRows, nCols) i >>= \imageData ->
-                                addDataToMVar dataMVar startTime [AcquiredData nRows nCols timeStamp (byteStringFromVector imageData) UINT16] >>
-                                fetchImages (nImagesRemaining - 1) (bufPtr, nRows, nCols) dataMVar
+                                let acqData = AcquiredData nRows nCols timeStamp (byteStringFromVector imageData) UINT16
+                                in  acqData `deepseq` writeChan chan (AsyncData acqData) >>
+                                    putStrLn "put image" >>
+                                    fetchImages (nImagesRemaining - 1) (bufPtr, nRows, nCols) chan
             nImagesInBuffer = 20
             getImageAtIndexInBuffer :: Ptr Word16 -> (Int, Int) -> Int -> IO (V.Vector Word16)
             getImageAtIndexInBuffer bufPtr (nRows, nCols) index =

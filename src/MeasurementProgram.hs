@@ -6,6 +6,7 @@ module MeasurementProgram (
 
 import Control.Concurrent
 import Control.Concurrent.Async
+import Control.Concurrent.Chan
 import Control.Exception
 import Control.Monad
 import Control.Monad.Trans.Except
@@ -53,8 +54,7 @@ executeMeasurementElements env es = mapM_ (executeMeasurementElement env) es
 
 executeMeasurementElement :: Detector a => ProgramEnvironment a -> MeasurementElement -> IO ()
 executeMeasurementElement env (MEDetection detParams) =
-    forM detParams (\p -> executeDetection detector lss fws p) >>=
-    addDataToMVar mvar startTime
+    forM_ detParams (\p -> executeDetection detector lss fws p >>= addDataToMVar mvar startTime)
     where
       detector = peDetector env
       lss = peLightSources env
@@ -162,13 +162,23 @@ executeDetection det lss fws DetectionParams{..} =
     disableLightSources lss dpIrradiation >>
     return acquiredData
 
-executeFastDetectionLoop :: Detector a => a -> [Equipment] -> [Equipment] -> DetectionParams -> Int -> TimeSpec -> MVar [[AcquiredData]] -> IO ()
+executeFastDetectionLoop :: Detector a => a -> [Equipment] -> [Equipment] -> DetectionParams -> Int -> TimeSpec -> MVar [AcquiredData] -> IO ()
 executeFastDetectionLoop detector lightSources filterWheels detParams nTimesToPerform startTime dataMVar =
     switchToFilters filterWheels (dpFilterParams detParams) >>
     enableLightSources lightSources (dpIrradiation detParams) >>
     acquireStreamingData detector (dpExposureTime detParams) (dpGain detParams)
-                    (dpNSpectraToAverage detParams) nTimesToPerform startTime dataMVar >>
+                    (dpNSpectraToAverage detParams) nTimesToPerform >>= \(as, chan) ->
+    (fetchData as chan `onException` cancel as) >>
     disableLightSources lightSources (dpIrradiation detParams)
+    where
+        fetchData :: Async () -> Chan AsyncData -> IO ()
+        fetchData as chan = readChan chan >>= \val -> putStrLn "read something" >>
+                            case val of
+                                AsyncFinished -> wait as
+                                AsyncError    -> wait as
+                                AsyncData d   -> putStrLn "found data" >>
+                                                 addDataToMVar dataMVar startTime d >>
+                                                 fetchData as chan
 
 executeIrradiation :: [Equipment] -> [Equipment] -> [IrradiationParams] -> Double -> IO ()
 executeIrradiation lightSources fws ips dur =
@@ -224,3 +234,14 @@ updateStatusMessage env newMsg =
     modifyMVar_ statusMVar (\(m : ms) -> return (LT.toStrict newMsg : ms))
     where
         statusMVar = peStatusMVar env
+
+addDataToMVar :: MVar [AcquiredData] -> TimeSpec -> AcquiredData -> IO ()
+addDataToMVar dataMVar startTime d = modifyMVar_ dataMVar (\previousData ->
+                                 when (length previousData > 250) (throwIO (userError "too many async data stored")) >>
+                                 if (null previousData)
+                                 then pure [adjustTime d]
+                                 else pure (adjustTime d : previousData))
+    where
+       adjustTime :: AcquiredData -> AcquiredData
+       adjustTime acqDat = let t = acqTimeStamp acqDat
+                           in acqDat {acqTimeStamp = diffTimeSpec t startTime}

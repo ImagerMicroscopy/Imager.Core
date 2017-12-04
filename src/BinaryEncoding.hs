@@ -39,23 +39,22 @@ shouldBinaryEncode (Wavelengths _) = True
 shouldBinaryEncode _ = False
 
 binaryEncode :: ResponseMessage -> [ByteString]
-binaryEncode (AcquiredDataResponse d) = encodeAcquiredData [[d]]
+binaryEncode (AcquiredDataResponse d) = encodeAcquiredData [d]
 binaryEncode (AsyncAcquiredData ds) = encodeAcquiredData ds
-binaryEncode (Wavelengths d) = encodeAcquiredData [[d]]
+binaryEncode (Wavelengths d) = encodeAcquiredData [d]
 binaryEncode _ = error "no binary encoding for this type"
 
-encodeAcquiredData :: [[AcquiredData]] -> [ByteString]
+encodeAcquiredData :: [AcquiredData] -> [ByteString]
 encodeAcquiredData [] = [encodeHeader 22 0 0 (encodedNumType UINT16) []]
 encodeAcquiredData acqs = let header = encodeHeader messageLength nRows nCols numType timeStamps
                           in header : acqBytes
   where
-      messageLength = 19 + (length concatenatedAcqs) * 8 + sum (map B.length acqBytes)
-      concatenatedAcqs = concat acqs
-      timeStamps = map (timeSpecAsDouble . acqTimeStamp) concatenatedAcqs
-      nRows = acqNRows (head concatenatedAcqs)
-      nCols = acqNCols (head concatenatedAcqs)
-      numType = encodedNumType $ acqNumType (head concatenatedAcqs)
-      acqBytes = map acqData concatenatedAcqs
+      messageLength = 19 + (length acqs) * 8 + sum (map B.length acqBytes)
+      timeStamps = map (timeSpecAsDouble . acqTimeStamp) acqs
+      nRows = acqNRows (head acqs)
+      nCols = acqNCols (head acqs)
+      numType = encodedNumType $ acqNumType (head acqs)
+      acqBytes = map acqData acqs
 
 encodeHeader :: Int -> Int -> Int -> Int -> [Double] -> ByteString
 encodeHeader messageLength nRows nCols numType timeStamps =

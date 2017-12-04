@@ -84,7 +84,7 @@ performAction :: Detector a => Environment a -> RequestMessage -> IO (ResponseMe
 performAction env (AcquireData params) =
     startAsyncAcquisition env (MEDetection [params]) >>= \(asyncWorker, spectraMVar, statusMVar) ->
     wait asyncWorker >>
-    takeMVar spectraMVar >>= \[[acquiredData]] ->
+    takeMVar spectraMVar >>= \[acquiredData] ->
     return (AcquiredDataResponse acquiredData, env)
 
 performAction env ListWavelengths =
@@ -189,7 +189,7 @@ performAction env FetchAsyncData =
     asyncAcquisitionRunning env >>= \asyncIsRunning ->
     modifyMVar dataMVar (\s -> return ([], s)) >>= \newData ->
     asyncAcquisitionErrorMessage env >>= \asyncErrorMsg ->
-    return (dataResponse asyncErrorMsg asyncIsRunning (map reverse newData), env)
+    return (dataResponse asyncErrorMsg asyncIsRunning (reverse newData), env)
     where
         dataMVar = envAsyncDataMVar env
         wl = envEncodedSpectrometerWavelengths env
@@ -222,7 +222,7 @@ performAction env IsAsyncAcquisitionRunning =
     asyncAcquisitionRunning env >>= \asyncIsRunning ->
     return (AsyncAcquisitionIsRunning asyncIsRunning, env)
 
-startAsyncAcquisition :: Detector a => Environment a -> MeasurementElement -> IO (Async (), MVar [[AcquiredData]], MVar [Text])
+startAsyncAcquisition :: Detector a => Environment a -> MeasurementElement -> IO (Async (), MVar [AcquiredData], MVar [Text])
 startAsyncAcquisition env me =
     ensureAsyncAcquisitionNotRunning env >>
     validateMeasurementElementThrows lightSources filterWheels motorizedStages robots me >>
