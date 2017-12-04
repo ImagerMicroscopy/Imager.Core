@@ -37,26 +37,25 @@ processingFunc IPORotateCCW = cRotateImageCCW
 processingFunc IPOFlipHorizontal = cFlipImageHorizontal
 processingFunc IPOFlipVertical = cFlipImageVertical
 
-processAcquiredImages :: [ExternalRearrangementFunc] -> MeasuredImages -> MeasuredImages
-processAcquiredImages [] ims = ims
-processAcquiredImages fs (MeasuredImages nRows nCols v) =
-    let nPixels = nRows * nCols
-        nIms = (V.length v) `div` nPixels
-        ims = take nIms (map (\im -> ImageVectorAndSize im (nRows, nCols)) . map (\s -> V.slice 0 nPixels v) $ [0, nPixels ..])
-        rearrangedIms = map (rearrangeImageExternal fs) ims
-        (newNRows, newNCols) = ivsSize (head rearrangedIms)
-        newV = V.concat (map ivsVector rearrangedIms)
-    in  MeasuredImages newNRows newNCols newV--MeasuredImages newNRows newNCols newV
+-- processAcquiredImages :: [ExternalRearrangementFunc] -> MeasuredImages -> MeasuredImages
+-- processAcquiredImages [] ims = ims
+-- processAcquiredImages fs (MeasuredImages nRows nCols v) =
+--     let nPixels = nRows * nCols
+--         nIms = (V.length v) `div` nPixels
+--         ims = take nIms (map (\im -> ImageVectorAndSize im (nRows, nCols)) . map (\s -> V.slice 0 nPixels v) $ [0, nPixels ..])
+--         rearrangedIms = map (rearrangeImageExternal fs) ims
+--         (newNRows, newNCols) = ivsSize (head rearrangedIms)
+--         newV = V.concat (map ivsVector rearrangedIms)
+--     in  MeasuredImages newNRows newNCols newV--MeasuredImages newNRows newNCols newV
 
 instance Detector SCCamDetector where
     acquireData :: SCCamDetector -> ExposureTime -> Gain -> NMeasurementsToAverage -> IO AcquiredData
     acquireData (SCCamDetector camName procF) expTime emGain nAvg =
         setExposureTime camName expTime >>
         setEMGain camName emGain >>
-        acquireImages camName 1 nAvg >>= \images ->
+        acquireImages camName 1 nAvg >>= \(MeasuredImages nRows nCols vec) ->
         getTime Monotonic >>= \timeStamp ->
-        let (MeasuredImages nRows nCols vec) = processAcquiredImages procF images
-            bytes = byteStringFromVector vec
+        let bytes = byteStringFromVector vec
             numType = UINT16
         in return (AcquiredData nRows nCols timeStamp bytes numType)
 
@@ -81,9 +80,8 @@ instance Detector SCCamDetector where
                         (-1) -> threadDelay (floor 50e3) >> fetchImages nImagesRemaining (bufPtr, nRows, nCols) dataMVar
                         i    -> getTime Monotonic >>= \timeStamp ->
                                 getImageAtIndexInBuffer bufPtr (nRows, nCols) i >>= \imageData ->
-                                let (MeasuredImages newNRows newNCols pVec) = processAcquiredImages procF (MeasuredImages nRows nCols imageData)
-                                in  addDataToMVar dataMVar startTime [AcquiredData newNRows newNCols timeStamp (byteStringFromVector pVec) UINT16] >>
-                                    fetchImages (nImagesRemaining - 1) (bufPtr, nRows, nCols) dataMVar
+                                addDataToMVar dataMVar startTime [AcquiredData nRows nCols timeStamp (byteStringFromVector imageData) UINT16] >>
+                                fetchImages (nImagesRemaining - 1) (bufPtr, nRows, nCols) dataMVar
             nImagesInBuffer = 20
             getImageAtIndexInBuffer :: Ptr Word16 -> (Int, Int) -> Int -> IO (V.Vector Word16)
             getImageAtIndexInBuffer bufPtr (nRows, nCols) index =

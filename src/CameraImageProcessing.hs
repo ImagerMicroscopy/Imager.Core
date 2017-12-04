@@ -11,12 +11,16 @@ module CameraImageProcessing (
 
 import Control.Monad
 import Control.Monad.ST
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Internal as B
+import qualified Data.ByteString.Unsafe as B
 import Data.Word
 import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
 import qualified Data.Vector.Storable.Mutable as MV
 import Foreign.Ptr
 import Foreign.C.Types
+import Foreign.ForeignPtr
 import Foreign.Marshal.Alloc
 import Foreign.Storable
 import System.IO.Unsafe
@@ -33,19 +37,20 @@ data ImageSizeAndCoordinate = ImageSizeAndCoordinate {
                                 , iscCoordinate :: !(Int, Int)
                               }
 
-rearrangeImageExternal :: [ExternalRearrangementFunc] -> ImageVectorAndSize -> ImageVectorAndSize
+rearrangeImageExternal :: [ExternalRearrangementFunc] -> AcquiredData -> AcquiredData
 rearrangeImageExternal [] ivs = ivs
 rearrangeImageExternal fs ivs = let f = foldl (.) id (map rearrangeImageExternalW fs)
                                  in  f ivs
 
-rearrangeImageExternalW :: ExternalRearrangementFunc -> ImageVectorAndSize -> ImageVectorAndSize
-rearrangeImageExternalW f (ImageVectorAndSize v (nRows, nCols))= unsafePerformIO $
-    MV.unsafeNew (nRows * nCols) >>= \newIm ->
-    alloca (\newNRowsPtr ->
-    alloca (\newNColsPtr ->
-    V.unsafeWith v (\imPtr ->
-    MV.unsafeWith newIm (\newImPtr ->
-        f imPtr (fromIntegral nRows) (fromIntegral nCols) newImPtr newNRowsPtr newNColsPtr >>
-        (,) <$> peek newNRowsPtr <*> peek newNColsPtr)))) >>= \(newNRows, newNCols) ->
-    V.unsafeFreeze newIm >>= \newVec ->
-    return (ImageVectorAndSize newVec ((fromIntegral newNRows), (fromIntegral newNCols)))
+rearrangeImageExternalW :: ExternalRearrangementFunc -> AcquiredData -> AcquiredData
+rearrangeImageExternalW f (AcquiredData nRows nCols ts bytes numType)
+    | numType /= UINT16 = error "can only process UINT16 images"
+    | otherwise         = unsafePerformIO $
+        mallocForeignPtrBytes (B.length bytes) >>= \newBytesFPtr ->
+        withForeignPtr newBytesFPtr (\newPtr ->
+        B.unsafeUseAsCString bytes (\oldPtr ->
+        alloca (\newNRowsPtr ->
+        alloca (\newNColsPtr ->
+        f (castPtr oldPtr) (fromIntegral nRows) (fromIntegral nCols) (castPtr newPtr) newNRowsPtr newNColsPtr >>
+        AcquiredData <$> (fromIntegral <$> peek newNRowsPtr) <*> (fromIntegral <$> peek newNColsPtr)
+                     <*> pure ts <*> pure (B.fromForeignPtr newBytesFPtr 0 (B.length bytes)) <*> pure numType))))
