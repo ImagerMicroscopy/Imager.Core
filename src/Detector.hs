@@ -51,11 +51,9 @@ data AsyncData = AsyncData !AcquiredData
 class Detector a where
     acquireData :: a -> ExposureTime -> Gain -> NMeasurementsToAverage -> IO AcquiredData
     acquireStreamingData :: a -> ExposureTime -> Gain -> NMeasurementsToAverage ->
-                            NMeasurementsToPerform -> IO (Async (), Chan AsyncData)
-    acquireStreamingData det expTime gain nMeasurementsToAverage nMeasurements =
-        newChan >>= \chan ->
-        async ((acquire chan >> writeChan chan AsyncFinished) `onException` writeChan chan AsyncError) >>= \as ->
-        return (as, chan)
+                            NMeasurementsToPerform -> Chan AsyncData -> IO ()
+    acquireStreamingData det expTime gain nMeasurementsToAverage nMeasurements chan =
+        (acquire chan >> writeChan chan AsyncFinished) `onException` (writeChan chan AsyncError)
         where
             acquire chan = forM_ [1 .. nMeasurements] (\_ ->
                                acquireData det expTime gain nMeasurementsToAverage >>= \acqData ->

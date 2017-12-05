@@ -63,22 +63,19 @@ instance Detector SCCamDetector where
         in return (AcquiredData nRows nCols timeStamp bytes numType)
 
     acquireStreamingData :: SCCamDetector -> ExposureTime -> Gain -> NMeasurementsToAverage ->
-                            NMeasurementsToPerform -> IO (Async (), Chan AsyncData)
-    acquireStreamingData (SCCamDetector camName procF) expTime gain nAvg nMeasurements =
+                            NMeasurementsToPerform -> Chan AsyncData -> IO ()
+    acquireStreamingData (SCCamDetector camName procF) expTime gain nAvg nMeasurements chan =
         getSensorDimensions camName >>= \(nRows, nCols) ->
         setExposureTime camName expTime >>
         setEMGain camName gain >>
-        newChan >>= \chan ->
-        async ((MV.new (nRows * nCols * nImagesInBuffer * 2) >>= \buffer ->
-                MV.unsafeWith buffer (\bufPtr ->
-                startAsyncAcquisition camName nAvg (bufPtr, nRows * nCols * nImagesInBuffer) >>
-                putStrLn "async running" >>
-                fetchImages nMeasurements (bufPtr, nRows, nCols) chan) >>
-                writeChan chan AsyncFinished)
-                   `onException` (writeChan chan AsyncError >>
-                                  abortAsyncAcquisition camName)) >>= \as ->
-        return (as, chan)
+        MV.new (nRows * nCols * nImagesInBuffer * 2) >>= \buffer ->
+        MV.unsafeWith buffer (\bufPtr ->
+        (performAcq bufPtr nRows nCols >> abortAsyncAcquisition camName) `onException` (abortAsyncAcquisition camName >>
+                                                                                        writeChan chan AsyncError))
         where
+            performAcq bufPtr nRows nCols = startAsyncAcquisition camName nAvg (bufPtr, nRows * nCols * nImagesInBuffer) >>
+                                fetchImages nMeasurements (bufPtr, nRows, nCols) chan >>
+                                writeChan chan AsyncFinished
             fetchImages :: Int -> (Ptr Word16, Int, Int) -> Chan AsyncData -> IO ()
             fetchImages nImagesRemaining (bufPtr, nRows, nCols) chan
                 | nImagesRemaining == 0 = return ()

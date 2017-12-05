@@ -166,9 +166,10 @@ executeFastDetectionLoop :: Detector a => a -> [Equipment] -> [Equipment] -> Det
 executeFastDetectionLoop detector lightSources filterWheels detParams nTimesToPerform startTime dataMVar =
     switchToFilters filterWheels (dpFilterParams detParams) >>
     enableLightSources lightSources (dpIrradiation detParams) >>
-    acquireStreamingData detector (dpExposureTime detParams) (dpGain detParams)
-                    (dpNSpectraToAverage detParams) nTimesToPerform >>= \(as, chan) ->
-    (fetchData as chan `onException` cancel as) >>
+    newChan >>= \chan ->
+    withAsync (acquireStreamingData detector (dpExposureTime detParams) (dpGain detParams)
+                    (dpNSpectraToAverage detParams) nTimesToPerform chan) (\as ->
+        fetchData as chan) >>
     disableLightSources lightSources (dpIrradiation detParams)
     where
         fetchData :: Async () -> Chan AsyncData -> IO ()
