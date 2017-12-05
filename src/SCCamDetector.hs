@@ -90,7 +90,6 @@ instance Detector SCCamDetector where
                                 getImageAtIndexInBuffer bufPtr (nRows, nCols) i >>= \imageData ->
                                 let acqData = AcquiredData nRows nCols timeStamp (byteStringFromVector imageData) UINT16
                                 in  acqData `deepseq` writeChan chan (AsyncData acqData) >>
-                                    putStrLn "put image" >>
                                     fetchImages (nImagesRemaining - 1) (bufPtr, nRows, nCols) chan
             nImagesInBuffer = 20
             getImageAtIndexInBuffer :: Ptr Word16 -> (Int, Int) -> Int -> IO (V.Vector Word16)

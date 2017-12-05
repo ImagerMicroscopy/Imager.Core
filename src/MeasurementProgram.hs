@@ -172,12 +172,11 @@ executeFastDetectionLoop detector lightSources filterWheels detParams nTimesToPe
     disableLightSources lightSources (dpIrradiation detParams)
     where
         fetchData :: Async () -> Chan AsyncData -> IO ()
-        fetchData as chan = readChan chan >>= \val -> putStrLn "read something" >>
+        fetchData as chan = readChan chan >>= \val ->
                             case val of
                                 AsyncFinished -> wait as
                                 AsyncError    -> wait as
-                                AsyncData d   -> putStrLn "found data" >>
-                                                 addDataToMVar dataMVar startTime d >>
+                                AsyncData d   -> addDataToMVar dataMVar startTime d >>
                                                  fetchData as chan
 
 executeIrradiation :: [Equipment] -> [Equipment] -> [IrradiationParams] -> Double -> IO ()
