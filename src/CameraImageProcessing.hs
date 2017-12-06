@@ -1,12 +1,8 @@
 {-# LANGUAGE BangPatterns #-}
 module CameraImageProcessing (
-    ImageVectorAndSize (..)
-  , ExternalRearrangementFunc
+    ExternalRearrangementFunc
   , rearrangeImageExternal
-  , cRotateImageCW
-  , cRotateImageCCW
-  , cFlipImageHorizontal
-  , cFlipImageVertical
+  , processingFunc
   ) where
 
 import Control.Monad
@@ -28,19 +24,22 @@ import System.IO.Unsafe
 import AcquiredDataTypes
 import SCCamera
 
-data ImageVectorAndSize = ImageVectorAndSize {
-                                 ivsVector :: !(Vector Word16)
-                               , ivsSize   :: !(Int, Int)
-                             }
-data ImageSizeAndCoordinate = ImageSizeAndCoordinate {
-                                  iscSize       :: !(Int, Int)
-                                , iscCoordinate :: !(Int, Int)
-                              }
+data ImageProcessingOperation = IPORotateCW
+                              | IPORotateCCW
+                              | IPOFlipHorizontal
+                              | IPOFlipVertical
+                              deriving (Read, Show)
+
+processingFunc :: ImageProcessingOperation -> ExternalRearrangementFunc
+processingFunc IPORotateCW = cRotateImageCW
+processingFunc IPORotateCCW = cRotateImageCCW
+processingFunc IPOFlipHorizontal = cFlipImageHorizontal
+processingFunc IPOFlipVertical = cFlipImageVertical
 
 rearrangeImageExternal :: [ExternalRearrangementFunc] -> AcquiredData -> AcquiredData
 rearrangeImageExternal [] ivs = ivs
 rearrangeImageExternal fs ivs = let f = foldl (.) id (map rearrangeImageExternalW fs)
-                                 in  f ivs
+                                in  f ivs
 
 rearrangeImageExternalW :: ExternalRearrangementFunc -> AcquiredData -> AcquiredData
 rearrangeImageExternalW f (AcquiredData nRows nCols ts bytes numType)

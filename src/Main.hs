@@ -21,7 +21,10 @@ import Data.Maybe
 import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
 import System.Clock
+import System.Environment
+import System.FilePath
 
+import CameraImageProcessing
 import CuvettorTypes
 import Detector
 import AvailableDetector
@@ -48,8 +51,10 @@ serverSettings = defaultSettings {ssBindToAllInterfaces = False,
 
 main :: IO ()
 main = wait =<< async (
+    getExecutablePath >>= \exePath ->
     readAvailableEquipment >>= \descs ->
     withEquipment descs $ \availableEquipment ->
+    (map processingFunc . read) <$> readFile (takeDirectory exePath </> "cameraoptions.txt") >>= \procFuncs ->
 
     newMVar [] >>= \asyncSpectraMVar ->
     newMVar [] >>= \asyncStatusMessagesMVar ->
@@ -65,7 +70,7 @@ main = wait =<< async (
             motorizedStages = filter isMotorizedStage availableEquipment
             robots = filter isRobot availableEquipment
             env = Environment lightSources filterWheels motorizedStages robots
-                      det encodedWl asyncSpectraMVar asyncStatusMessagesMVar asyncProgramWorker
+                      det procFuncs encodedWl asyncSpectraMVar asyncStatusMessagesMVar asyncProgramWorker
         in runServer 3200 messageHandler env serverSettings))
 
 messageHandler :: Detector a => MessageHandler (Environment a)
@@ -229,7 +234,7 @@ startAsyncAcquisition env me =
     newMVar [] >>= \spectraMVar ->
     newMVar [] >>= \statusMVar ->
     getTime Monotonic >>= \startTime ->
-    async (executeMeasurement (ProgramEnvironment detector startTime lightSources filterWheels motorizedStages robots spectraMVar statusMVar) me >>
+    async (executeMeasurement (ProgramEnvironment detector startTime lightSources filterWheels motorizedStages robots rearrangementFuncs spectraMVar statusMVar) me >>
            return ()) >>= \asyncWorker ->
     return (asyncWorker, spectraMVar, statusMVar)
     where
@@ -238,6 +243,7 @@ startAsyncAcquisition env me =
         filterWheels = envFilterWheels env
         motorizedStages = envMotorizedStages env
         robots = envRobots env
+        rearrangementFuncs = envRearrangementFuncs env
 
 ensureAsyncAcquisitionNotRunning :: Environment a -> IO ()
 ensureAsyncAcquisitionNotRunning env =

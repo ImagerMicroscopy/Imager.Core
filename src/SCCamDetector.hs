@@ -27,33 +27,11 @@ import CameraImageProcessing
 
 data SCCamDetector = SCCamDetector {
                          sccCamName :: !Text
-                       , sccImageProcessing :: ![ExternalRearrangementFunc]
                      }
-
-data ImageProcessingOperation = IPORotateCW | IPORotateCCW
-                              | IPOFlipHorizontal | IPOFlipVertical
-                                deriving (Show, Read)
-
-processingFunc :: ImageProcessingOperation -> ExternalRearrangementFunc
-processingFunc IPORotateCW = cRotateImageCW
-processingFunc IPORotateCCW = cRotateImageCCW
-processingFunc IPOFlipHorizontal = cFlipImageHorizontal
-processingFunc IPOFlipVertical = cFlipImageVertical
-
--- processAcquiredImages :: [ExternalRearrangementFunc] -> MeasuredImages -> MeasuredImages
--- processAcquiredImages [] ims = ims
--- processAcquiredImages fs (MeasuredImages nRows nCols v) =
---     let nPixels = nRows * nCols
---         nIms = (V.length v) `div` nPixels
---         ims = take nIms (map (\im -> ImageVectorAndSize im (nRows, nCols)) . map (\s -> V.slice 0 nPixels v) $ [0, nPixels ..])
---         rearrangedIms = map (rearrangeImageExternal fs) ims
---         (newNRows, newNCols) = ivsSize (head rearrangedIms)
---         newV = V.concat (map ivsVector rearrangedIms)
---     in  MeasuredImages newNRows newNCols newV--MeasuredImages newNRows newNCols newV
 
 instance Detector SCCamDetector where
     acquireData :: SCCamDetector -> ExposureTime -> Gain -> NMeasurementsToAverage -> IO AcquiredData
-    acquireData (SCCamDetector camName procF) expTime emGain nAvg =
+    acquireData (SCCamDetector camName) expTime emGain nAvg =
         setExposureTime camName expTime >>
         setEMGain camName emGain >>
         acquireImages camName 1 nAvg >>= \(MeasuredImages nRows nCols vec) ->
@@ -64,7 +42,7 @@ instance Detector SCCamDetector where
 
     acquireStreamingData :: SCCamDetector -> ExposureTime -> Gain -> NMeasurementsToAverage ->
                             NMeasurementsToPerform -> Chan AsyncData -> IO ()
-    acquireStreamingData (SCCamDetector camName procF) expTime gain nAvg nMeasurements chan =
+    acquireStreamingData (SCCamDetector camName) expTime gain nAvg nMeasurements chan =
         getSensorDimensions camName >>= \(nRows, nCols) ->
         setExposureTime camName expTime >>
         setEMGain camName gain >>
@@ -88,7 +66,7 @@ instance Detector SCCamDetector where
                                 let acqData = AcquiredData nRows nCols timeStamp (byteStringFromVector imageData) UINT16
                                 in  acqData `deepseq` writeChan chan (AsyncData acqData) >>
                                     fetchImages (nImagesRemaining - 1) (bufPtr, nRows, nCols) chan
-            nImagesInBuffer = 20
+            nImagesInBuffer = 50
             getImageAtIndexInBuffer :: Ptr Word16 -> (Int, Int) -> Int -> IO (V.Vector Word16)
             getImageAtIndexInBuffer bufPtr (nRows, nCols) index =
                 let nBytesInImage = nRows * nCols * 2
@@ -98,14 +76,14 @@ instance Detector SCCamDetector where
                     V.freeze image
 
     setDetectorTemperature :: SCCamDetector -> Temperature -> IO ()
-    setDetectorTemperature (SCCamDetector camName _) t = setTemperature camName t
+    setDetectorTemperature (SCCamDetector camName) t = setTemperature camName t
     getDetectorTemperature :: SCCamDetector -> IO Temperature
-    getDetectorTemperature (SCCamDetector camName _) = readTemperature camName
+    getDetectorTemperature (SCCamDetector camName) = readTemperature camName
     getDetectorTemperatureSetpoint :: SCCamDetector -> IO Temperature
-    getDetectorTemperatureSetpoint (SCCamDetector camName _) = readTemperatureSetpoint camName
+    getDetectorTemperatureSetpoint (SCCamDetector camName) = readTemperatureSetpoint camName
 
     getGainRange :: SCCamDetector -> IO (Gain, Gain)
-    getGainRange (SCCamDetector camName _) = readEMGainRange camName
+    getGainRange (SCCamDetector camName) = readEMGainRange camName
 
     getExposureTimeRange :: SCCamDetector -> IO (ExposureTime, ExposureTime)
-    getExposureTimeRange (SCCamDetector camName _) = readExposureTimeRange camName
+    getExposureTimeRange (SCCamDetector camName) = readExposureTimeRange camName

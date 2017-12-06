@@ -8,8 +8,6 @@ import Data.Either
 import qualified Data.Text as T
 import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
-import System.Environment (getExecutablePath)
-import System.FilePath
 
 import Detector
 #ifdef WITH_OCEANOPTICS
@@ -51,8 +49,6 @@ withAvailableDetector f =
 #ifdef WITH_SCCAMERA
 withAvailableDetector :: (SCCamDetector -> IO ()) -> IO ()
 withAvailableDetector f =
-    getExecutablePath >>= \exePath ->
-    (map processingFunc . read) <$> readFile (takeDirectory exePath </> "cameraoptions.txt") >>= \procFs ->
     (bracket initializeCameraDLL (\_ -> shutdownCameraDLL) $ \initStatus ->
     when (isLeft initStatus) (error (fromLeft initStatus)) >>
     listConnectedCameras >>= \camNames ->
@@ -61,7 +57,7 @@ withAvailableDetector f =
         getLine >> error "no cameras found") >>
     putStrLn ("using camera " ++ (T.unpack $ head camNames)) >>
     let camName = head camNames
-    in f (SCCamDetector camName procFs))
+    in f (SCCamDetector camName))
 #endif
 #ifdef WITH_DUMMYDETECTOR
 withAvailableDetector :: (DummyDetector -> IO ()) -> IO ()

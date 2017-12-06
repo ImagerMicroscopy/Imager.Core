@@ -7,6 +7,7 @@ module MeasurementProgram (
 import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Concurrent.Chan
+import Control.DeepSeq
 import Control.Exception
 import Control.Monad
 import Control.Monad.Trans.Except
@@ -25,6 +26,7 @@ import Data.Time.Clock
 import Data.Time.LocalTime
 import System.Clock
 
+import CameraImageProcessing
 import Detector
 import EquipmentTypes
 import FilterWheel
@@ -54,11 +56,14 @@ executeMeasurementElements env es = mapM_ (executeMeasurementElement env) es
 
 executeMeasurementElement :: Detector a => ProgramEnvironment a -> MeasurementElement -> IO ()
 executeMeasurementElement env (MEDetection detParams) =
-    forM_ detParams (\p -> executeDetection detector lss fws p >>= addDataToMVar mvar startTime)
+    forM_ detParams (\p -> executeDetection detector lss fws p >>=
+                           return . rearrangeImageExternal rearrangeFuncs >>= \r ->
+                           r `deepseq` addDataToMVar mvar startTime r)
     where
       detector = peDetector env
       lss = peLightSources env
       fws = peFilterWheels env
+      rearrangeFuncs = peRearrangementFuncs env
       mvar = peDataMVar env
       startTime = peStartTime env
 executeMeasurementElement env (MEIrradiation dur ips) =
@@ -83,10 +88,11 @@ executeMeasurementElement env (MEDoTimes n es) =
         ))
 executeMeasurementElement env (MEFastAcquisitionLoop n detParams) =
     withStatusMessage env (T.format "fast acquisition ({} images)" (T.Only n)) (
-        executeFastDetectionLoop detector lss fws detParams n startTime mvar)
+        executeFastDetectionLoop detector lss fws detParams rearrangeFuncs n startTime mvar)
     where
       lss = peLightSources env
       fws = peFilterWheels env
+      rearrangeFuncs = peRearrangementFuncs env
       mvar = peDataMVar env
       startTime = peStartTime env
       detector = peDetector env
@@ -162,8 +168,8 @@ executeDetection det lss fws DetectionParams{..} =
     disableLightSources lss dpIrradiation >>
     return acquiredData
 
-executeFastDetectionLoop :: Detector a => a -> [Equipment] -> [Equipment] -> DetectionParams -> Int -> TimeSpec -> MVar [AcquiredData] -> IO ()
-executeFastDetectionLoop detector lightSources filterWheels detParams nTimesToPerform startTime dataMVar =
+executeFastDetectionLoop :: Detector a => a -> [Equipment] -> [Equipment] -> DetectionParams -> [ExternalRearrangementFunc] -> Int -> TimeSpec -> MVar [AcquiredData] -> IO ()
+executeFastDetectionLoop detector lightSources filterWheels detParams rearrangeFuncs nTimesToPerform startTime dataMVar =
     switchToFilters filterWheels (dpFilterParams detParams) >>
     enableLightSources lightSources (dpIrradiation detParams) >>
     newChan >>= \chan ->
@@ -177,8 +183,9 @@ executeFastDetectionLoop detector lightSources filterWheels detParams nTimesToPe
                             case val of
                                 AsyncFinished -> wait as
                                 AsyncError    -> wait as
-                                AsyncData d   -> addDataToMVar dataMVar startTime d >>
-                                                 fetchData as chan
+                                AsyncData d   -> let r = rearrangeImageExternal rearrangeFuncs d
+                                                 in  r `deepseq` addDataToMVar dataMVar startTime r >>
+                                                     fetchData as chan
 
 executeIrradiation :: [Equipment] -> [Equipment] -> [IrradiationParams] -> Double -> IO ()
 executeIrradiation lightSources fws ips dur =

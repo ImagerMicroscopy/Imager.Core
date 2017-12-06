@@ -22,6 +22,7 @@ import Foreign
 import System.Clock
 import System.IO.Unsafe
 
+import CameraImageProcessing
 import MiscUtils
 import Detector
 import EquipmentEncoding
@@ -39,6 +40,7 @@ data Environment a = Environment {
                     , envMotorizedStages :: [Equipment]
                     , envRobots :: [Equipment]
                     , envDetector :: a
+                    , envRearrangementFuncs :: [ExternalRearrangementFunc]
                     , envEncodedSpectrometerWavelengths :: !SB.ByteString
                     , envAsyncDataMVar :: MVar [AcquiredData]
                     , envAsyncStatusMessagesMVar :: MVar [Text]

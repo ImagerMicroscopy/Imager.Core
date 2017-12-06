@@ -69,7 +69,7 @@ executable RaspCuvettor
                      , AvailableDetector
                      , MiscUtils
   default-extensions:  CPP
-  ghc-options:         -O2 -threaded
+  ghc-options:         -O2 -threaded -rtsopts
 
   if (flag(withoceanoptics))
       build-depends:   hsOceanOptics

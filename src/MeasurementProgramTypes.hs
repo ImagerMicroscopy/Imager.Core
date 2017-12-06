@@ -8,6 +8,7 @@ import Data.Monoid
 import Data.Text (Text)
 import System.Clock
 
+import CameraImageProcessing
 import Detector
 import EquipmentTypes
 import LightSources
@@ -33,6 +34,7 @@ data ProgramEnvironment a = ProgramEnvironment {
                               , peFilterWheels :: [Equipment]
                               , peMotorizedStages :: [Equipment]
                               , peRobots :: [Equipment]
+                              , peRearrangementFuncs :: [ExternalRearrangementFunc]
                               , peDataMVar :: MVar [AcquiredData]
                               , peStatusMVar :: MVar [Text]
                             }
