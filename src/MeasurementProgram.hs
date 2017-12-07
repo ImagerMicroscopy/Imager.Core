@@ -24,6 +24,7 @@ import qualified Data.Text.Lazy as LT
 import qualified Data.Text.Format as T
 import Data.Time.Clock
 import Data.Time.LocalTime
+import System.Mem
 import System.Clock
 
 import CameraImageProcessing
@@ -175,17 +176,18 @@ executeFastDetectionLoop detector lightSources filterWheels detParams rearrangeF
     newChan >>= \chan ->
     withAsync (acquireStreamingData detector (dpExposureTime detParams) (dpGain detParams)
                     (dpNSpectraToAverage detParams) nTimesToPerform chan) (\as ->
-        fetchData as chan) >>
+        fetchData 0 as chan) >>
     disableLightSources lightSources (dpIrradiation detParams)
     where
-        fetchData :: Async () -> Chan AsyncData -> IO ()
-        fetchData as chan = readChan chan >>= \val ->
-                            case val of
-                                AsyncFinished -> wait as
-                                AsyncError    -> wait as
-                                AsyncData d   -> let r = rearrangeImageExternal rearrangeFuncs d
-                                                 in  r `deepseq` addDataToMVar dataMVar startTime r >>
-                                                     fetchData as chan
+        fetchData :: Int -> Async () -> Chan AsyncData -> IO ()
+        fetchData nFetched as chan = readChan chan >>= \val ->
+                                     case val of
+                                         AsyncFinished -> performMajorGC >> wait as
+                                         AsyncError    -> performMajorGC >> wait as
+                                         AsyncData d   -> let r = rearrangeImageExternal rearrangeFuncs d
+                                                          in  when (nFetched `mod` 50 == 49) (performMajorGC) >>
+                                                              r `deepseq` addDataToMVar dataMVar startTime r >>
+                                                              fetchData (nFetched + 1) as chan
 
 executeIrradiation :: [Equipment] -> [Equipment] -> [IrradiationParams] -> Double -> IO ()
 executeIrradiation lightSources fws ips dur =
