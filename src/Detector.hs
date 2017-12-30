@@ -62,6 +62,16 @@ class Detector a where
     getDetectorWavelengths :: a -> IO (Vector Double)
     getDetectorWavelengths _ = return V.empty
 
+    getDataDimensions :: a -> IO (Int, Int)
+    getAllowedCropSizes :: a -> IO [(Int, Int)]
+    getAllowedCropSizes det = getDataDimensions det >>= \dim -> pure [dim]
+    setCropSize :: a -> (Int, Int) -> IO ()
+    setCropSize _ _ = pure ()
+    getAllowedBinningFactors :: a -> IO [Int]
+    getAllowedBinningFactors det = pure [1]
+    setBinningFactor :: a -> Int -> IO ()
+    setBinningFactor _ _ = pure ()
+
     setDetectorTemperature :: a -> Temperature -> IO ()
     setDetectorTemperature _ _ = return ()
     getDetectorTemperature :: a -> IO Temperature

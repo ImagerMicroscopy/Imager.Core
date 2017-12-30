@@ -43,7 +43,7 @@ instance Detector SCCamDetector where
     acquireStreamingData :: SCCamDetector -> ExposureTime -> Gain -> NMeasurementsToAverage ->
                             NMeasurementsToPerform -> Chan AsyncData -> IO ()
     acquireStreamingData (SCCamDetector camName) expTime gain nAvg nMeasurements chan =
-        getSensorDimensions camName >>= \(nRows, nCols) ->
+        getImageDimensions camName >>= \(nRows, nCols) ->
         setExposureTime camName expTime >>
         setEMGain camName gain >>
         MV.new (nRows * nCols * nImagesInBuffer * 2) >>= \buffer ->
@@ -74,6 +74,9 @@ instance Detector SCCamDetector where
                 in  MV.new (nRows * nCols) >>= \image ->
                     MV.unsafeWith image (\imPtr -> copyBytes imPtr offsetPtr nBytesInImage) >>
                     V.freeze image
+
+    getDataDimensions :: SCCamDetector -> IO (Int, Int)
+    getDataDimensions (SCCamDetector camName) = getImageDimensions camName
 
     setDetectorTemperature :: SCCamDetector -> Temperature -> IO ()
     setDetectorTemperature (SCCamDetector camName) t = setTemperature camName t
