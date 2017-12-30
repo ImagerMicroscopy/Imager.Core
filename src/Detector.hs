@@ -71,6 +71,8 @@ class Detector a where
     getAllowedBinningFactors det = pure [1]
     setBinningFactor :: a -> Int -> IO ()
     setBinningFactor _ _ = pure ()
+    getBinningFactor :: a -> IO Int
+    getBinningFactor _ = pure 1
 
     setDetectorTemperature :: a -> Temperature -> IO ()
     setDetectorTemperature _ _ = return ()

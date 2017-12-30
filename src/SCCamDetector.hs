@@ -21,7 +21,7 @@ import Data.Vector.Storable.Mutable (IOVector)
 import qualified Data.Vector.Storable.Mutable as MV
 
 import Detector
-import SCCamera
+import qualified SCCamera as SC
 import MiscUtils
 import CameraImageProcessing
 
@@ -32,9 +32,9 @@ data SCCamDetector = SCCamDetector {
 instance Detector SCCamDetector where
     acquireData :: SCCamDetector -> ExposureTime -> Gain -> NMeasurementsToAverage -> IO AcquiredData
     acquireData (SCCamDetector camName) expTime emGain nAvg =
-        setExposureTime camName expTime >>
-        setEMGain camName emGain >>
-        acquireImages camName 1 nAvg >>= \(MeasuredImages nRows nCols vec) ->
+        SC.setExposureTime camName expTime >>
+        SC.setEMGain camName emGain >>
+        SC.acquireImages camName 1 nAvg >>= \(SC.MeasuredImages nRows nCols vec) ->
         getTime Monotonic >>= \timeStamp ->
         let bytes = byteStringFromVector vec
             numType = UINT16
@@ -43,22 +43,22 @@ instance Detector SCCamDetector where
     acquireStreamingData :: SCCamDetector -> ExposureTime -> Gain -> NMeasurementsToAverage ->
                             NMeasurementsToPerform -> Chan AsyncData -> IO ()
     acquireStreamingData (SCCamDetector camName) expTime gain nAvg nMeasurements chan =
-        getImageDimensions camName >>= \(nRows, nCols) ->
-        setExposureTime camName expTime >>
-        setEMGain camName gain >>
+        SC.getImageDimensions camName >>= \(nRows, nCols) ->
+        SC.setExposureTime camName expTime >>
+        SC.setEMGain camName gain >>
         MV.new (nRows * nCols * nImagesInBuffer * 2) >>= \buffer ->
         MV.unsafeWith buffer (\bufPtr ->
-        (performAcq bufPtr nRows nCols >> abortAsyncAcquisition camName) `onException` (abortAsyncAcquisition camName >>
-                                                                                        writeChan chan AsyncError))
+        (performAcq bufPtr nRows nCols >> SC.abortAsyncAcquisition camName) `onException` (SC.abortAsyncAcquisition camName >>
+                                                                                           writeChan chan AsyncError))
         where
-            performAcq bufPtr nRows nCols = startAsyncAcquisition camName nAvg (bufPtr, nRows * nCols * nImagesInBuffer) >>
-                                fetchImages nMeasurements (bufPtr, nRows, nCols) chan >>
-                                writeChan chan AsyncFinished
+            performAcq bufPtr nRows nCols = SC.startAsyncAcquisition camName nAvg (bufPtr, nRows * nCols * nImagesInBuffer) >>
+                                            fetchImages nMeasurements (bufPtr, nRows, nCols) chan >>
+                                            writeChan chan AsyncFinished
             fetchImages :: Int -> (Ptr Word16, Int, Int) -> Chan AsyncData -> IO ()
             fetchImages nImagesRemaining (bufPtr, nRows, nCols) chan
                 | nImagesRemaining == 0 = return ()
                 | otherwise =
-                    getIndexOfLastImageAsyncAcquired camName >>= \idx ->
+                    SC.getIndexOfLastImageAsyncAcquired camName >>= \idx ->
                     case idx of
                         (-1) -> threadDelay (floor 50e3) >> fetchImages nImagesRemaining (bufPtr, nRows, nCols) chan
                         i    -> getTime Monotonic >>= \timeStamp ->
@@ -76,17 +76,22 @@ instance Detector SCCamDetector where
                     V.freeze image
 
     getDataDimensions :: SCCamDetector -> IO (Int, Int)
-    getDataDimensions (SCCamDetector camName) = getImageDimensions camName
+    getDataDimensions (SCCamDetector camName) = SC.getImageDimensions camName
+    getAllowedCropSizes (SCCamDetector camName) = SC.getAllowedCropSizes camName
+    setCropSize (SCCamDetector camName) size = SC.setCropSize camName size
+    getAllowedBinningFactors (SCCamDetector camName) = SC.getAllowedBinningFactors camName
+    setBinningFactor (SCCamDetector camName) factor = SC.setBinningFactor camName factor
+    getBinningFactor (SCCamDetector camName) = SC.getBinningFactor camName
 
     setDetectorTemperature :: SCCamDetector -> Temperature -> IO ()
-    setDetectorTemperature (SCCamDetector camName) t = setTemperature camName t
+    setDetectorTemperature (SCCamDetector camName) t = SC.setTemperature camName t
     getDetectorTemperature :: SCCamDetector -> IO Temperature
-    getDetectorTemperature (SCCamDetector camName) = readTemperature camName
+    getDetectorTemperature (SCCamDetector camName) = SC.readTemperature camName
     getDetectorTemperatureSetpoint :: SCCamDetector -> IO Temperature
-    getDetectorTemperatureSetpoint (SCCamDetector camName) = readTemperatureSetpoint camName
+    getDetectorTemperatureSetpoint (SCCamDetector camName) = SC.readTemperatureSetpoint camName
 
     getGainRange :: SCCamDetector -> IO (Gain, Gain)
-    getGainRange (SCCamDetector camName) = readEMGainRange camName
+    getGainRange (SCCamDetector camName) = SC.readEMGainRange camName
 
     getExposureTimeRange :: SCCamDetector -> IO (ExposureTime, ExposureTime)
-    getExposureTimeRange (SCCamDetector camName) = readExposureTimeRange camName
+    getExposureTimeRange (SCCamDetector camName) = SC.readExposureTimeRange camName
