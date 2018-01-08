@@ -163,6 +163,8 @@ insertFastAcquisitionLoops m = m
 
 executeDetection :: Detector a => a -> [Equipment] -> [Equipment] -> DetectionParams -> IO AcquiredData
 executeDetection det lss fws DetectionParams{..} =
+    setBinningFactor det dpBinningFactor >>
+    setCropSize det dpCropSize >>
     switchToFilters fws dpFilterParams >>
     enableLightSources lss dpIrradiation >>
     acquireData det dpExposureTime dpGain dpNSpectraToAverage >>= \acquiredData ->
@@ -171,6 +173,8 @@ executeDetection det lss fws DetectionParams{..} =
 
 executeFastDetectionLoop :: Detector a => a -> [Equipment] -> [Equipment] -> DetectionParams -> [ExternalRearrangementFunc] -> Int -> TimeSpec -> MVar [AcquiredData] -> IO ()
 executeFastDetectionLoop detector lightSources filterWheels detParams rearrangeFuncs nTimesToPerform startTime dataMVar =
+    setBinningFactor detector (dpBinningFactor detParams) >>
+    setCropSize detector (dpCropSize detParams) >>
     switchToFilters filterWheels (dpFilterParams detParams) >>
     enableLightSources lightSources (dpIrradiation detParams) >>
     newChan >>= \chan ->

@@ -58,10 +58,10 @@ data RequestMessage = AcquireData !DetectionParams
                     | GetMotorizedStagePosition !Text
                     | SetMotorizedStagePosition !Text !(Double, Double, Double)
                     | ListRobotPrograms !Text
-                    | GetDetectorLimits
+                    | GetDetectorLimits !(Int, Int) Int
+                    | GetDetectorParameters
                     | SetDetectorTemperature !Double
                     | GetDetectorTemperature
-                    | GetDetectorTemperatureSetpoint
                     | ActivateLightSource {
                         reqActivateName :: !Text
                       , reqActivateChannels :: ![Text]
@@ -89,10 +89,11 @@ instance ToJSON RequestMessage where
     toEncoding (GetMotorizedStagePosition name) = pairs ("action" .= ("getmotorizedstageposition" :: Text) <> "name" .= name)
     toEncoding (SetMotorizedStagePosition name ds) = pairs ("action" .= ("setmotorizedstageposition" :: Text) <> "name" .= name <> "position" .= ds)
     toEncoding (ListRobotPrograms name) = pairs ("action" .= ("listrobotprograms" :: Text) <> "name" .= name)
-    toEncoding GetDetectorLimits = pairs ("action" .= ("getdetectorlimits" :: Text))
+    toEncoding (GetDetectorLimits cropSize binFactor) = pairs ("action" .= ("getdetectorlimits" :: Text) <> "binfactor" .= binFactor <>
+                                                               "nrows" .= fst cropSize <> "ncols" .= snd cropSize)
+    toEncoding GetDetectorParameters = pairs ("action" .= ("getdetectorparameters" :: Text))
     toEncoding (SetDetectorTemperature t) = pairs ("action" .= ("setdetectortemperature" :: Text) <> "temperature" .= t)
     toEncoding GetDetectorTemperature = pairs ("action" .= ("getdetectortemperature" :: Text))
-    toEncoding GetDetectorTemperatureSetpoint = pairs ("action" .= ("getdetectortemperaturesetpoint" :: Text))
     toEncoding (ActivateLightSource name channel power) = pairs ("action" .= ("activatelightsource" :: Text) <> "name" .= name <> "channel" .= channel <> "power" .= power)
     toEncoding (DeactivateLightSource name) = pairs ("action" .= ("deactivatelightsource" :: Text) <> "name" .= name)
     toEncoding (TurnOffLightSource name) = pairs ("action" .= ("turnofflightsource" :: Text) <> "name" .= name)
@@ -116,10 +117,11 @@ instance FromJSON RequestMessage where
             "getmotorizedstageposition" -> GetMotorizedStagePosition <$> v .: "name"
             "setmotorizedstageposition" -> SetMotorizedStagePosition <$> v .: "name" <*> v .: "position"
             "listrobotprograms" -> ListRobotPrograms <$> v .: "name"
-            "getdetectorlimits" -> return GetDetectorLimits
+            "getdetectorlimits" -> v .: "nrows" >>= \nRows -> v .: "ncols" >>= \nCols ->
+                                   GetDetectorLimits (nRows, nCols) <$> v .: "binfactor"
+            "getdetectorparameters" -> return GetDetectorParameters
             "setdetectortemperature" -> SetDetectorTemperature <$> v .: "temperature"
             "getdetectortemperature" -> return GetDetectorTemperature
-            "getdetectortemperaturesetpoint" -> return GetDetectorTemperatureSetpoint
             "activatelightsource" -> ActivateLightSource <$> v .: "name" <*> v .: "channel" <*> v .: "power"
             "deactivatelightsource" -> DeactivateLightSource <$> v .: "name"
             "turnofflightsource" -> TurnOffLightSource <$> v .: "name"
@@ -146,8 +148,8 @@ data ResponseMessage = StatusOK
                      | MotorizedStagePosition !(Double, Double, Double)
                      | RobotProgramsResponse ![Text]
                      | DetectorLimitsResponse !DetectorLimits
+                     | DetectorParametersResponse !DetectorParameters
                      | DetectorTemperatureResponse !Double
-                     | DetectorTemperatureSetpointResponse !Double
                      | Pong
                      | AsyncAcquiredData ![AcquiredData]
                      | AsyncStatusMessages ![Text]
@@ -172,8 +174,8 @@ instance ToJSON ResponseMessage where
     toEncoding (MotorizedStagePosition ds) = pairs ("responsetype" .= ("motorizedstageposition" :: Text) <> "position" .= ds)
     toEncoding (RobotProgramsResponse ps) = pairs ("responsetype" .= ("robotprograms" :: Text) <> "programs" .= ps)
     toEncoding (DetectorLimitsResponse dl) = pairs ("responsetype" .= ("detectorlimits" :: Text) <> "detectorlimits" .= dl)
+    toEncoding (DetectorParametersResponse d) = pairs ("responsetype" .= ("detectorparameters" :: Text) <> "parameters" .= d)
     toEncoding (DetectorTemperatureResponse t) = pairs ("responsetype" .= ("detectortemperature" :: Text) <> "detectortemperature" .= t)
-    toEncoding (DetectorTemperatureSetpointResponse t) = pairs ("responsetype" .= ("detectortemperaturesetpoint" :: Text) <> "detectortemperaturesetpoint" .= t)
     toEncoding (Pong) = pairs ("responsetype" .= ("pong" :: Text))
     toEncoding (AsyncAcquiredData ds) =
         pairs ("responsetype" .= ("asyncdata" :: Text) <> "data" .= ds)
@@ -186,6 +188,13 @@ instance ToJSON AcquiredData where
       object ["nrows" .= nRows, "ncols" .= nCols, "data" .= bytes, "timestamp" .= (timeSpecAsDouble timeStamp), "numtype" .= (show numType)]
   toEncoding (AcquiredData nRows nCols timeStamp bytes numType) =
       pairs ("nrows" .= nRows <> "ncols" .= nCols <> "timestamp" .= (timeSpecAsDouble timeStamp) <> "data" .= bytes <> "numtype" .= (show numType))
+
+instance ToJSON DetectorParameters where
+    toJSON (DetectorParameters dataSize allowedCrop allowedBinning currentBin limits tempSetPoint) =
+        object [("datadimensions", object ["nrows" .= fst dataSize, "ncols" .= snd dataSize]),
+                ("allowedcropsizes", toJSON (map (\(r,c) -> object ["nrows" .= r, "ncols" .= c]) allowedCrop)),
+                "allowedbinfactors" .= allowedBinning, "currentbinfactor" .= currentBin,
+                "limits" .= limits, "temperaturesetpoint" .= tempSetPoint]
 
 instance ToJSON DetectorLimits where
     toJSON (DetectorLimits minExpTime maxExpTime minGain maxGain minAveraging maxAveraging) =

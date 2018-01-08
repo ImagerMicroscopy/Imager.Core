@@ -43,6 +43,8 @@ data DetectionParams = DetectionParams {
                            dpExposureTime :: !Double
                          , dpGain :: !Double
                          , dpNSpectraToAverage :: !Int
+                         , dpBinningFactor :: !Int
+                         , dpCropSize :: !(Int, Int)
                          , dpIrradiation :: [IrradiationParams]
                          , dpFilterParams :: [FilterParams]
                        }
@@ -102,16 +104,20 @@ instance ToJSON MeasurementElement where
 
 instance FromJSON DetectionParams where
     parseJSON (Object v) =
+        v .: "cropsize" >>= \(Object c) -> (,) <$> c .: "nrows" <*> c .: "ncols" >>= \cropping ->
         DetectionParams <$> v .: "exposuretime"
                         <*> v .: "gain"
                         <*> v .: "nspectra"
+                        <*> v .: "binfactor"
+                        <*> pure cropping
                         <*> v .: "irradiation"
                         <*> v .: "filters"
     parseJSON _ = fail "can't decode detection params"
 instance ToJSON DetectionParams where
-    toEncoding (DetectionParams expTime gain nSpectra irr filters) =
-        pairs ("exposuretime" .= expTime <> "gain" .= gain <> "nspectra" .= nSpectra <> "irradiation" .= irr <> "filters" .= filters)
-    toJSON _ = error "no toJSON"
+    toJSON (DetectionParams expTime gain nSpectra binFactor (nRows, nCols) irr filters) =
+        object ["exposuretime" .= expTime, "gain" .= gain, "nspectra" .= nSpectra,
+               "binfactor" .= binFactor, "cropsize" .= object ["nrows" .= nRows, "ncols" .= nCols],
+               "irradiation" .= irr, "filters" .= filters]
 
 instance FromJSON IrradiationParams where
     parseJSON (Object v) =

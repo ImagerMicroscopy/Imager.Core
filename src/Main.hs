@@ -133,10 +133,18 @@ performAction env (ListRobotPrograms name) =
     where
         robots = envRobots env
 
-performAction env GetDetectorLimits =
+performAction env (GetDetectorLimits cropSize binFactor) =
     ensureAsyncAcquisitionNotRunning env >>
-    getDetectorLimits det >>= \limits ->
-    return (DetectorLimitsResponse limits, env)
+    setCropSize det cropSize >> setBinningFactor det binFactor >>
+    getDetectorParameters det >>= \params ->
+    return (DetectorLimitsResponse (dpDetectorLimits params), env)
+    where
+        det = envDetector env
+
+performAction env GetDetectorParameters =
+    ensureAsyncAcquisitionNotRunning env >>
+    getDetectorParameters det >>= \params ->
+    return (DetectorParametersResponse params, env)
     where
         det = envDetector env
 
@@ -150,13 +158,6 @@ performAction env (SetDetectorTemperature t) =
 performAction env GetDetectorTemperature =
     getDetectorTemperature det >>= \t ->
     return (DetectorTemperatureResponse t, env)
-    where
-        det = envDetector env
-
-performAction env GetDetectorTemperatureSetpoint =
-    ensureAsyncAcquisitionNotRunning env >>
-    getDetectorTemperatureSetpoint det >>= \t ->
-    return (DetectorTemperatureSetpointResponse t, env)
     where
         det = envDetector env
 

@@ -4,6 +4,7 @@ module Detector (
     AcquiredData (..)
   , NumberType (..)
   , Detector (..)
+  , DetectorParameters (..)
   , DetectorLimits (..)
   , AsyncData (..)
   , ExposureTime
@@ -11,7 +12,7 @@ module Detector (
   , Temperature
   , NMeasurementsToAverage
   , NMeasurementsToPerform
-  , getDetectorLimits
+  , getDetectorParameters
 ) where
 
 import Control.Concurrent
@@ -34,6 +35,15 @@ type Gain = Double
 type Temperature = Double
 type NMeasurementsToAverage = Int
 type NMeasurementsToPerform = Int
+
+data DetectorParameters = DetectorParameters {
+                              dpDataDimensions :: !(Int, Int)
+                            , dpAllowedCropSizes :: ![(Int, Int)]
+                            , dpAllowedBinningFactors :: ![Int]
+                            , dpCurrentBinFactor :: !Int
+                            , dpDetectorLimits :: !DetectorLimits
+                            , dpTemperatureSetPoint :: !Double
+                          } deriving (Show)
 
 data DetectorLimits = DetectorLimits {
                           dlMinExposureTime :: !ExposureTime
@@ -85,8 +95,14 @@ class Detector a where
     getGainRange _ = return (1.0, 1.0)
     getExposureTimeRange :: a -> IO (ExposureTime, ExposureTime)
 
-getDetectorLimits :: (Detector a) => a -> IO DetectorLimits
-getDetectorLimits det =
+getDetectorParameters :: (Detector a) => a -> IO DetectorParameters
+getDetectorParameters det =
+    getDataDimensions det >>= \dataDimensions ->
+    getAllowedCropSizes det >>= \cropSizes ->
+    getAllowedBinningFactors det >>= \binFactors ->
+    getBinningFactor det >>= \binFactor ->
+    getDetectorTemperatureSetpoint det >>= \tempSetPoint ->
     getGainRange det >>= \(minGain, maxGain) ->
     getExposureTimeRange det >>= \(minExpTime, maxExpTime) ->
-    return (DetectorLimits minExpTime maxExpTime minGain maxGain 1 100)
+    let dls = DetectorLimits minExpTime maxExpTime minGain maxGain 1 100
+    in  pure (DetectorParameters dataDimensions cropSizes binFactors binFactor dls tempSetPoint)
