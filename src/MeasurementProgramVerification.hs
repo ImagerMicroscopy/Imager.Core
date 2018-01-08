@@ -113,7 +113,7 @@ foldMeasurementElement f me = foldMeasurementElement' f mempty me
 -- empty list as value means no error
 validateDetection :: [Equipment] -> [Equipment] -> DetectionParams -> [String]
 validateDetection lightSources filterWheels DetectionParams{..} =
-    if ((within dpExposureTime 3.8e-3 10) && (within dpNSpectraToAverage 1 1000)
+    if ((within dpExposureTime 1e-3 10) && (within dpNSpectraToAverage 1 1000)
        && (null . concat . map (validateIrradiation lightSources) $ dpIrradiation)
        && filtersAreValid)
     then []
