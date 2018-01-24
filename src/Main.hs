@@ -28,18 +28,16 @@ import CameraImageProcessing
 import CuvettorTypes
 import Detector
 import AvailableDetector
+import Equipment
 import EquipmentTypes
 import EquipmentInitialization
 import SimpleJSONServer
 import MeasurementProgram
 import MeasurementProgramTypes
+import MeasurementProgramUtils
 import MeasurementProgramVerification
-import LightSources
-import Robot
-import MotorizedStage
 import MiscUtils
 import BinaryEncoding
-import FilterWheel
 
 handlerTimeout :: Int
 handlerTimeout = 2 * 1000000
@@ -65,10 +63,10 @@ main = wait =<< async (
         getDetectorWavelengths det >>= \wl ->
         return (byteStringFromVector wl) >>= \encodedWl ->
         putStrLn "ready to measure!" >>
-        let lightSources = filter isLightSource availableEquipment
-            filterWheels = filter isFilterWheel availableEquipment
-            motorizedStages = filter isMotorizedStage availableEquipment
-            robots = filter isRobot availableEquipment
+        let lightSources = filter hasLightSource availableEquipment
+            filterWheels = filter hasFilterWheel availableEquipment
+            motorizedStages = filter hasMotorizedStage availableEquipment
+            robots = filter hasRobot availableEquipment
             env = Environment lightSources filterWheels motorizedStages robots
                       det procFuncs encodedWl asyncSpectraMVar asyncStatusMessagesMVar asyncProgramWorker
         in runServer 3200 messageHandler env serverSettings))
@@ -120,12 +118,12 @@ performAction env (GetMotorizedStagePosition name) =
     getStagePosition stage >>= \pos ->
     return (MotorizedStagePosition pos, env)
     where
-        stage = lookupStage (envMotorizedStages env) name
+        stage = lookupStageThrows (envMotorizedStages env) name
 
 performAction env (SetMotorizedStagePosition name ds) =
-    setStagePositionLookup mss name ds >> return (StatusOK, env)
+    setStagePosition stage ds >> return (StatusOK, env)
     where
-        mss = envMotorizedStages env
+        stage = lookupStageThrows (envMotorizedStages env) name
 
 performAction env (ListRobotPrograms name) =
     listRobotPrograms (lookupRobotThrows robots name) >>= \programs ->
@@ -178,8 +176,7 @@ performAction env (DeactivateLightSource name) =
         lightSources = envLightSources env
 
 performAction env (TurnOffLightSource name) =
-    return (lookupLightSource lightSources name) >>=
-    turnOffLightSource >>
+    putStrLn "turning off light sources not supported" >>
     return (StatusOK, env)
     where
         lightSources = envLightSources env

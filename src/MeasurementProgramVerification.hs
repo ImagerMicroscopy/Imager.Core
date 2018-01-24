@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RecordWildCards, OverloadedStrings #-}
 module MeasurementProgramVerification (
     validateMeasurementElementThrows
   , validateMeasurementElement
@@ -13,17 +13,15 @@ import Control.Monad
 import Data.Text (Text)
 import qualified Data.Text as T
 
+import Equipment
 import EquipmentTypes
-import FilterWheel
-import LightSources
 import MeasurementProgramTypes
-import MotorizedStage
+import MeasurementProgramUtils
 import MiscUtils
-import Robot
 
 type RobotInfo = (Text, [Text]) -- robot name, robot programs
 
-validateMeasurementElementThrows :: [Equipment] -> [Equipment] -> [Equipment] -> [Equipment] -> MeasurementElement -> IO ()
+validateMeasurementElementThrows :: [EquipmentW] -> [EquipmentW] -> [EquipmentW] -> [EquipmentW] -> MeasurementElement -> IO ()
 validateMeasurementElementThrows lss fws mss rss me =
     verifyRobotElements rss me >>= \robotsResult ->
     when (not $ null robotsResult) (
@@ -34,7 +32,7 @@ validateMeasurementElementThrows lss fws mss rss me =
 
 -- should not inspect contained MeasurementElements
 -- empty list for no error
-validateMeasurementElement :: [Equipment] -> [Equipment] -> [Equipment] -> [Equipment] -> MeasurementElement -> [String]
+validateMeasurementElement :: [EquipmentW] -> [EquipmentW] -> [EquipmentW] -> [EquipmentW] -> MeasurementElement -> [String]
 validateMeasurementElement lss fws _ _ (MEDetection dets)
     | null dets = ["no detection specified"]
     | otherwise = concat $ (map (validateDetection lss fws) dets)
@@ -77,7 +75,7 @@ validateMeasurementElement lss fws sts rss (MERelativeStageLoop stageName (Relat
     where
         stageNames = map motorizedStageName sts
 
-verifyRobotElements :: [Equipment] -> MeasurementElement -> IO [String]
+verifyRobotElements :: [EquipmentW] -> MeasurementElement -> IO [String]
 verifyRobotElements  rss me
         = do
           pExists <- programsExist
@@ -111,7 +109,7 @@ foldMeasurementElement f me = foldMeasurementElement' f mempty me
         childVals f mes = map (foldMeasurementElement f) mes
 
 -- empty list as value means no error
-validateDetection :: [Equipment] -> [Equipment] -> DetectionParams -> [String]
+validateDetection :: [EquipmentW] -> [EquipmentW] -> DetectionParams -> [String]
 validateDetection lightSources filterWheels DetectionParams{..} =
     if ((within dpExposureTime 1e-3 10) && (within dpNSpectraToAverage 1 1000)
        && (null . concat . map (validateIrradiation lightSources) $ dpIrradiation)
@@ -129,7 +127,7 @@ validateDetection lightSources filterWheels DetectionParams{..} =
                 Nothing -> False
                 Just (availableFilters) -> fName `elem` availableFilters
 
-validateIrradiation :: [Equipment] -> IrradiationParams -> [String]
+validateIrradiation :: [EquipmentW] -> IrradiationParams -> [String]
 validateIrradiation lightSources IrradiationParams{..} =
     case (lookupMaybeLightSource lightSources ipLightSourceName) of
       Nothing -> ["invalid light source name"]
@@ -137,3 +135,15 @@ validateIrradiation lightSources IrradiationParams{..} =
                  in if (T.null errMsg)
                     then []
                     else ["invalid light source parameters for " ++ T.unpack ipLightSourceName ++ ": " ++ T.unpack errMsg]
+
+validLightSourceChannelsAndPowers :: EquipmentW -> [Text] -> [Double] -> Text
+validLightSourceChannelsAndPowers ls channels powers
+    | length channels /= length powers = "must have same number of channels and powers"
+    | (length channels > 1) && (not (lightSourceAllowsMultipleChannels ls)) = "light source does not allow multiple channels"
+    | null channels = "channels cannot be empty"
+    | not (all (\c -> lightSourceHasChannel ls c) channels) = "invalid channel(s)"
+    | not (all (\p -> within p 0.0 100.0) powers) = "power outside valid range"
+    | nub channels /= channels = "duplicate channels requested"
+    | otherwise = T.empty
+    where
+        lightSourceHasChannel e c = c `elem` lightSourceChannels e

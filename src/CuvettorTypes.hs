@@ -25,20 +25,17 @@ import System.IO.Unsafe
 import CameraImageProcessing
 import MiscUtils
 import Detector
+import Equipment
 import EquipmentEncoding
 import EquipmentTypes
 import MeasurementProgram
 import MeasurementProgramTypes
-import LightSources
-import FilterWheel
-import MotorizedStage
-import Robot
 
 data Environment a = Environment {
-                      envLightSources :: [Equipment]
-                    , envFilterWheels :: [Equipment]
-                    , envMotorizedStages :: [Equipment]
-                    , envRobots :: [Equipment]
+                      envLightSources :: [EquipmentW]
+                    , envFilterWheels :: [EquipmentW]
+                    , envMotorizedStages :: [EquipmentW]
+                    , envRobots :: [EquipmentW]
                     , envDetector :: a
                     , envRearrangementFuncs :: [ExternalRearrangementFunc]
                     , envEncodedSpectrometerWavelengths :: !SB.ByteString
@@ -141,10 +138,10 @@ data ResponseMessage = StatusOK
                      | StatusNoNewAsyncDataComing
                      | AcquiredDataResponse !AcquiredData
                      | Wavelengths !AcquiredData
-                     | AvailableLightSources ![Equipment]
-                     | AvailableFilterWheels ![Equipment]
-                     | AvailableMotorizedStages ![Equipment]
-                     | AvailableRobots ![Equipment]
+                     | AvailableLightSources ![EquipmentW]
+                     | AvailableFilterWheels ![EquipmentW]
+                     | AvailableMotorizedStages ![EquipmentW]
+                     | AvailableRobots ![EquipmentW]
                      | MotorizedStagePosition !(Double, Double, Double)
                      | RobotProgramsResponse ![Text]
                      | DetectorLimitsResponse !DetectorLimits

@@ -18,21 +18,6 @@ import qualified Data.Text.Encoding as T
 
 import RCSerialPort
 
-handleAsahiMessage :: SerialPort -> String -> IO ()
-handleAsahiMessage port ss =
-    flushSerialPort port >> serialWrite port (T.encodeUtf8 $ T.pack ss) >> serialReadUntilChar port '\n' >>= \response ->
-    if (response == "OK\r\n")
-    then return ()
-    else throwIO (userError ("sent " ++ ss ++ "to asahi, received " ++ (T.unpack $ T.decodeUtf8 response)))
-
-handleArduinoMessage :: SerialPort -> String -> IO ()
-handleArduinoMessage port ss =
-    flushSerialPort port >> serialWrite port (T.encodeUtf8 . T.pack $ ss) >>
-    serialReadUntilChar port '\r' >>= \response ->
-    case response of
-        "OK\r" -> return ()
-        e -> throwIO (userError ("arduino responded \"" ++ T.unpack (T.decodeUtf8 e) ++ "\""))
-
 fw103HMoveAbsoluteMessage :: Int -> ByteString
 fw103HMoveAbsoluteMessage pos = runPut $
     mapM_ putWord8 [0x53, 0x04, 0x06, 0x00, 0xD0, 0x01, 0x01, 0x00] >>

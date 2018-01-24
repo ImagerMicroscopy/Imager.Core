@@ -10,11 +10,8 @@ import System.Clock
 
 import CameraImageProcessing
 import Detector
+import Equipment
 import EquipmentTypes
-import LightSources
-import FilterWheel
-import MotorizedStage
-import Robot
 
 data MeasurementElement = MEDetection ![DetectionParams]
                         | MEIrradiation !Double ![IrradiationParams]
@@ -30,10 +27,10 @@ data MeasurementElement = MEDetection ![DetectionParams]
 data ProgramEnvironment a = ProgramEnvironment {
                                 peDetector :: a
                               , peStartTime :: TimeSpec
-                              , peLightSources :: [Equipment]
-                              , peFilterWheels :: [Equipment]
-                              , peMotorizedStages :: [Equipment]
-                              , peRobots :: [Equipment]
+                              , peLightSources :: [EquipmentW]
+                              , peFilterWheels :: [EquipmentW]
+                              , peMotorizedStages :: [EquipmentW]
+                              , peRobots :: [EquipmentW]
                               , peRearrangementFuncs :: [ExternalRearrangementFunc]
                               , peDataMVar :: MVar [AcquiredData]
                               , peStatusMVar :: MVar [Text]
