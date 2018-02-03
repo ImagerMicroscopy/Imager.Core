@@ -41,7 +41,7 @@ instance Equipment Lumencor where
     lightSourceCanControlPower _ = True
     lightSourceAllowsMultipleChannels _ = True
     lightSourceChannels _ = map fst lumencorChannels
-    activateLightSource (Lumencor _ port haveInitRef currFilterRef) channels powers =
+    activateLightSource (Lumencor _ port haveInitRef currFilterRef) chs =
         readIORef haveInitRef >>= \haveInit ->
         when (not haveInit) (   -- init RS232 and arbitrarily select the green filter
             serialWrite port lumencorEnableRS232Message >>
@@ -55,6 +55,7 @@ instance Equipment Lumencor where
         serialWrite port (lumencorEnableMessage lcChannels possiblyUpdatedFilter) >>
         return ()
         where
+            (channels, powers) = unzip chs
             lcChannels = map (fromJust . (flip lookup lumencorChannels)) channels
             changeFilter filter =
                 serialWrite port (lumencorFilterMessage filter) >>

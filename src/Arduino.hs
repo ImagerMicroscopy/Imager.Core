@@ -45,8 +45,8 @@ instance Equipment ArduinoLightSource where
     lightSourceCanControlPower _ = False
     lightSourceAllowsMultipleChannels _ = True
     lightSourceChannels (ArduinoLightSource _ chs _ _) = map fst chs
-    activateLightSource (ArduinoLightSource _ availChs activePinRef port) chs _ =
-        case (concatMaybes $ map (\ch -> lookup ch availChs) chs) of
+    activateLightSource (ArduinoLightSource _ availChs activePinRef port) chs =
+        case (concatMaybes $ map ((\ch -> lookup ch availChs) . fst) chs) of
             Nothing -> throwIO (userError "unknown arduino channel")
             Just pins ->
                 setArduinoPinsLevel port pins High >>

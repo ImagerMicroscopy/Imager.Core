@@ -162,7 +162,7 @@ performAction env GetDetectorTemperature =
 performAction env (ActivateLightSource name channels powers) =
     ensureAsyncAcquisitionNotRunning env >>
     return (lookupLightSource lightSources name) >>= \lightSource ->
-    activateLightSource lightSource channels powers >>
+    activateLightSource lightSource (zip channels powers) >>
     return (StatusOK, env)
     where
         lightSources = envLightSources env

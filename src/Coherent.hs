@@ -41,7 +41,7 @@ instance Equipment Coherent where
     lightSourceCanControlPower _ = True
     lightSourceAllowsMultipleChannels _ = False
     lightSourceChannels _ = [""]
-    activateLightSource (Coherent _ port powerRange currentPower) _ (power : _) =
+    activateLightSource (Coherent _ port powerRange currentPower) ((_, power) : _) =
         needToSetPower >>= \needPower ->
         when (needPower) (setPower power) >>
         sendAndReadResponse "L=1\r" >> return ()

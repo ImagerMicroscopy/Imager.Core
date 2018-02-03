@@ -46,7 +46,7 @@ instance Equipment AsahiLightSource where
     lightSourceCanControlPower _ = True
     lightSourceAllowsMultipleChannels _ = False
     lightSourceChannels (AsahiLightSource _ chs _) = map fst chs
-    activateLightSource (AsahiLightSource _ chs port) (filter : _) (power : _) =
+    activateLightSource (AsahiLightSource _ chs port) ((filter, power) : _) =
         case (lookup filter chs) of
             Nothing -> throwIO (userError ("missing filter " ++ T.unpack filter))
             Just idx ->

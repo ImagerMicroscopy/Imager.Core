@@ -204,7 +204,7 @@ switchToFilters fws fps =
 
 enableLightSources :: [EquipmentW] -> [IrradiationParams] -> IO ()
 enableLightSources lss params =
-    forM_ params (\(IrradiationParams sourceName channel power) ->  activateLightSource (lookupLightSource lss sourceName) channel power)
+    forM_ params (\(IrradiationParams sourceName channels powers) ->  activateLightSource (lookupLightSource lss sourceName) (zip channels powers))
 
 disableLightSources :: [EquipmentW] -> [IrradiationParams] -> IO ()
 disableLightSources lss params =

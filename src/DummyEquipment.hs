@@ -34,9 +34,10 @@ instance Equipment DummyLightSource where
     lightSourceCanControlPower _ = True
     lightSourceAllowsMultipleChannels _ = True
     lightSourceChannels _ = ["ch1", "ch2"]
-    activateLightSource (DummyLightSource name) chs ps =
-        putStrLn ("activated " ++ T.unpack name ++ " with channels " ++ show chs ++ " with powers " ++ show ps) >>
-        return ()
+    activateLightSource (DummyLightSource name) chs =
+        putStrLn ("activated " ++ T.unpack name ++ " with channels " ++ show channels ++ " with powers " ++ show powers)
+        where
+            (channels, powers) = unzip chs
     deactivateLightSource (DummyLightSource name) = putStrLn ("deactivated " ++ T.unpack name)
 
 instance Equipment DummyFilterWheel where

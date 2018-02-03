@@ -53,23 +53,32 @@ executable RaspCuvettor
                      , CameraImageProcessing
                      , CuvettorTypes
                      , BinaryEncoding
+                     , Equipment
                      , EquipmentMessaging
                      , EquipmentTypes
                      , EquipmentInitialization
                      , EquipmentEncoding
-                     , FilterWheel
-                     , LightSources
-                     , MotorizedStage
+                     , FilterUtils
                      , MeasurementProgram
                      , MeasurementProgramTypes
+                     , MeasurementProgramUtils
                      , MeasurementProgramVerification
                      , RCSerialPort
-                     , Robot
                      , Detector
                      , AvailableDetector
                      , MiscUtils
+                     , Arduino
+                     , Asahi
+                     , Coherent
+                     , DummyEquipment
+                     , Lumencor
+                     , Olympus
+                     , Prior
+                     , Robottor
+                     , Sutter
+                     , Thorlabs
   default-extensions:  CPP
-  ghc-options:         -O2 -threaded -rtsopts
+  ghc-options:         -O2 -threaded -rtsopts -funbox-strict-fields
 
   if (flag(withoceanoptics))
       build-depends:   hsOceanOptics

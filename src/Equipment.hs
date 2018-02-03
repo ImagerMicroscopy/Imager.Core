@@ -6,6 +6,7 @@ import Data.Text (Text)
 data EquipmentW = forall e. (Equipment e) => EquipmentW e
 
 type StagePosition = (Double, Double, Double)
+type ChannelName = Text
 
 class Equipment e where
     equipmentName :: e -> Text
@@ -15,8 +16,8 @@ class Equipment e where
     lightSourceName :: e -> Text
     lightSourceCanControlPower :: e -> Bool
     lightSourceAllowsMultipleChannels :: e -> Bool
-    lightSourceChannels :: e -> [Text]
-    activateLightSource :: e -> [Text] -> [Double] -> IO ()
+    lightSourceChannels :: e -> [ChannelName]
+    activateLightSource :: e -> [(ChannelName, Double)] -> IO ()
     deactivateLightSource :: e -> IO ()
 
     hasFilterWheel  :: e -> Bool
@@ -42,7 +43,7 @@ class Equipment e where
     lightSourceCanControlPower _ = error "calling lightSourceCanControlPower"
     lightSourceAllowsMultipleChannels _ = error "calling lightSourceAllowsMultipleChannels"
     lightSourceChannels _ = error "calling lightSourceChannels"
-    activateLightSource _ _ _ = error "calling activateLightSource"
+    activateLightSource _ _ = error "calling activateLightSource"
     deactivateLightSource _ = error "calling deactivateLightSource"
     hasFilterWheel _ = False
     filterWheelName _ = error "calling filterWheelName"
