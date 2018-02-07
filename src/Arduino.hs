@@ -24,7 +24,7 @@ import EquipmentTypes
 import MiscUtils
 import RCSerialPort
 
-data ArduinoLightSource = ArduinoLightSource !Text ![(Text, (Int, Double))] !(IORef [(Int, Double)]) !SerialPort
+data ArduinoLightSource = ArduinoLightSource !LSName ![(Text, (Int, Double))] !(IORef [(Int, Double)]) !SerialPort
 
 initializeArduinoLightSource :: EquipmentDescription -> IO EquipmentW
 initializeArduinoLightSource (ArduinoLightSourceDesc name portName chs) =
@@ -34,7 +34,7 @@ initializeArduinoLightSource (ArduinoLightSourceDesc name portName chs) =
     in  openSerialPort portName serialSettings >>= \port -> threadDelay (floor 2e6) >> -- delay needed, otherwise the arduino won't receive the messages.
         setArduinoPinsState ArduinoOutput (map (fst . snd) chs) port >>
         newIORef [] >>= \activeSet ->
-        return (EquipmentW (ArduinoLightSource name chs activeSet port))
+        return (EquipmentW (ArduinoLightSource (LSName name) chs activeSet port))
 
 instance Equipment ArduinoLightSource where
     equipmentName _ = (EqName "Arduino")

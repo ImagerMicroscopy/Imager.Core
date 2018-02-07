@@ -8,13 +8,13 @@ import Equipment
 import EquipmentTypes
 import FilterUtils
 
-data DummyLightSource = DummyLightSource !Text
+data DummyLightSource = DummyLightSource !LSName
 data DummyFilterWheel = DummyFilterWheel !Text ![(Text, Int)]
 data DummyStage = DummyStage !Text
 
 initializeDummyLightSource :: EquipmentDescription -> IO EquipmentW
 initializeDummyLightSource (DummyLightSourceDesc name) =
-    putStrLn ("opened light source " ++ T.unpack name) >> return (EquipmentW $ DummyLightSource name)
+    putStrLn ("opened light source " ++ T.unpack name) >> return (EquipmentW $ DummyLightSource (LSName name))
 
 initializeDummyFilterWheel :: EquipmentDescription -> IO EquipmentW
 initializeDummyFilterWheel (DummyFilterWheelDesc name chs) =
@@ -28,14 +28,14 @@ initializeDummyStage (DummyStageDesc name) =
 
 instance Equipment DummyLightSource where
     equipmentName _ = (EqName "Dummy light source")
-    closeDevice (DummyLightSource name) = putStr ("closed light source " ++ T.unpack name) >> return ()
+    closeDevice (DummyLightSource name) = putStr ("closed light source " ++ T.unpack (fromLSName name)) >> return ()
     availableLightSources (DummyLightSource n) =
         [LightSourceDescription n True True ["ch1", "ch2"]]
     activateLightSource (DummyLightSource name) _ chs =
-        putStrLn ("activated " ++ T.unpack name ++ " with channels " ++ show channels ++ " with powers " ++ show powers)
+        putStrLn ("activated " ++ T.unpack (fromLSName name) ++ " with channels " ++ show channels ++ " with powers " ++ show powers)
         where
             (channels, powers) = unzip chs
-    deactivateLightSource (DummyLightSource name) = putStrLn ("deactivated " ++ T.unpack name)
+    deactivateLightSource (DummyLightSource name) = putStrLn ("deactivated " ++ T.unpack (fromLSName name))
 
 instance Equipment DummyFilterWheel where
     equipmentName _ = (EqName "Dummy filter wheel")

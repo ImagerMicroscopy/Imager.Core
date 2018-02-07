@@ -9,6 +9,9 @@ data EquipmentW = forall e. (Equipment e) => EquipmentW e
 newtype EqName = EqName {
                      fromEqName :: Text
                  } deriving (Show, Eq, Ord, Monoid, ToJSON, FromJSON)
+newtype LSName = LSName {
+                     fromLSName :: Text
+                 } deriving (Show, Eq, Ord, Monoid, ToJSON, FromJSON)
 
 type Name = Text
 type FilterName = Text
@@ -16,7 +19,7 @@ type StagePosition = (Double, Double, Double)
 type ChannelName = Text
 
 data LightSourceDescription = LightSourceDescription {
-                                  lsdName :: !Text
+                                  lsdName :: !LSName
                                 , lsdCanControlPower :: !Bool
                                 , lsdAllowsMultipleChannels :: !Bool
                                 , lsdChannels :: ![ChannelName]
@@ -27,7 +30,7 @@ class Equipment e where
     closeDevice :: e -> IO ()
 
     availableLightSources :: e -> [LightSourceDescription]
-    activateLightSource :: e -> Name -> [(ChannelName, Double)] -> IO ()
+    activateLightSource :: e -> LSName -> [(ChannelName, Double)] -> IO ()
     deactivateLightSource :: e -> IO ()
 
     availableFilterWheels  :: e -> [(Name, [FilterName])]

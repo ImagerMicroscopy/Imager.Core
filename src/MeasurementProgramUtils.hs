@@ -8,14 +8,14 @@ import qualified Data.Text as T
 
 import Equipment
 
-lookupMaybeLightSource :: [EquipmentW] -> (EqName, Name) -> Maybe EquipmentW
+lookupMaybeLightSource :: [EquipmentW] -> (EqName, LSName) -> Maybe EquipmentW
 lookupMaybeLightSource eqs (eqName, lsName) =
     case (filter (\e -> (equipmentName e == eqName) && (lsName `elem` (map lsdName $ availableLightSources e))) eqs) of
         [e] -> Just e
         _   -> Nothing
 
 
-lookupLightSource :: [EquipmentW] -> (EqName, Name) -> EquipmentW
+lookupLightSource :: [EquipmentW] -> (EqName, LSName) -> EquipmentW
 lookupLightSource es n = fromJust $ lookupMaybeLightSource es n
 
 lookupStageThrows :: [EquipmentW] -> EqName -> EquipmentW

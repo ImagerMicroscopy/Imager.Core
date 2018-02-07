@@ -137,9 +137,9 @@ validateIrradiation eqs IrradiationParams{..} =
       Just eq -> let errMsg = validLightSourceChannelsAndPowers eq ipLightSourceName ipLightSourceChannels ipPowers
                  in if (T.null errMsg)
                     then []
-                    else ["invalid light source parameters for " ++ T.unpack ipLightSourceName ++ ": " ++ T.unpack errMsg]
+                    else ["invalid light source parameters for " ++ T.unpack (fromLSName ipLightSourceName) ++ ": " ++ T.unpack errMsg]
 
-validLightSourceChannelsAndPowers :: EquipmentW -> Text -> [Text] -> [Double] -> Text
+validLightSourceChannelsAndPowers :: EquipmentW -> LSName -> [Text] -> [Double] -> Text
 validLightSourceChannelsAndPowers eq lsName channels powers
     | length channels /= length powers = "must have same number of channels and powers"
     | (length channels > 1) && (not (lsdAllowsMultipleChannels lsParams)) = "light source does not allow multiple channels"

@@ -25,13 +25,13 @@ import EquipmentTypes
 import MiscUtils
 import RCSerialPort
 
-data Lumencor = Lumencor !Text !SerialPort !(IORef Bool) !(IORef LumencorFilter)
+data Lumencor = Lumencor !LSName !SerialPort !(IORef Bool) !(IORef LumencorFilter)
 
 initializeLumencor :: EquipmentDescription -> IO EquipmentW
 initializeLumencor (LumencorLightSourceDesc name portName) =
     let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS9600}) (TimeoutMillis 10000) SerialPortNoDebug
         port = openSerialPort portName serialSettings
-    in  EquipmentW <$> (Lumencor name <$> port <*> newIORef False <*> newIORef LCGreenFilter)
+    in  EquipmentW <$> (Lumencor (LSName name) <$> port <*> newIORef False <*> newIORef LCGreenFilter)
 
 instance Equipment Lumencor where
     equipmentName _ = (EqName "Lumencor")

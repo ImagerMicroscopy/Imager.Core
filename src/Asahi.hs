@@ -23,7 +23,7 @@ import FilterUtils
 import MiscUtils
 import RCSerialPort
 
-data AsahiLightSource = AsahiLightSource !Text ![(Text, Int)] !SerialPort
+data AsahiLightSource = AsahiLightSource !LSName ![(Text, Int)] !SerialPort
 
 initializeAsahiLightSource :: EquipmentDescription -> IO EquipmentW
 initializeAsahiLightSource (AsahiLightSourceDesc name portName chs) =
@@ -31,7 +31,7 @@ initializeAsahiLightSource (AsahiLightSourceDesc name portName chs) =
     in  openSerialPort portName serialSettings >>= \port ->
         readLampLife port >>= \life ->
         putStrLn ("Asahi lamp has been on " ++ show life ++ " hours (recommended lamp life 500 hours, max lamp life 1000 hours)") >>
-                  return (EquipmentW $ AsahiLightSource name (validateFilters (1, 8) chs) port)
+                  return (EquipmentW $ AsahiLightSource (LSName name) (validateFilters (1, 8) chs) port)
     where
         readLampLife :: SerialPort -> IO Double
         readLampLife port =

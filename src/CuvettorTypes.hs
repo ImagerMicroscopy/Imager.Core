@@ -55,7 +55,7 @@ data RequestMessage = AcquireData !DetectionParams
                     | GetDetectorTemperature
                     | ActivateLightSource {
                         alsEquipmentName :: !EqName
-                      , alsName :: !Text
+                      , alsName :: !LSName
                       , alsChannels :: ![Text]
                       , alsPowers :: ![Double]
                     }
