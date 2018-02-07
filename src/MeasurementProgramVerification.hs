@@ -57,15 +57,15 @@ validateMeasurementElement eqs (METimeLapse n dur es)
     | otherwise = []
 validateMeasurementElement eqs (MEStageLoop stageName pos es)
     | null pos = ["no positions in stage loop"]
-    | T.null stageName = ["no stage name"]
-    | stageName `notElem` stageNames = ["can't find stage named " ++ T.unpack stageName]
+    | T.null (fromEqName stageName) = ["no stage name"]
+    | stageName `notElem` stageNames = ["can't find stage named " ++ T.unpack (fromEqName stageName)]
     | null es = ["stage loop but no elements"]
     | otherwise = []
     where
-        stageNames = map motorizedStageName (filter hasMotorizedStage eqs)
+        stageNames = map equipmentName (filter hasMotorizedStage eqs)
 validateMeasurementElement eqs (MERelativeStageLoop stageName (RelativeStageLoopParams dx dy dz (bx, ax) (by, ay) (bz, az)) es)
-    | T.null stageName = ["no stage name"]
-    | stageName `notElem` stageNames = ["can't find stage named " ++ T.unpack stageName]
+    | T.null (fromEqName stageName) = ["no stage name"]
+    | stageName `notElem` stageNames = ["can't find stage named " ++ T.unpack (fromEqName stageName)]
     | null es = ["relative stage loop but no elements"]
     | (dx < 0) || (dy < 0) || (dz < 0) = ["invalid additional planes distance"]
     | (bx < 0) || (ax < 0) = ["invalid additional planes x"]
@@ -73,11 +73,10 @@ validateMeasurementElement eqs (MERelativeStageLoop stageName (RelativeStageLoop
     | (bz < 0) || (az < 0) = ["invalid additional planes z"]
     | otherwise = []
     where
-        stageNames = map motorizedStageName (filter hasMotorizedStage eqs)
+        stageNames = map equipmentName (filter hasMotorizedStage eqs)
 
 verifyRobotElements :: [EquipmentW] -> MeasurementElement -> IO [String]
-verifyRobotElements  eqs me
-        = do
+verifyRobotElements  eqs me = do
           pExists <- programsExist
           rAllows <- robotsAllowExecution
           if (not pExists)
@@ -87,7 +86,7 @@ verifyRobotElements  eqs me
                else return []
     where
         rss = filter hasRobot eqs
-        availableRobotNames = map robotName rss
+        availableRobotNames = map equipmentName rss
         robotsAndProgramsInProgram = map (\(MEExecuteRobotProgram rName pName _) -> (lookupRobotThrows rss rName, pName)) robotElements
         usedRobots = map fst robotsAndProgramsInProgram
         robotsAllowExecution = and <$> mapM robotAcceptsExternalCommands usedRobots

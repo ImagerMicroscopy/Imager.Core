@@ -46,21 +46,21 @@ type ExposureTime = Double
 data RequestMessage = AcquireData !DetectionParams
                     | ListWavelengths
                     | ListAvailableEquipment
-                    | GetMotorizedStagePosition !Text
-                    | SetMotorizedStagePosition !Text !(Double, Double, Double)
-                    | ListRobotPrograms !Text
+                    | GetMotorizedStagePosition !EqName
+                    | SetMotorizedStagePosition !EqName !(Double, Double, Double)
+                    | ListRobotPrograms !EqName
                     | GetDetectorLimits !(Int, Int) Int
                     | GetDetectorParameters
                     | SetDetectorTemperature !Double
                     | GetDetectorTemperature
                     | ActivateLightSource {
-                        alsEquipmentName :: !Text
+                        alsEquipmentName :: !EqName
                       , alsName :: !Text
                       , alsChannels :: ![Text]
                       , alsPowers :: ![Double]
                     }
-                    | DeactivateLightSource !Text
-                    | TurnOffLightSource !Text
+                    | DeactivateLightSource !EqName
+                    | TurnOffLightSource !EqName
                     | Ping
                     | ExecuteMeasurementProgram {
                         execMeasurementProgram :: !MeasurementElement

@@ -50,7 +50,7 @@ initializePriorStage (PriorDesc name portName) =
              EquipmentW <$> (PriorStage name <$> newMVar port)
 
 instance Equipment PriorStage where
-    equipmentName _ = "Prior stage"
+    equipmentName _ = (EqName "Prior stage")
     closeDevice (PriorStage _ portVar) = withMVar portVar $ (\port -> closeSerialPort port)
     hasMotorizedStage _ = True
     motorizedStageName (PriorStage n _) = n

@@ -24,7 +24,7 @@ initializeRobottor :: EquipmentDescription -> IO EquipmentW
 initializeRobottor (RobottorDesc name ip port) = return (EquipmentW $ Robottor name ip port)
 
 instance Equipment Robottor where
-    equipmentName _ = "Robottor"
+    equipmentName _ = (EqName "Robottor")
     closeDevice (Robottor _ ip port) = return ()
     hasRobot _ = True
     robotName (Robottor n _ _) = n

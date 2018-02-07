@@ -34,7 +34,7 @@ initializeCoherent (CoherentLightSourceDesc name portName) =
         return (EquipmentW $ Coherent name port powerRange currentPower)
 
 instance Equipment Coherent where
-    equipmentName _ = "Coherent laser"
+    equipmentName _ = (EqName "Coherent laser")
     closeDevice (Coherent _ port _ _) = closeSerialPort port
     availableLightSources (Coherent n _ _ _) =
         [LightSourceDescription n True False ["laser"]]

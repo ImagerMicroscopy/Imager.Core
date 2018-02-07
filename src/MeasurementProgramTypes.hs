@@ -16,12 +16,12 @@ import EquipmentTypes
 data MeasurementElement = MEDetection ![DetectionParams]
                         | MEIrradiation !Double ![IrradiationParams]
                         | MEWait !Double
-                        | MEExecuteRobotProgram !Text !Text !Bool
+                        | MEExecuteRobotProgram !EqName !Text !Bool
                         | MEDoTimes !Int ![MeasurementElement]
                         | MEFastAcquisitionLoop !Int !DetectionParams
                         | METimeLapse !Int !Double ![MeasurementElement]
-                        | MEStageLoop !Text ![PositionNameAndCoords] ![MeasurementElement]
-                        | MERelativeStageLoop !Text !RelativeStageLoopParams ![MeasurementElement]
+                        | MEStageLoop !EqName ![PositionNameAndCoords] ![MeasurementElement]
+                        | MERelativeStageLoop !EqName !RelativeStageLoopParams ![MeasurementElement]
                         deriving (Show)
 
 data ProgramEnvironment a = ProgramEnvironment {
@@ -45,7 +45,7 @@ data DetectionParams = DetectionParams {
                        deriving (Show, Eq)
 
 data IrradiationParams = IrradiationParams {
-                            ipEquipmentName :: !Text
+                            ipEquipmentName :: !EqName
                           , ipLightSourceName :: !Text
                           , ipLightSourceChannels :: ![Text]
                           , ipPowers :: ![Double]
@@ -53,7 +53,7 @@ data IrradiationParams = IrradiationParams {
                         deriving (Show, Eq)
 
 data FilterParams = FilterParams {
-                        fpEquipmentName :: !Text
+                        fpEquipmentName :: !EqName
                       , fpFilterWheelName :: !Text
                       , fpFilterName :: !Text
                     } deriving (Show, Eq)

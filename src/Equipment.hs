@@ -1,9 +1,14 @@
-{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE ExistentialQuantification, GeneralizedNewtypeDeriving #-}
 module Equipment where
 
+import Data.Aeson
 import Data.Text (Text)
 
 data EquipmentW = forall e. (Equipment e) => EquipmentW e
+
+newtype EqName = EqName {
+                     fromEqName :: Text
+                 } deriving (Show, Eq, Ord, Monoid, ToJSON, FromJSON)
 
 type Name = Text
 type FilterName = Text
@@ -18,7 +23,7 @@ data LightSourceDescription = LightSourceDescription {
                               }
 
 class Equipment e where
-    equipmentName :: e -> Text
+    equipmentName :: e -> EqName
     closeDevice :: e -> IO ()
 
     availableLightSources :: e -> [LightSourceDescription]

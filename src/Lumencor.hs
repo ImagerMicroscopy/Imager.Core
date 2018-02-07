@@ -34,7 +34,7 @@ initializeLumencor (LumencorLightSourceDesc name portName) =
     in  EquipmentW <$> (Lumencor name <$> port <*> newIORef False <*> newIORef LCGreenFilter)
 
 instance Equipment Lumencor where
-    equipmentName _ = "Lumencor"
+    equipmentName _ = (EqName "Lumencor")
     closeDevice (Lumencor _ port _ _) = closeSerialPort port
     availableLightSources (Lumencor n _ _ _) =
         [LightSourceDescription n True True (map fst lumencorChannels)]

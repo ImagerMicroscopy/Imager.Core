@@ -39,7 +39,7 @@ initializeAsahiLightSource (AsahiLightSourceDesc name portName chs) =
             return . read . filter (`elem` ("01234567890." :: String)) . byteStringAsString
 
 instance Equipment AsahiLightSource where
-    equipmentName _ = "Asahi lamp"
+    equipmentName _ = (EqName "Asahi lamp")
     closeDevice (AsahiLightSource _ _ port) = closeSerialPort port
     availableLightSources (AsahiLightSource n chs _) =
         [LightSourceDescription n True False (map fst chs)]

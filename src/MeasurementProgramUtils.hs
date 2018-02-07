@@ -8,25 +8,25 @@ import qualified Data.Text as T
 
 import Equipment
 
-lookupMaybeLightSource :: [EquipmentW] -> (Name, Name) -> Maybe EquipmentW
+lookupMaybeLightSource :: [EquipmentW] -> (EqName, Name) -> Maybe EquipmentW
 lookupMaybeLightSource eqs (eqName, lsName) =
     case (filter (\e -> (equipmentName e == eqName) && (lsName `elem` (map lsdName $ availableLightSources e))) eqs) of
         [e] -> Just e
         _   -> Nothing
 
 
-lookupLightSource :: [EquipmentW] -> (Name, Name) -> EquipmentW
+lookupLightSource :: [EquipmentW] -> (EqName, Name) -> EquipmentW
 lookupLightSource es n = fromJust $ lookupMaybeLightSource es n
 
-lookupStageThrows :: [EquipmentW] -> Text -> EquipmentW
-lookupStageThrows mss name = case eligibleStages of
+lookupStageThrows :: [EquipmentW] -> EqName -> EquipmentW
+lookupStageThrows eqs name = case eligibleStages of
                         [s] -> s
-                        []  -> throw (userError ("no stage named " ++ (T.unpack name)))
+                        []  -> throw (userError ("no stage named " ++ (T.unpack $ fromEqName name)))
                         _   -> throw (userError ("more than one stage with the same name"))
     where
-      eligibleStages = filter (\e -> hasMotorizedStage e && (name == motorizedStageName e)) mss
+      eligibleStages = filter (\e -> hasMotorizedStage e && (name == equipmentName e)) eqs
 
-lookupRobotThrows :: [EquipmentW] -> Text -> EquipmentW
-lookupRobotThrows eqs rName = case (filter (\e -> hasRobot e && (robotName e == rName)) eqs) of
-                                  [r] -> r
-                                  _   -> throw (userError "missing robot in program validation")
+lookupRobotThrows :: [EquipmentW] -> EqName -> EquipmentW
+lookupRobotThrows eqs eqName = case (filter (\e -> hasRobot e && (equipmentName e == eqName)) eqs) of
+                                   [r] -> r
+                                   _   -> throw (userError "missing robot in program validation")

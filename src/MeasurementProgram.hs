@@ -46,7 +46,7 @@ executeMeasurement env me = withAsync (forever $ resetSystemSleepTimer >> thread
                                                throwIO (e :: SomeException)))
     where
         eqs = peEquipment env
-        eqsUsedAsLightSource = eqNameUsedAsLightSourceIn me
+        eqsUsedAsLightSource = eqNamesUsedAsLightSourceIn me
         deactiveUsedLightSources = mapM_ deactivateLightSource (filter (\e -> equipmentName e `elem` eqsUsedAsLightSource) eqs)
         usedRobots = let usedRobotEqNames = robotNamesUsedIn me
                      in  filter (\e -> (equipmentName e) `elem` usedRobotEqNames) eqs
@@ -74,7 +74,7 @@ executeMeasurementElement env (MEWait dur) =
     withStatusMessage env (T.format "waiting {} s" (T.Only dur)) (
         threadDelay (round $ dur * 1e6))
 executeMeasurementElement env (MEExecuteRobotProgram rEqName pName wait) =
-    withStatusMessage env (T.format "executing program {} on {}" (pName, rEqName)) (
+    withStatusMessage env (T.format "executing program {} on {}" (pName, fromEqName rEqName)) (
         executeRobotProgram robot pName wait)
     where
         [robot] = filter (\e -> equipmentName e == rEqName) (peEquipment env)
@@ -215,19 +215,19 @@ disableLightSources eqs params =
 deactivateAllLightSources :: [EquipmentW] -> IO ()
 deactivateAllLightSources sources = mapM_ deactivateLightSource sources
 
-eqNameUsedAsLightSourceIn :: MeasurementElement -> [Text]
-eqNameUsedAsLightSourceIn me = S.toList (eqNameUsedAsLightSourceIn' S.empty me)
+eqNamesUsedAsLightSourceIn :: MeasurementElement -> [EqName]
+eqNamesUsedAsLightSourceIn me = S.toList (eqNamesUsedAsLightSourceIn' S.empty me)
     where
-        eqNameUsedAsLightSourceIn' :: Set Text -> MeasurementElement -> Set Text
-        eqNameUsedAsLightSourceIn' s (MEDetection dps) = s <> (S.fromList . concat $ map (map ipEquipmentName . dpIrradiation) dps)
-        eqNameUsedAsLightSourceIn' s (MEIrradiation _ ips) = s <> ((S.fromList . map ipEquipmentName) ips)
-        eqNameUsedAsLightSourceIn' s (MEDoTimes _ mes) = s <> mconcat (map (eqNameUsedAsLightSourceIn' S.empty) mes)
-        eqNameUsedAsLightSourceIn' s (MEFastAcquisitionLoop _ dp) = s <> S.fromList (map ipEquipmentName . dpIrradiation $ dp)
-        eqNameUsedAsLightSourceIn' s (METimeLapse _ _ mes) = s <> mconcat (map (eqNameUsedAsLightSourceIn' S.empty) mes)
-        eqNameUsedAsLightSourceIn' s (MEStageLoop _ _ mes) = s <> mconcat (map (eqNameUsedAsLightSourceIn' S.empty) mes)
-        eqNameUsedAsLightSourceIn' s _ = s
+        eqNamesUsedAsLightSourceIn' :: Set EqName -> MeasurementElement -> Set EqName
+        eqNamesUsedAsLightSourceIn' s (MEDetection dps) = s <> (S.fromList . concat $ map (map ipEquipmentName . dpIrradiation) dps)
+        eqNamesUsedAsLightSourceIn' s (MEIrradiation _ ips) = s <> ((S.fromList . map ipEquipmentName) ips)
+        eqNamesUsedAsLightSourceIn' s (MEDoTimes _ mes) = s <> mconcat (map (eqNamesUsedAsLightSourceIn' S.empty) mes)
+        eqNamesUsedAsLightSourceIn' s (MEFastAcquisitionLoop _ dp) = s <> S.fromList (map ipEquipmentName . dpIrradiation $ dp)
+        eqNamesUsedAsLightSourceIn' s (METimeLapse _ _ mes) = s <> mconcat (map (eqNamesUsedAsLightSourceIn' S.empty) mes)
+        eqNamesUsedAsLightSourceIn' s (MEStageLoop _ _ mes) = s <> mconcat (map (eqNamesUsedAsLightSourceIn' S.empty) mes)
+        eqNamesUsedAsLightSourceIn' s _ = s
 
-switchFilterWheel :: [EquipmentW] -> Text -> Text -> Text -> IO ()
+switchFilterWheel :: [EquipmentW] -> EqName -> Text -> Text -> IO ()
 switchFilterWheel eqs eqName fwName fName =
     let [eq] = filter (\e -> equipmentName e == eqName) eqs
     in ST.timeout (floor 10e6) (switchToFilter eq fwName fName) >>= \result ->
@@ -235,10 +235,10 @@ switchFilterWheel eqs eqName fwName fName =
            Nothing -> throwIO (userError ("timeout communicating with filterwheel " ++ T.unpack fwName))
            Just v -> return v
 
-robotNamesUsedIn :: MeasurementElement -> [Text]
+robotNamesUsedIn :: MeasurementElement -> [EqName]
 robotNamesUsedIn = foldMeasurementElement f
     where
-        f :: MeasurementElement -> [Text]
+        f :: MeasurementElement -> [EqName]
         f (MEExecuteRobotProgram rName _ _) = [rName]
         f _ = []
 

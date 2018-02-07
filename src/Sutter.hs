@@ -37,7 +37,7 @@ initializeSutterLambda10B (SutterLambda10BDesc name portName chs) =
         return (EquipmentW $ SutterLambda10B name (validateFilters (0, 9) chs) port)
 
 instance Equipment SutterLambda10B where
-    equipmentName _ = "SutterLambda10B"
+    equipmentName _ = (EqName "SutterLambda10B")
     closeDevice (SutterLambda10B _ _ port) = closeSerialPort port
     availableFilterWheels (SutterLambda10B n chs _) = [(n, map fst chs)]
     switchToFilter (SutterLambda10B _ chs port) _ chName =

@@ -46,7 +46,7 @@ initializeThorlabsFW102C (ThorlabsFW102CDesc name portName chs) =
     in  EquipmentW <$> (ThorlabsFW102C name (validateFilters (0, 5) chs) <$> openSerialPort portName serialSettings)
 
 instance Equipment ThorlabsFW103H where
-    equipmentName _ = "ThorlabsFW103H"
+    equipmentName _ = (EqName "ThorlabsFW103H")
     closeDevice (ThorlabsFW103H _ _ port) = closeSerialPort port
     availableFilterWheels (ThorlabsFW103H n chs _) = [(n, map fst chs)]
     switchToFilter (ThorlabsFW103H _ chs port) _ chName =
@@ -57,7 +57,7 @@ instance Equipment ThorlabsFW103H where
 
 
 instance Equipment ThorlabsFW102C where
-    equipmentName _ = "ThorlabsFW102C"
+    equipmentName _ = (EqName "ThorlabsFW102C")
     closeDevice (ThorlabsFW102C _ _ port) = closeSerialPort port
     availableFilterWheels (ThorlabsFW102C n chs _) = [(n, map fst chs)]
     switchToFilter (ThorlabsFW102C _ chs port) _ chName =

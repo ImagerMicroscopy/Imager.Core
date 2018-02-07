@@ -40,7 +40,7 @@ initializeOlympusIX71Dichroic (OlympusIX71DichroicDesc name portName chs) =
         return (EquipmentW $ OlympusIX71Dichroic name (validateFilters (0, 5) chs) currFilterRef port)
 
 instance Equipment OlympusIX71Dichroic where
-    equipmentName _ = "Olympus IX71 Dichroic"
+    equipmentName _ = (EqName "Olympus IX71 Dichroic")
     closeDevice (OlympusIX71Dichroic _ _ _ port) = closeSerialPort port
     availableFilterWheels (OlympusIX71Dichroic n chs _ _) = [(n, map fst chs)]
     switchToFilter (OlympusIX71Dichroic _ chs currFilter port) _ chName =

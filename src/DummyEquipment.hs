@@ -27,7 +27,7 @@ initializeDummyStage (DummyStageDesc name) =
     return (EquipmentW $ DummyStage name)
 
 instance Equipment DummyLightSource where
-    equipmentName _ = "Dummy light source"
+    equipmentName _ = (EqName "Dummy light source")
     closeDevice (DummyLightSource name) = putStr ("closed light source " ++ T.unpack name) >> return ()
     availableLightSources (DummyLightSource n) =
         [LightSourceDescription n True True ["ch1", "ch2"]]
@@ -38,14 +38,14 @@ instance Equipment DummyLightSource where
     deactivateLightSource (DummyLightSource name) = putStrLn ("deactivated " ++ T.unpack name)
 
 instance Equipment DummyFilterWheel where
-    equipmentName _ = "Dummy filter wheel"
+    equipmentName _ = (EqName "Dummy filter wheel")
     closeDevice (DummyFilterWheel name _) = putStrLn ("Closed filter wheel " ++ T.unpack name)
     availableFilterWheels (DummyFilterWheel n chs) = [(n, map fst chs)]
     switchToFilter (DummyFilterWheel name chs) _ chName =
         putStrLn ("Switched filter wheel " ++ T.unpack name ++ " to filter " ++ T.unpack chName)
 
 instance Equipment DummyStage where
-    equipmentName _ = "Dummy stage"
+    equipmentName _ = (EqName "Dummy stage")
     closeDevice (DummyStage n) = putStrLn ("dummy stage " ++ (T.unpack n) ++ " closed")
     hasMotorizedStage _ = True
     motorizedStageName (DummyStage n) = n

@@ -37,7 +37,7 @@ initializeArduinoLightSource (ArduinoLightSourceDesc name portName chs) =
         return (EquipmentW (ArduinoLightSource name chs activeSet port))
 
 instance Equipment ArduinoLightSource where
-    equipmentName _ = "Arduino"
+    equipmentName _ = (EqName "Arduino")
     closeDevice (ArduinoLightSource _ chs _ port) =
         setArduinoPinsState ArduinoInput (map (fst . snd) chs) port >> closeSerialPort port
     availableLightSources (ArduinoLightSource n chs _ _) =
