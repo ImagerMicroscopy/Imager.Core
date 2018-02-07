@@ -48,10 +48,8 @@ initializeThorlabsFW102C (ThorlabsFW102CDesc name portName chs) =
 instance Equipment ThorlabsFW103H where
     equipmentName _ = "ThorlabsFW103H"
     closeDevice (ThorlabsFW103H _ _ port) = closeSerialPort port
-    hasFilterWheel _ = True
-    filterWheelName (ThorlabsFW103H n _ _) = n
-    filterWheelChannels (ThorlabsFW103H _ chs _) = map fst chs
-    switchToFilter (ThorlabsFW103H _ chs port) chName =
+    availableFilterWheels (ThorlabsFW103H n chs _) = [(n, map fst chs)]
+    switchToFilter (ThorlabsFW103H _ chs port) _ chName =
         let filterIndex = fromJust (lookup chName chs)
             wheelPos = (409600 `div` 6) * filterIndex -- Thorlabs:  1 turn represents 360 degrees which is 409600 micro steps
         in  flushSerialPort port >> serialWrite port (fw103HMoveAbsoluteMessage wheelPos) >>
@@ -61,10 +59,8 @@ instance Equipment ThorlabsFW103H where
 instance Equipment ThorlabsFW102C where
     equipmentName _ = "ThorlabsFW102C"
     closeDevice (ThorlabsFW102C _ _ port) = closeSerialPort port
-    hasFilterWheel _ = True
-    filterWheelName (ThorlabsFW102C n _ _) = n
-    filterWheelChannels (ThorlabsFW102C _ chs _) = map fst chs
-    switchToFilter (ThorlabsFW102C _ chs port) chName =
+    availableFilterWheels (ThorlabsFW102C n chs _) = [(n, map fst chs)]
+    switchToFilter (ThorlabsFW102C _ chs port) _ chName =
         let filterIndex = fromJust (lookup chName chs)
         in flushSerialPort port >> serialWrite port (T.encodeUtf8 . T.pack $ "pos=" ++ show filterIndex) >>
             serialReadUntilChar port '>' >> return ()

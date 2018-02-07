@@ -1,17 +1,21 @@
 module MeasurementProgramUtils where
 
 import Control.Exception
+import Data.List
 import Data.Maybe
 import Data.Text (Text)
 import qualified Data.Text as T
 
 import Equipment
 
-lookupMaybeLightSource :: [EquipmentW] -> Text -> Maybe EquipmentW
-lookupMaybeLightSource eqs name = case (filter (\e -> hasLightSource e && (lightSourceName e == name))) eqs of
-                                      [l] -> Just l
-                                      _   -> Nothing
-lookupLightSource :: [EquipmentW] -> Text -> EquipmentW
+lookupMaybeLightSource :: [EquipmentW] -> (Name, Name) -> Maybe EquipmentW
+lookupMaybeLightSource eqs (eqName, lsName) =
+    case (filter (\e -> (equipmentName e == eqName) && (lsName `elem` (map lsdName $ availableLightSources e))) eqs) of
+        [e] -> Just e
+        _   -> Nothing
+
+
+lookupLightSource :: [EquipmentW] -> (Name, Name) -> EquipmentW
 lookupLightSource es n = fromJust $ lookupMaybeLightSource es n
 
 lookupStageThrows :: [EquipmentW] -> Text -> EquipmentW

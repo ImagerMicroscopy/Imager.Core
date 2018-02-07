@@ -41,12 +41,9 @@ initializeAsahiLightSource (AsahiLightSourceDesc name portName chs) =
 instance Equipment AsahiLightSource where
     equipmentName _ = "Asahi lamp"
     closeDevice (AsahiLightSource _ _ port) = closeSerialPort port
-    hasLightSource _ = True
-    lightSourceName (AsahiLightSource n _ _) = n
-    lightSourceCanControlPower _ = True
-    lightSourceAllowsMultipleChannels _ = False
-    lightSourceChannels (AsahiLightSource _ chs _) = map fst chs
-    activateLightSource (AsahiLightSource _ chs port) ((filter, power) : _) =
+    availableLightSources (AsahiLightSource n chs _) =
+        [LightSourceDescription n True False (map fst chs)]
+    activateLightSource (AsahiLightSource _ chs port) _ ((filter, power) : _) =
         case (lookup filter chs) of
             Nothing -> throwIO (userError ("missing filter " ++ T.unpack filter))
             Just idx ->

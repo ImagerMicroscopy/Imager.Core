@@ -63,12 +63,8 @@ main = wait =<< async (
         getDetectorWavelengths det >>= \wl ->
         return (byteStringFromVector wl) >>= \encodedWl ->
         putStrLn "ready to measure!" >>
-        let lightSources = filter hasLightSource availableEquipment
-            filterWheels = filter hasFilterWheel availableEquipment
-            motorizedStages = filter hasMotorizedStage availableEquipment
-            robots = filter hasRobot availableEquipment
-            env = Environment lightSources filterWheels motorizedStages robots
-                      det procFuncs encodedWl asyncSpectraMVar asyncStatusMessagesMVar asyncProgramWorker
+        let env = Environment availableEquipment det procFuncs encodedWl
+                              asyncSpectraMVar asyncStatusMessagesMVar asyncProgramWorker
         in runServer 3200 messageHandler env serverSettings))
 
 messageHandler :: Detector a => MessageHandler (Environment a)
@@ -98,38 +94,26 @@ performAction env ListWavelengths =
         nWavelengths = SB.length wavelengths `div` 8
         numType = FP64
 
-performAction env ListLightSources = return (AvailableLightSources lss, env)
+performAction env ListAvailableEquipment = return (AvailableEquipment es, env)
     where
-      lss = envLightSources env
-
-performAction env ListFilterWheels = return (AvailableFilterWheels fws, env)
-    where
-        fws = envFilterWheels env
-
-performAction env ListMotorizedStages = return (AvailableMotorizedStages mss, env)
-    where
-        mss = envMotorizedStages env
-
-performAction env ListRobots = return (AvailableRobots robots, env)
-    where
-        robots = envRobots env
+      es = envEquipment env
 
 performAction env (GetMotorizedStagePosition name) =
     getStagePosition stage >>= \pos ->
     return (MotorizedStagePosition pos, env)
     where
-        stage = lookupStageThrows (envMotorizedStages env) name
+        stage = lookupStageThrows (envEquipment env) name
 
 performAction env (SetMotorizedStagePosition name ds) =
     setStagePosition stage ds >> return (StatusOK, env)
     where
-        stage = lookupStageThrows (envMotorizedStages env) name
+        stage = lookupStageThrows (envEquipment env) name
 
 performAction env (ListRobotPrograms name) =
-    listRobotPrograms (lookupRobotThrows robots name) >>= \programs ->
+    listRobotPrograms (lookupRobotThrows eqs name) >>= \programs ->
     return (RobotProgramsResponse programs, env)
     where
-        robots = envRobots env
+        eqs = envEquipment env
 
 performAction env (GetDetectorLimits cropSize binFactor) =
     ensureAsyncAcquisitionNotRunning env >>
@@ -159,27 +143,24 @@ performAction env GetDetectorTemperature =
     where
         det = envDetector env
 
-performAction env (ActivateLightSource name channels powers) =
+performAction env (ActivateLightSource eqName name channels powers) =
     ensureAsyncAcquisitionNotRunning env >>
-    return (lookupLightSource lightSources name) >>= \lightSource ->
-    activateLightSource lightSource (zip channels powers) >>
+    return (lookupLightSource eqs (eqName, name)) >>= \eq ->
+    activateLightSource eq name (zip channels powers) >>
     return (StatusOK, env)
     where
-        lightSources = envLightSources env
+        eqs = envEquipment env
 
-performAction env (DeactivateLightSource name) =
+performAction env (DeactivateLightSource eqName) =
     ensureAsyncAcquisitionNotRunning env >>
-    return (lookupLightSource lightSources name) >>=
-    deactivateLightSource >>
+    deactivateLightSource eq >>
     return (StatusOK, env)
     where
-        lightSources = envLightSources env
+        [eq]  = filter (\e -> equipmentName e == eqName) (envEquipment env)
 
 performAction env (TurnOffLightSource name) =
     putStrLn "turning off light sources not supported" >>
     return (StatusOK, env)
-    where
-        lightSources = envLightSources env
 
 performAction env Ping = return (Pong, env)
 
@@ -228,19 +209,15 @@ performAction env IsAsyncAcquisitionRunning =
 startAsyncAcquisition :: Detector a => Environment a -> MeasurementElement -> IO (Async (), MVar [AcquiredData], MVar [Text])
 startAsyncAcquisition env me =
     ensureAsyncAcquisitionNotRunning env >>
-    validateMeasurementElementThrows lightSources filterWheels motorizedStages robots me >>
+    validateMeasurementElementThrows (envEquipment env) me >>
     newMVar [] >>= \spectraMVar ->
     newMVar [] >>= \statusMVar ->
     getTime Monotonic >>= \startTime ->
-    async (executeMeasurement (ProgramEnvironment detector startTime lightSources filterWheels motorizedStages robots rearrangementFuncs spectraMVar statusMVar) me >>
+    async (executeMeasurement (ProgramEnvironment detector startTime (envEquipment env) rearrangementFuncs spectraMVar statusMVar) me >>
            return ()) >>= \asyncWorker ->
     return (asyncWorker, spectraMVar, statusMVar)
     where
         detector = envDetector env
-        lightSources = envLightSources env
-        filterWheels = envFilterWheels env
-        motorizedStages = envMotorizedStages env
-        robots = envRobots env
         rearrangementFuncs = envRearrangementFuncs env
 
 ensureAsyncAcquisitionNotRunning :: Environment a -> IO ()

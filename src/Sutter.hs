@@ -39,10 +39,8 @@ initializeSutterLambda10B (SutterLambda10BDesc name portName chs) =
 instance Equipment SutterLambda10B where
     equipmentName _ = "SutterLambda10B"
     closeDevice (SutterLambda10B _ _ port) = closeSerialPort port
-    hasFilterWheel _ = True
-    filterWheelName (SutterLambda10B n _ _) = n
-    filterWheelChannels (SutterLambda10B _ chs _) = map fst chs
-    switchToFilter (SutterLambda10B _ chs port) chName =
+    availableFilterWheels (SutterLambda10B n chs _) = [(n, map fst chs)]
+    switchToFilter (SutterLambda10B _ chs port) _ chName =
         let filterIndex = (fromIntegral . fromJust . lookup chName) chs
             speed = 3
             byte = (speed `shiftL` 4) .|. filterIndex

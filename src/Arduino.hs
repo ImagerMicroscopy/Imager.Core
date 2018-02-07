@@ -40,12 +40,9 @@ instance Equipment ArduinoLightSource where
     equipmentName _ = "Arduino"
     closeDevice (ArduinoLightSource _ chs _ port) =
         setArduinoPinsState ArduinoInput (map (fst . snd) chs) port >> closeSerialPort port
-    hasLightSource _ = True
-    lightSourceName (ArduinoLightSource n _ _ _) = n
-    lightSourceCanControlPower _ = False
-    lightSourceAllowsMultipleChannels _ = True
-    lightSourceChannels (ArduinoLightSource _ chs _ _) = map fst chs
-    activateLightSource (ArduinoLightSource _ availChs activePinRef port) chs =
+    availableLightSources (ArduinoLightSource n chs _ _) =
+        [LightSourceDescription n False True (map fst chs)]
+    activateLightSource (ArduinoLightSource _ availChs activePinRef port) _ chs =
         case (concatMaybes $ map ((\ch -> lookup ch availChs) . fst) chs) of
             Nothing -> throwIO (userError "unknown arduino channel")
             Just pins ->

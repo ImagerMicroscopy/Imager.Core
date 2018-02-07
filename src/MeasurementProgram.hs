@@ -40,46 +40,44 @@ import MiscUtils
 executeMeasurement :: Detector a => ProgramEnvironment a -> MeasurementElement -> IO ()
 executeMeasurement env me = withAsync (forever $ resetSystemSleepTimer >> threadDelay (round 60.0e6)) (\_ ->
                                 executeMeasurementElement env (insertFastAcquisitionLoops me)
-                                `catch` (\e -> deactivateAllLightSources usedLightSources >>
+                                `catch` (\e -> deactiveUsedLightSources >>
                                                mapM_ abortRobotProgramExecution usedRobots >>
                                                putStrLn (displayException e) >>
                                                throwIO (e :: SomeException)))
     where
-        lss = peLightSources env
-        robots = peRobots env
-        usedLightSourceNames = lightSourceNamesUsedIn me
-        usedLightSources = map (lookupLightSource lss) usedLightSourceNames
-        usedRobots = map (lookupRobotThrows robots) (robotNamesUsedIn me)
+        eqs = peEquipment env
+        eqsUsedAsLightSource = eqNameUsedAsLightSourceIn me
+        deactiveUsedLightSources = mapM_ deactivateLightSource (filter (\e -> equipmentName e `elem` eqsUsedAsLightSource) eqs)
+        usedRobots = let usedRobotEqNames = robotNamesUsedIn me
+                     in  filter (\e -> (equipmentName e) `elem` usedRobotEqNames) eqs
 
 executeMeasurementElements :: Detector a => ProgramEnvironment a -> [MeasurementElement] -> IO ()
 executeMeasurementElements env es = mapM_ (executeMeasurementElement env) es
 
 executeMeasurementElement :: Detector a => ProgramEnvironment a -> MeasurementElement -> IO ()
 executeMeasurementElement env (MEDetection detParams) =
-    forM_ detParams (\p -> executeDetection detector lss fws p >>=
+    forM_ detParams (\p -> executeDetection detector eqs p >>=
                            return . rearrangeImageExternal rearrangeFuncs >>= \r ->
                            r `deepseq` addDataToMVar mvar startTime r)
     where
+      eqs = peEquipment env
       detector = peDetector env
-      lss = peLightSources env
-      fws = peFilterWheels env
       rearrangeFuncs = peRearrangementFuncs env
       mvar = peDataMVar env
       startTime = peStartTime env
 executeMeasurementElement env (MEIrradiation dur ips) =
     withStatusMessage env (T.format "irradiating {} s" (T.Only dur)) (
-        executeIrradiation lss fws ips dur)
+        executeIrradiation eqs ips dur)
     where
-      lss = peLightSources env
-      fws = peFilterWheels env
+      eqs = peEquipment env
 executeMeasurementElement env (MEWait dur) =
     withStatusMessage env (T.format "waiting {} s" (T.Only dur)) (
         threadDelay (round $ dur * 1e6))
-executeMeasurementElement env (MEExecuteRobotProgram rName pName wait) =
-    withStatusMessage env (T.format "executing program {} on {}" (pName, rName)) (
-        executeRobotProgram (lookupRobotThrows robots rName) pName wait)
+executeMeasurementElement env (MEExecuteRobotProgram rEqName pName wait) =
+    withStatusMessage env (T.format "executing program {} on {}" (pName, rEqName)) (
+        executeRobotProgram robot pName wait)
     where
-        robots = peRobots env
+        [robot] = filter (\e -> equipmentName e == rEqName) (peEquipment env)
 executeMeasurementElement env (MEDoTimes n es) =
     withStatusMessage env "do times" (
         forM_ (zip [1 ..] (take n . repeat $ es)) (\(index :: Int, ses) ->
@@ -88,10 +86,9 @@ executeMeasurementElement env (MEDoTimes n es) =
         ))
 executeMeasurementElement env (MEFastAcquisitionLoop n detParams) =
     withStatusMessage env (T.format "fast acquisition ({} images)" (T.Only n)) (
-        executeFastDetectionLoop detector lss fws detParams rearrangeFuncs n startTime mvar)
+        executeFastDetectionLoop detector eqs detParams rearrangeFuncs n startTime mvar)
     where
-      lss = peLightSources env
-      fws = peFilterWheels env
+      eqs = peEquipment env
       rearrangeFuncs = peRearrangementFuncs env
       mvar = peDataMVar env
       startTime = peStartTime env
@@ -133,9 +130,9 @@ executeMeasurementElement env (MEStageLoop sn poss es) =
     withStatusMessage env "stage loop" (
         forM_ (zip [1..] poss) (\(index :: Int, (PositionNameAndCoords posName pos)) ->
             updateStatusMessage env (T.format "stage position {} of {} ({})" (index, nPos, posName)) >>
-            setStagePosition stage pos >> executeMeasurementElements env es))
+            setStagePosition stageEq pos >> executeMeasurementElements env es))
     where
-        stage = lookupStageThrows (peMotorizedStages env) sn
+        [stageEq] = filter (\e -> equipmentName e == sn) (peEquipment env)
         nPos = length poss
 
 executeMeasurementElement env (MERelativeStageLoop sn (RelativeStageLoopParams dx dy dz (bx, ax) (by, ay) (bz, az)) es) =
@@ -146,7 +143,7 @@ executeMeasurementElement env (MERelativeStageLoop sn (RelativeStageLoopParams d
                 updateStatusMessage env (T.format "relative stage position {} of {}" (index, length poss)) >>
                 setStagePosition stage pos >> executeMeasurementElements env es))
     where
-        stage = lookupStageThrows (peMotorizedStages env) sn
+        [stage] = filter (\e -> equipmentName e == sn) (peEquipment env)
         planesx = map ((*) dx . fromIntegral) [negate bx .. ax] :: [Double]
         planesy = map ((*) dy . fromIntegral) [negate by .. ay]
         planesz = map ((*) dz . fromIntegral) [negate bz .. az]
@@ -160,27 +157,27 @@ insertFastAcquisitionLoops (METimeLapse n dur es) = METimeLapse n dur (map inser
 insertFastAcquisitionLoops (MEStageLoop n pos es) = MEStageLoop n pos (map insertFastAcquisitionLoops es)
 insertFastAcquisitionLoops m = m
 
-executeDetection :: Detector a => a -> [EquipmentW] -> [EquipmentW] -> DetectionParams -> IO AcquiredData
-executeDetection det lss fws DetectionParams{..} =
+executeDetection :: Detector a => a -> [EquipmentW] -> DetectionParams -> IO AcquiredData
+executeDetection det eqs DetectionParams{..} =
     setBinningFactor det dpBinningFactor >>
     setCropSize det dpCropSize >>
-    switchToFilters fws dpFilterParams >>
-    enableLightSources lss dpIrradiation >>
+    switchToFilters eqs dpFilterParams >>
+    enableLightSources eqs dpIrradiation >>
     acquireData det dpExposureTime dpGain dpNSpectraToAverage >>= \acquiredData ->
-    disableLightSources lss dpIrradiation >>
+    disableLightSources eqs dpIrradiation >>
     return acquiredData
 
-executeFastDetectionLoop :: Detector a => a -> [EquipmentW] -> [EquipmentW] -> DetectionParams -> [ExternalRearrangementFunc] -> Int -> TimeSpec -> MVar [AcquiredData] -> IO ()
-executeFastDetectionLoop detector lightSources filterWheels detParams rearrangeFuncs nTimesToPerform startTime dataMVar =
+executeFastDetectionLoop :: Detector a => a -> [EquipmentW] -> DetectionParams -> [ExternalRearrangementFunc] -> Int -> TimeSpec -> MVar [AcquiredData] -> IO ()
+executeFastDetectionLoop detector eqs detParams rearrangeFuncs nTimesToPerform startTime dataMVar =
     setBinningFactor detector (dpBinningFactor detParams) >>
     setCropSize detector (dpCropSize detParams) >>
-    switchToFilters filterWheels (dpFilterParams detParams) >>
-    enableLightSources lightSources (dpIrradiation detParams) >>
+    switchToFilters eqs (dpFilterParams detParams) >>
+    enableLightSources eqs (dpIrradiation detParams) >>
     newChan >>= \chan ->
     withAsync (acquireStreamingData detector (dpExposureTime detParams) (dpGain detParams)
                     (dpNSpectraToAverage detParams) nTimesToPerform chan) (\as ->
         fetchData 0 as chan) >>
-    disableLightSources lightSources (dpIrradiation detParams)
+    disableLightSources eqs (dpIrradiation detParams)
     where
         fetchData :: Int -> Async () -> Chan AsyncData -> IO ()
         fetchData nFetched as chan = readChan chan >>= \val ->
@@ -192,45 +189,50 @@ executeFastDetectionLoop detector lightSources filterWheels detParams rearrangeF
                                                               r `deepseq` addDataToMVar dataMVar startTime r >>
                                                               fetchData (nFetched + 1) as chan
 
-executeIrradiation :: [EquipmentW] -> [EquipmentW] -> [IrradiationParams] -> Double -> IO ()
-executeIrradiation lightSources fws ips dur =
-    enableLightSources lightSources ips >>
-    when (dur > 0.0) (threadDelay (floor $ dur * 1.0e6)) >>
-    disableLightSources lightSources ips
+executeIrradiation :: [EquipmentW] -> [IrradiationParams] -> Double -> IO ()
+executeIrradiation eqs ips dur =
+    when (dur > 0.0) (
+        enableLightSources eqs ips >>
+        threadDelay (floor $ dur * 1.0e6) >>
+        disableLightSources eqs ips)
 
 switchToFilters :: [EquipmentW] -> [FilterParams] -> IO ()
-switchToFilters fws fps =
-    forM_ fps (\(FilterParams fwName fw) -> switchFilterWheel fws fwName fw)
+switchToFilters eqs fps =
+    forM_ fps (\(FilterParams eqName fwName fw) -> switchFilterWheel eqs eqName fwName fw)
 
 enableLightSources :: [EquipmentW] -> [IrradiationParams] -> IO ()
-enableLightSources lss params =
-    forM_ params (\(IrradiationParams sourceName channels powers) ->  activateLightSource (lookupLightSource lss sourceName) (zip channels powers))
+enableLightSources eqs params =
+    forM_ params (\(IrradiationParams eqName sourceName channels powers) ->
+        let [eq] = filter (\e -> equipmentName e == eqName) eqs
+        in  activateLightSource eq sourceName (zip channels powers))
 
 disableLightSources :: [EquipmentW] -> [IrradiationParams] -> IO ()
-disableLightSources lss params =
-    forM_ params (\(IrradiationParams sourceName _ _) -> deactivateLightSource (lookupLightSource lss sourceName))
+disableLightSources eqs params =
+    forM_ params (\(IrradiationParams eqName sourceName _ _) ->
+        let [eq] = filter (\e -> equipmentName e == eqName) eqs
+        in  deactivateLightSource eq)
 
 deactivateAllLightSources :: [EquipmentW] -> IO ()
 deactivateAllLightSources sources = mapM_ deactivateLightSource sources
 
-lightSourceNamesUsedIn :: MeasurementElement -> [Text]
-lightSourceNamesUsedIn me = S.toList (lightSourceNamesUsedIn' S.empty me)
+eqNameUsedAsLightSourceIn :: MeasurementElement -> [Text]
+eqNameUsedAsLightSourceIn me = S.toList (eqNameUsedAsLightSourceIn' S.empty me)
     where
-        lightSourceNamesUsedIn' :: Set Text -> MeasurementElement -> Set Text
-        lightSourceNamesUsedIn' s (MEDetection dps) = s <> (S.fromList . concat $ map (map ipLightSourceName . dpIrradiation) dps)
-        lightSourceNamesUsedIn' s (MEIrradiation _ ips) = s <> ((S.fromList . map ipLightSourceName) ips)
-        lightSourceNamesUsedIn' s (MEDoTimes _ mes) = s <> mconcat (map (lightSourceNamesUsedIn' S.empty) mes)
-        lightSourceNamesUsedIn' s (MEFastAcquisitionLoop _ dp) = s <> S.fromList (map ipLightSourceName . dpIrradiation $ dp)
-        lightSourceNamesUsedIn' s (METimeLapse _ _ mes) = s <> mconcat (map (lightSourceNamesUsedIn' S.empty) mes)
-        lightSourceNamesUsedIn' s (MEStageLoop _ _ mes) = s <> mconcat (map (lightSourceNamesUsedIn' S.empty) mes)
-        lightSourceNamesUsedIn' s _ = s
+        eqNameUsedAsLightSourceIn' :: Set Text -> MeasurementElement -> Set Text
+        eqNameUsedAsLightSourceIn' s (MEDetection dps) = s <> (S.fromList . concat $ map (map ipEquipmentName . dpIrradiation) dps)
+        eqNameUsedAsLightSourceIn' s (MEIrradiation _ ips) = s <> ((S.fromList . map ipEquipmentName) ips)
+        eqNameUsedAsLightSourceIn' s (MEDoTimes _ mes) = s <> mconcat (map (eqNameUsedAsLightSourceIn' S.empty) mes)
+        eqNameUsedAsLightSourceIn' s (MEFastAcquisitionLoop _ dp) = s <> S.fromList (map ipEquipmentName . dpIrradiation $ dp)
+        eqNameUsedAsLightSourceIn' s (METimeLapse _ _ mes) = s <> mconcat (map (eqNameUsedAsLightSourceIn' S.empty) mes)
+        eqNameUsedAsLightSourceIn' s (MEStageLoop _ _ mes) = s <> mconcat (map (eqNameUsedAsLightSourceIn' S.empty) mes)
+        eqNameUsedAsLightSourceIn' s _ = s
 
-switchFilterWheel :: [EquipmentW] -> Text -> Text -> IO ()
-switchFilterWheel fws fwName fName =
-    let filterWheel = head (filter (\fw -> hasFilterWheel fw && (filterWheelName fw == fwName)) fws)
-    in ST.timeout (floor 10e6) (switchToFilter filterWheel fName) >>= \result ->
+switchFilterWheel :: [EquipmentW] -> Text -> Text -> Text -> IO ()
+switchFilterWheel eqs eqName fwName fName =
+    let [eq] = filter (\e -> equipmentName e == eqName) eqs
+    in ST.timeout (floor 10e6) (switchToFilter eq fwName fName) >>= \result ->
        case result of
-           Nothing -> throwIO (userError ("timeout communicating with " ++ T.unpack (filterWheelName filterWheel)))
+           Nothing -> throwIO (userError ("timeout communicating with filterwheel " ++ T.unpack fwName))
            Just v -> return v
 
 robotNamesUsedIn :: MeasurementElement -> [Text]

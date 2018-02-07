@@ -36,12 +36,9 @@ initializeLumencor (LumencorLightSourceDesc name portName) =
 instance Equipment Lumencor where
     equipmentName _ = "Lumencor"
     closeDevice (Lumencor _ port _ _) = closeSerialPort port
-    hasLightSource _ = True
-    lightSourceName (Lumencor n _ _ _) = n
-    lightSourceCanControlPower _ = True
-    lightSourceAllowsMultipleChannels _ = True
-    lightSourceChannels _ = map fst lumencorChannels
-    activateLightSource (Lumencor _ port haveInitRef currFilterRef) chs =
+    availableLightSources (Lumencor n _ _ _) =
+        [LightSourceDescription n True True (map fst lumencorChannels)]
+    activateLightSource (Lumencor _ port haveInitRef currFilterRef) _ chs =
         readIORef haveInitRef >>= \haveInit ->
         when (not haveInit) (   -- init RS232 and arbitrarily select the green filter
             serialWrite port lumencorEnableRS232Message >>

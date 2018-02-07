@@ -32,26 +32,20 @@ import MeasurementProgram
 import MeasurementProgramTypes
 
 data Environment a = Environment {
-                      envLightSources :: [EquipmentW]
-                    , envFilterWheels :: [EquipmentW]
-                    , envMotorizedStages :: [EquipmentW]
-                    , envRobots :: [EquipmentW]
-                    , envDetector :: a
-                    , envRearrangementFuncs :: [ExternalRearrangementFunc]
+                      envEquipment :: ![EquipmentW]
+                    , envDetector :: !a
+                    , envRearrangementFuncs :: ![ExternalRearrangementFunc]
                     , envEncodedSpectrometerWavelengths :: !SB.ByteString
-                    , envAsyncDataMVar :: MVar [AcquiredData]
-                    , envAsyncStatusMessagesMVar :: MVar [Text]
-                    , envAsyncProgramWorker :: Async ()
+                    , envAsyncDataMVar :: !(MVar [AcquiredData])
+                    , envAsyncStatusMessagesMVar :: !(MVar [Text])
+                    , envAsyncProgramWorker :: !(Async ())
 }
 
 type ExposureTime = Double
 
 data RequestMessage = AcquireData !DetectionParams
                     | ListWavelengths
-                    | ListLightSources
-                    | ListFilterWheels
-                    | ListMotorizedStages
-                    | ListRobots
+                    | ListAvailableEquipment
                     | GetMotorizedStagePosition !Text
                     | SetMotorizedStagePosition !Text !(Double, Double, Double)
                     | ListRobotPrograms !Text
@@ -60,9 +54,10 @@ data RequestMessage = AcquireData !DetectionParams
                     | SetDetectorTemperature !Double
                     | GetDetectorTemperature
                     | ActivateLightSource {
-                        reqActivateName :: !Text
-                      , reqActivateChannels :: ![Text]
-                      , reqActivatePowers :: ![Double]
+                        alsEquipmentName :: !Text
+                      , alsName :: !Text
+                      , alsChannels :: ![Text]
+                      , alsPowers :: ![Double]
                     }
                     | DeactivateLightSource !Text
                     | TurnOffLightSource !Text
@@ -79,10 +74,7 @@ data RequestMessage = AcquireData !DetectionParams
 instance ToJSON RequestMessage where
     toEncoding ListWavelengths = pairs ("action" .= ("listwavelengths" :: Text))
     toEncoding (AcquireData p) = pairs ("action" .= ("acquiredata"  :: Text) <> "params" .= p)
-    toEncoding ListLightSources = pairs ("action" .= ("listlightsources" :: Text))
-    toEncoding ListFilterWheels = pairs ("action" .= ("listfilterwheels" :: Text))
-    toEncoding ListMotorizedStages = pairs ("action" .= ("listmotorizedstages" :: Text))
-    toEncoding ListRobots = pairs ("action" .= ("listmicroscoperobots" :: Text))
+    toEncoding ListAvailableEquipment = pairs ("action" .= ("listavailableequipment" :: Text))
     toEncoding (GetMotorizedStagePosition name) = pairs ("action" .= ("getmotorizedstageposition" :: Text) <> "name" .= name)
     toEncoding (SetMotorizedStagePosition name ds) = pairs ("action" .= ("setmotorizedstageposition" :: Text) <> "name" .= name <> "position" .= ds)
     toEncoding (ListRobotPrograms name) = pairs ("action" .= ("listrobotprograms" :: Text) <> "name" .= name)
@@ -91,7 +83,9 @@ instance ToJSON RequestMessage where
     toEncoding GetDetectorParameters = pairs ("action" .= ("getdetectorparameters" :: Text))
     toEncoding (SetDetectorTemperature t) = pairs ("action" .= ("setdetectortemperature" :: Text) <> "temperature" .= t)
     toEncoding GetDetectorTemperature = pairs ("action" .= ("getdetectortemperature" :: Text))
-    toEncoding (ActivateLightSource name channel power) = pairs ("action" .= ("activatelightsource" :: Text) <> "name" .= name <> "channel" .= channel <> "power" .= power)
+    toEncoding (ActivateLightSource eqName name channel power) =
+        pairs ("action" .= ("activatelightsource" :: Text) <> "equipmentname" .= eqName <>
+               "name" .= name <> "channel" .= channel <> "power" .= power)
     toEncoding (DeactivateLightSource name) = pairs ("action" .= ("deactivatelightsource" :: Text) <> "name" .= name)
     toEncoding (TurnOffLightSource name) = pairs ("action" .= ("turnofflightsource" :: Text) <> "name" .= name)
     toEncoding Ping = pairs ("action" .= ("ping" :: Text))
@@ -107,10 +101,7 @@ instance FromJSON RequestMessage where
         case (T.toLower action) of
             "acquiredata" -> AcquireData <$> v .: "params"
             "listwavelengths" -> return ListWavelengths
-            "listlightsources" -> return ListLightSources
-            "listfilterwheels" -> return ListFilterWheels
-            "listmotorizedstages" -> return ListMotorizedStages
-            "listrobots" -> return ListRobots
+            "listavailableequipment" -> return ListAvailableEquipment
             "getmotorizedstageposition" -> GetMotorizedStagePosition <$> v .: "name"
             "setmotorizedstageposition" -> SetMotorizedStagePosition <$> v .: "name" <*> v .: "position"
             "listrobotprograms" -> ListRobotPrograms <$> v .: "name"
@@ -119,7 +110,10 @@ instance FromJSON RequestMessage where
             "getdetectorparameters" -> return GetDetectorParameters
             "setdetectortemperature" -> SetDetectorTemperature <$> v .: "temperature"
             "getdetectortemperature" -> return GetDetectorTemperature
-            "activatelightsource" -> ActivateLightSource <$> v .: "name" <*> v .: "channel" <*> v .: "power"
+            "activatelightsource" -> ActivateLightSource <$> v .: "equipmentname"
+                                                         <*> v .: "name"
+                                                         <*> v .: "channel"
+                                                         <*> v .: "power"
             "deactivatelightsource" -> DeactivateLightSource <$> v .: "name"
             "turnofflightsource" -> TurnOffLightSource <$> v .: "name"
             "ping"      -> return Ping
@@ -138,10 +132,7 @@ data ResponseMessage = StatusOK
                      | StatusNoNewAsyncDataComing
                      | AcquiredDataResponse !AcquiredData
                      | Wavelengths !AcquiredData
-                     | AvailableLightSources ![EquipmentW]
-                     | AvailableFilterWheels ![EquipmentW]
-                     | AvailableMotorizedStages ![EquipmentW]
-                     | AvailableRobots ![EquipmentW]
+                     | AvailableEquipment ![EquipmentW]
                      | MotorizedStagePosition !(Double, Double, Double)
                      | RobotProgramsResponse ![Text]
                      | DetectorLimitsResponse !DetectorLimits
@@ -164,10 +155,7 @@ instance ToJSON ResponseMessage where
     toEncoding (StatusNoNewAsyncDataComing) = pairs ("responsetype" .= ("asyncacquisitionspectrastatus" :: Text) <> "status" .= ("nonewspectracoming" :: Text))
     toEncoding (AcquiredDataResponse d) = pairs ("responsetype" .= ("acquireddata" :: Text) <> "data" .= d)
     toEncoding (Wavelengths d) = pairs ("responsetype" .= ("wavelengths" :: Text) <> "wavelengths" .= d)
-    toEncoding (AvailableLightSources ls) = pairs ("responsetype" .= ("availablelightsources" :: Text) <> "lightsources" .= ls)
-    toEncoding (AvailableFilterWheels fws) = pairs ("responsetype" .= ("availablefilterwheels" :: Text) <> "filterwheels" .= fws)
-    toEncoding (AvailableMotorizedStages ss) = pairs ("responsetype" .= ("availablemotorizedstages" :: Text) <> "motorizedstages" .= ss)
-    toEncoding (AvailableRobots ss) = pairs ("responsetype" .= ("availablerobots" :: Text) <> "robots" .= ss)
+    toEncoding (AvailableEquipment es) = pairs ("responsetype" .= ("availableequipment" :: Text) <> "equipment" .= es)
     toEncoding (MotorizedStagePosition ds) = pairs ("responsetype" .= ("motorizedstageposition" :: Text) <> "position" .= ds)
     toEncoding (RobotProgramsResponse ps) = pairs ("responsetype" .= ("robotprograms" :: Text) <> "programs" .= ps)
     toEncoding (DetectorLimitsResponse dl) = pairs ("responsetype" .= ("detectorlimits" :: Text) <> "detectorlimits" .= dl)

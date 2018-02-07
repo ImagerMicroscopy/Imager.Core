@@ -25,15 +25,12 @@ data MeasurementElement = MEDetection ![DetectionParams]
                         deriving (Show)
 
 data ProgramEnvironment a = ProgramEnvironment {
-                                peDetector :: a
-                              , peStartTime :: TimeSpec
-                              , peLightSources :: [EquipmentW]
-                              , peFilterWheels :: [EquipmentW]
-                              , peMotorizedStages :: [EquipmentW]
-                              , peRobots :: [EquipmentW]
-                              , peRearrangementFuncs :: [ExternalRearrangementFunc]
-                              , peDataMVar :: MVar [AcquiredData]
-                              , peStatusMVar :: MVar [Text]
+                                peDetector :: !a
+                              , peStartTime :: !TimeSpec
+                              , peEquipment :: ![EquipmentW]
+                              , peRearrangementFuncs :: ![ExternalRearrangementFunc]
+                              , peDataMVar :: !(MVar [AcquiredData])
+                              , peStatusMVar :: !(MVar [Text])
                             }
 
 data DetectionParams = DetectionParams {
@@ -42,20 +39,22 @@ data DetectionParams = DetectionParams {
                          , dpNSpectraToAverage :: !Int
                          , dpBinningFactor :: !Int
                          , dpCropSize :: !(Int, Int)
-                         , dpIrradiation :: [IrradiationParams]
-                         , dpFilterParams :: [FilterParams]
+                         , dpIrradiation :: ![IrradiationParams]
+                         , dpFilterParams :: ![FilterParams]
                        }
                        deriving (Show, Eq)
 
 data IrradiationParams = IrradiationParams {
-                            ipLightSourceName :: !Text
-                          , ipLightSourceChannel :: ![Text]
-                          , ipPower :: ![Double]
+                            ipEquipmentName :: !Text
+                          , ipLightSourceName :: !Text
+                          , ipLightSourceChannels :: ![Text]
+                          , ipPowers :: ![Double]
                         }
                         deriving (Show, Eq)
 
 data FilterParams = FilterParams {
-                        fpFilterWheelName :: !Text
+                        fpEquipmentName :: !Text
+                      , fpFilterWheelName :: !Text
                       , fpFilterName :: !Text
                     } deriving (Show, Eq)
 
@@ -118,23 +117,27 @@ instance ToJSON DetectionParams where
 
 instance FromJSON IrradiationParams where
     parseJSON (Object v) =
-        IrradiationParams <$> v .: "lightsourcename"
+        IrradiationParams <$> v .: "equipmentname"
+                          <*> v .: "lightsourcename"
                           <*> v .: "lightsourcechannel"
                           <*> v .: "lightsourcepower"
     parseJSON _ = fail "can't decode irradiation params"
 instance ToJSON IrradiationParams where
-    toEncoding (IrradiationParams lName channel power) =
-        pairs ("lightsourcename" .= lName <> "lightsourcechannel" .= channel <> "lightsourcepower" .= power)
+    toEncoding (IrradiationParams eName lName channel power) =
+        pairs ("equipmentname" .= eName <> "lightsourcename" .= lName
+            <> "lightsourcechannel" .= channel <> "lightsourcepower" .= power)
     toJSON _ = error "no toJSON"
 
 instance FromJSON FilterParams where
     parseJSON (Object v) =
-        FilterParams <$> v .: "filterwheelname"
+        FilterParams <$> v .: "equipmentname"
+                     <*> v .: "filterwheelname"
                      <*> v .: "filtername"
     parseJSON _ = fail "can't decode FilterParams params"
 instance ToJSON FilterParams where
-    toEncoding (FilterParams filterWheelName filterName) =
-        pairs ("filterwheelname" .= filterWheelName <> "filtername" .= filterName)
+    toEncoding (FilterParams eName filterWheelName filterName) =
+        pairs ("equipmentname" .= eName <> "filterwheelname" .= filterWheelName
+            <> "filtername" .= filterName)
     toJSON _ = error "no toJSON"
 
 instance FromJSON PositionNameAndCoords where

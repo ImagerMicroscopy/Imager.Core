@@ -5,25 +5,28 @@ import Data.Text (Text)
 
 data EquipmentW = forall e. (Equipment e) => EquipmentW e
 
+type Name = Text
+type FilterName = Text
 type StagePosition = (Double, Double, Double)
 type ChannelName = Text
+
+data LightSourceDescription = LightSourceDescription {
+                                  lsdName :: !Text
+                                , lsdCanControlPower :: !Bool
+                                , lsdAllowsMultipleChannels :: !Bool
+                                , lsdChannels :: ![ChannelName]
+                              }
 
 class Equipment e where
     equipmentName :: e -> Text
     closeDevice :: e -> IO ()
 
-    hasLightSource :: e -> Bool
-    lightSourceName :: e -> Text
-    lightSourceCanControlPower :: e -> Bool
-    lightSourceAllowsMultipleChannels :: e -> Bool
-    lightSourceChannels :: e -> [ChannelName]
-    activateLightSource :: e -> [(ChannelName, Double)] -> IO ()
+    availableLightSources :: e -> [LightSourceDescription]
+    activateLightSource :: e -> Name -> [(ChannelName, Double)] -> IO ()
     deactivateLightSource :: e -> IO ()
 
-    hasFilterWheel  :: e -> Bool
-    filterWheelName :: e -> Text
-    filterWheelChannels :: e -> [Text]
-    switchToFilter :: e -> Text -> IO ()
+    availableFilterWheels  :: e -> [(Name, [FilterName])]
+    switchToFilter :: e -> Name -> FilterName -> IO ()
 
     hasMotorizedStage :: e -> Bool
     motorizedStageName :: e -> Text
@@ -38,16 +41,10 @@ class Equipment e where
     abortRobotProgramExecution :: e -> IO ()
 
 
-    hasLightSource _ = False
-    lightSourceName _ = error "calling lightSourceName"
-    lightSourceCanControlPower _ = error "calling lightSourceCanControlPower"
-    lightSourceAllowsMultipleChannels _ = error "calling lightSourceAllowsMultipleChannels"
-    lightSourceChannels _ = error "calling lightSourceChannels"
-    activateLightSource _ _ = error "calling activateLightSource"
+    availableLightSources _ = []
+    activateLightSource _ _ _ = error "calling activateLightSource"
     deactivateLightSource _ = error "calling deactivateLightSource"
-    hasFilterWheel _ = False
-    filterWheelName _ = error "calling filterWheelName"
-    filterWheelChannels _ = error "calling filterWheelChannels"
+    availableFilterWheels _ = []
     switchToFilter _ _ = error "calling switchToFilter"
     hasMotorizedStage _ = False
     motorizedStageName _  = error "calling motorizedStageName"
@@ -63,16 +60,10 @@ class Equipment e where
 instance Equipment EquipmentW where
     equipmentName (EquipmentW e) = equipmentName e
     closeDevice (EquipmentW e) = closeDevice e
-    hasLightSource (EquipmentW e) = hasLightSource e
-    lightSourceName (EquipmentW e) = lightSourceName e
-    lightSourceCanControlPower (EquipmentW e) = lightSourceCanControlPower e
-    lightSourceAllowsMultipleChannels (EquipmentW e) = lightSourceAllowsMultipleChannels e
-    lightSourceChannels (EquipmentW e) = lightSourceChannels e
+    availableLightSources (EquipmentW e) = availableLightSources e
     activateLightSource (EquipmentW e) = activateLightSource e
     deactivateLightSource (EquipmentW e) = deactivateLightSource e
-    hasFilterWheel (EquipmentW e) = hasFilterWheel e
-    filterWheelName (EquipmentW e) = filterWheelName e
-    filterWheelChannels (EquipmentW e) = filterWheelChannels e
+    availableFilterWheels (EquipmentW e) = availableFilterWheels e
     switchToFilter (EquipmentW e) = switchToFilter e
     hasMotorizedStage (EquipmentW e) = hasMotorizedStage e
     motorizedStageName (EquipmentW e)  = motorizedStageName e

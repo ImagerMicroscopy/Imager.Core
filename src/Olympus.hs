@@ -42,9 +42,8 @@ initializeOlympusIX71Dichroic (OlympusIX71DichroicDesc name portName chs) =
 instance Equipment OlympusIX71Dichroic where
     equipmentName _ = "Olympus IX71 Dichroic"
     closeDevice (OlympusIX71Dichroic _ _ _ port) = closeSerialPort port
-    hasFilterWheel _ = True
-    filterWheelChannels (OlympusIX71Dichroic _ chs _ _) = map fst chs
-    switchToFilter (OlympusIX71Dichroic _ chs currFilter port) chName =
+    availableFilterWheels (OlympusIX71Dichroic n chs _ _) = [(n, map fst chs)]
+    switchToFilter (OlympusIX71Dichroic _ chs currFilter port) _ chName =
         let filterIndex = fromJust (lookup chName chs)
         in  readIORef currFilter >>= \(haveInit, currFilterIdx) ->
             when ((not haveInit) || (currFilterIdx /= filterIndex)) (

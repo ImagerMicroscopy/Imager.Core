@@ -36,12 +36,9 @@ initializeCoherent (CoherentLightSourceDesc name portName) =
 instance Equipment Coherent where
     equipmentName _ = "Coherent laser"
     closeDevice (Coherent _ port _ _) = closeSerialPort port
-    hasLightSource _ = True
-    lightSourceName (Coherent n _ _ _) = n
-    lightSourceCanControlPower _ = True
-    lightSourceAllowsMultipleChannels _ = False
-    lightSourceChannels _ = [""]
-    activateLightSource (Coherent _ port powerRange currentPower) ((_, power) : _) =
+    availableLightSources (Coherent n _ _ _) =
+        [LightSourceDescription n True False ["laser"]]
+    activateLightSource (Coherent _ port powerRange currentPower) _ ((_, power) : _) =
         needToSetPower >>= \needPower ->
         when (needPower) (setPower power) >>
         sendAndReadResponse "L=1\r" >> return ()
