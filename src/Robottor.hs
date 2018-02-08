@@ -30,7 +30,7 @@ instance Equipment Robottor where
     robotName (Robottor n _ _) = n
     listRobotPrograms r =
         handleRobottorRequest r ListRobottorPrograms >>= \(RobottorProgramListResponse ps) ->
-        return ps
+        return (RobotProgramName <$> ps)
     robotAcceptsExternalCommands r =
         handleRobottorRequest r AllowsProgramExecution >>= \(AllowsProgramExecutionResponse b) -> return b
     executeRobotProgram r progName waitForCompletion =

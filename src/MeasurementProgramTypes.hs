@@ -16,7 +16,7 @@ import EquipmentTypes
 data MeasurementElement = MEDetection ![DetectionParams]
                         | MEIrradiation !Double ![IrradiationParams]
                         | MEWait !Double
-                        | MEExecuteRobotProgram !RobotName !Text !Bool
+                        | MEExecuteRobotProgram !RobotName !RobotProgramName !Bool
                         | MEDoTimes !Int ![MeasurementElement]
                         | MEFastAcquisitionLoop !Int !DetectionParams
                         | METimeLapse !Int !Double ![MeasurementElement]
