@@ -132,18 +132,18 @@ executeMeasurementElement env (MEStageLoop sn poss es) =
             updateStatusMessage env (T.format "stage position {} of {} ({})" (index, nPos, posName)) >>
             setStagePosition stageEq pos >> executeMeasurementElements env es))
     where
-        [stageEq] = filter (\e -> equipmentName e == sn) (peEquipment env)
+        [stageEq] = filter (\e -> hasMotorizedStage e && motorizedStageName e == sn) (peEquipment env)
         nPos = length poss
 
 executeMeasurementElement env (MERelativeStageLoop sn (RelativeStageLoopParams dx dy dz (bx, ax) (by, ay) (bz, az)) es) =
     withStatusMessage env "relative stage loop" (
-        getStagePosition stage >>= \currPos ->
+        getStagePosition stageEq >>= \currPos ->
         let poss = (allPositions currPos)
         in  forM_ (zip [1..] (allPositions currPos)) (\(index :: Int, pos) ->
                 updateStatusMessage env (T.format "relative stage position {} of {}" (index, length poss)) >>
-                setStagePosition stage pos >> executeMeasurementElements env es))
+                setStagePosition stageEq pos >> executeMeasurementElements env es))
     where
-        [stage] = filter (\e -> equipmentName e == sn) (peEquipment env)
+        [stageEq] = filter (\e -> hasMotorizedStage e && motorizedStageName e == sn) (peEquipment env)
         planesx = map ((*) dx . fromIntegral) [negate bx .. ax] :: [Double]
         planesy = map ((*) dy . fromIntegral) [negate by .. ay]
         planesz = map ((*) dz . fromIntegral) [negate bz .. az]

@@ -10,7 +10,7 @@ import FilterUtils
 
 data DummyLightSource = DummyLightSource !LSName
 data DummyFilterWheel = DummyFilterWheel !FWName ![(FName, Int)]
-data DummyStage = DummyStage !Text
+data DummyStage = DummyStage !StageName
 
 initializeDummyLightSource :: EquipmentDescription -> IO EquipmentW
 initializeDummyLightSource (DummyLightSourceDesc name) =
@@ -24,7 +24,7 @@ initializeDummyFilterWheel (DummyFilterWheelDesc name chs) =
 initializeDummyStage :: EquipmentDescription -> IO EquipmentW
 initializeDummyStage (DummyStageDesc name) =
     putStrLn ("dummy stage " ++ (T.unpack name) ++ " open") >>
-    return (EquipmentW $ DummyStage name)
+    return (EquipmentW $ DummyStage (StageName name))
 
 instance Equipment DummyLightSource where
     equipmentName _ = (EqName "Dummy light source")
@@ -46,10 +46,10 @@ instance Equipment DummyFilterWheel where
 
 instance Equipment DummyStage where
     equipmentName _ = (EqName "Dummy stage")
-    closeDevice (DummyStage n) = putStrLn ("dummy stage " ++ (T.unpack n) ++ " closed")
+    closeDevice (DummyStage n) = putStrLn ("dummy stage " ++ (T.unpack (fromStageName n)) ++ " closed")
     hasMotorizedStage _ = True
     motorizedStageName (DummyStage n) = n
     getStagePosition (DummyStage n) =
-        putStrLn ("read position of " ++ T.unpack n) >> return (0.0, 0.0, 0.0)
+        putStrLn ("read position of " ++ T.unpack (fromStageName n)) >> return (0.0, 0.0, 0.0)
     setStagePosition (DummyStage n) ds =
-        putStrLn ("set position of " ++ T.unpack n ++ " to " ++ show ds)
+        putStrLn ("set position of " ++ T.unpack (fromStageName n) ++ " to " ++ show ds)

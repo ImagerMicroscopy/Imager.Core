@@ -57,15 +57,15 @@ validateMeasurementElement eqs (METimeLapse n dur es)
     | otherwise = []
 validateMeasurementElement eqs (MEStageLoop stageName pos es)
     | null pos = ["no positions in stage loop"]
-    | T.null (fromEqName stageName) = ["no stage name"]
-    | stageName `notElem` stageNames = ["can't find stage named " ++ T.unpack (fromEqName stageName)]
+    | T.null (fromStageName stageName) = ["no stage name"]
+    | stageName `notElem` stageNames = ["can't find stage named " ++ T.unpack (fromStageName stageName)]
     | null es = ["stage loop but no elements"]
     | otherwise = []
     where
-        stageNames = map equipmentName (filter hasMotorizedStage eqs)
+        stageNames = map motorizedStageName (filter hasMotorizedStage eqs)
 validateMeasurementElement eqs (MERelativeStageLoop stageName (RelativeStageLoopParams dx dy dz (bx, ax) (by, ay) (bz, az)) es)
-    | T.null (fromEqName stageName) = ["no stage name"]
-    | stageName `notElem` stageNames = ["can't find stage named " ++ T.unpack (fromEqName stageName)]
+    | T.null (fromStageName stageName) = ["no stage name"]
+    | stageName `notElem` stageNames = ["can't find stage named " ++ T.unpack (fromStageName stageName)]
     | null es = ["relative stage loop but no elements"]
     | (dx < 0) || (dy < 0) || (dz < 0) = ["invalid additional planes distance"]
     | (bx < 0) || (ax < 0) = ["invalid additional planes x"]
@@ -73,7 +73,7 @@ validateMeasurementElement eqs (MERelativeStageLoop stageName (RelativeStageLoop
     | (bz < 0) || (az < 0) = ["invalid additional planes z"]
     | otherwise = []
     where
-        stageNames = map equipmentName (filter hasMotorizedStage eqs)
+        stageNames = map motorizedStageName (filter hasMotorizedStage eqs)
 
 verifyRobotElements :: [EquipmentW] -> MeasurementElement -> IO [String]
 verifyRobotElements  eqs me = do

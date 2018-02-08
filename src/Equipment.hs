@@ -28,8 +28,6 @@ newtype StageName = StageName {
                         fromStageName :: Text
                     } deriving (Show, Eq, Ord, ToJSON, FromJSON)
 
-type Name = Text
-type FilterName = Text
 type StagePosition = (Double, Double, Double)
 
 data LightSourceDescription = LightSourceDescription {

@@ -46,8 +46,8 @@ type ExposureTime = Double
 data RequestMessage = AcquireData !DetectionParams
                     | ListWavelengths
                     | ListAvailableEquipment
-                    | GetMotorizedStagePosition !EqName
-                    | SetMotorizedStagePosition !EqName !(Double, Double, Double)
+                    | GetMotorizedStagePosition !StageName
+                    | SetMotorizedStagePosition !StageName !(Double, Double, Double)
                     | ListRobotPrograms !EqName
                     | GetDetectorLimits !(Int, Int) Int
                     | GetDetectorParameters

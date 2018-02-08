@@ -18,13 +18,13 @@ lookupMaybeLightSource eqs (eqName, lsName) =
 lookupLightSource :: [EquipmentW] -> (EqName, LSName) -> EquipmentW
 lookupLightSource es n = fromJust $ lookupMaybeLightSource es n
 
-lookupStageThrows :: [EquipmentW] -> EqName -> EquipmentW
+lookupStageThrows :: [EquipmentW] -> StageName -> EquipmentW
 lookupStageThrows eqs name = case eligibleStages of
                         [s] -> s
-                        []  -> throw (userError ("no stage named " ++ (T.unpack $ fromEqName name)))
+                        []  -> throw (userError ("no stage named " ++ (T.unpack $ fromStageName name)))
                         _   -> throw (userError ("more than one stage with the same name"))
     where
-      eligibleStages = filter (\e -> hasMotorizedStage e && (name == equipmentName e)) eqs
+      eligibleStages = filter (\e -> hasMotorizedStage e && (name == motorizedStageName e)) eqs
 
 lookupRobotThrows :: [EquipmentW] -> EqName -> EquipmentW
 lookupRobotThrows eqs eqName = case (filter (\e -> hasRobot e && (equipmentName e == eqName)) eqs) of
