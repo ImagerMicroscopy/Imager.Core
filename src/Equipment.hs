@@ -24,6 +24,9 @@ newtype FWName = FWName {
 newtype FName = FName {
                    fromFName :: Text
                 } deriving (Show, Eq, Ord, ToJSON, FromJSON)
+newtype StageName = StageName {
+                        fromStageName :: Text
+                    } deriving (Show, Eq, Ord, ToJSON, FromJSON)
 
 type Name = Text
 type FilterName = Text
@@ -48,7 +51,7 @@ class Equipment e where
     switchToFilter :: e -> FWName -> FName -> IO ()
 
     hasMotorizedStage :: e -> Bool
-    motorizedStageName :: e -> Text
+    motorizedStageName :: e -> StageName
     getStagePosition :: e -> IO StagePosition
     setStagePosition :: e -> StagePosition -> IO ()
 
