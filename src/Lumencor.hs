@@ -99,11 +99,11 @@ lumencorEnableMessage channels filter =
         channelEnableByte LCGreen = 2^1
         channelEnableByte LCRed = 2^0
 
-lumencorIntensityMessage :: [LumencorChannel] -> [Double] -> ByteString
+lumencorIntensityMessage :: [LumencorChannel] -> [LSIlluminationPower] -> ByteString
 lumencorIntensityMessage chs ps = mconcat (zipWith lumencorChannelIntensityMessage chs ps)
 
-lumencorChannelIntensityMessage :: LumencorChannel -> Double -> ByteString
-lumencorChannelIntensityMessage ch p =
+lumencorChannelIntensityMessage :: LumencorChannel -> LSIlluminationPower -> ByteString
+lumencorChannelIntensityMessage ch (LSIlluminationPower p) =
     B.pack [0x53, byte5, 0x03, byte3, byte2, byte1, 0x50]
     where
         intensityByte = round ((1.0 - p / 100.0) * 255) -- 255 means no light

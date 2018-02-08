@@ -139,13 +139,13 @@ validateIrradiation eqs IrradiationParams{..} =
                     then []
                     else ["invalid light source parameters for " ++ T.unpack (fromLSName ipLightSourceName) ++ ": " ++ T.unpack errMsg]
 
-validLightSourceChannelsAndPowers :: EquipmentW -> LSName -> [LSChannelName] -> [Double] -> Text
+validLightSourceChannelsAndPowers :: EquipmentW -> LSName -> [LSChannelName] -> [LSIlluminationPower] -> Text
 validLightSourceChannelsAndPowers eq lsName channels powers
     | length channels /= length powers = "must have same number of channels and powers"
     | (length channels > 1) && (not (lsdAllowsMultipleChannels lsParams)) = "light source does not allow multiple channels"
     | null channels = "channels cannot be empty"
     | not (all (\c -> lightSourceHasChannel eq c) channels) = "invalid channel(s)"
-    | not (all (\p -> within p 0.0 100.0) powers) = "power outside valid range"
+    | not (all (\(LSIlluminationPower p) -> within p 0.0 100.0) powers) = "power outside valid range"
     | not (nodups channels) = "duplicate channels requested"
     | otherwise = T.empty
     where

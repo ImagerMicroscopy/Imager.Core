@@ -49,7 +49,7 @@ instance Equipment AsahiLightSource where
             Just idx ->
                 handleAsahiMessage port "S=0\r\n" >> -- close shutter
                 handleAsahiMessage port ("F=" ++ show idx ++ "\r\n") >> -- set filter
-                handleAsahiMessage port ("LI=" ++ (show . toInteger . round $ power) ++ "\r\n") >> --set power
+                handleAsahiMessage port ("LI=" ++ (show . toInteger . round . fromLSIlluminationPower $ power) ++ "\r\n") >> --set power
                 handleAsahiMessage port "S=1\r\n"
     deactivateLightSource (AsahiLightSource _ _ port) = handleAsahiMessage port "S=0\r\n"
 

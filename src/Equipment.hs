@@ -15,6 +15,9 @@ newtype LSName = LSName {
 newtype LSChannelName = LSChannelName {
                             fromLSChannelName :: Text
                         } deriving (Show, Eq, Ord, Monoid, ToJSON, FromJSON)
+newtype LSIlluminationPower = LSIlluminationPower {
+                                  fromLSIlluminationPower :: Double
+                              } deriving (Show, Eq, Ord, ToJSON, FromJSON)
 
 type Name = Text
 type FilterName = Text
@@ -33,7 +36,7 @@ class Equipment e where
     closeDevice :: e -> IO ()
 
     availableLightSources :: e -> [LightSourceDescription]
-    activateLightSource :: e -> LSName -> [(LSChannelName, Double)] -> IO ()
+    activateLightSource :: e -> LSName -> [(LSChannelName, LSIlluminationPower)] -> IO ()
     deactivateLightSource :: e -> IO ()
 
     availableFilterWheels  :: e -> [(Name, [FilterName])]

@@ -23,14 +23,14 @@ import EquipmentTypes
 import MiscUtils
 import RCSerialPort
 
-data Coherent = Coherent !LSName !SerialPort !(IORef (Bool, Double, Double)) !(IORef (Bool, Double))
+data Coherent = Coherent !LSName !SerialPort !(IORef (Bool, LSIlluminationPower, LSIlluminationPower)) !(IORef (Bool, LSIlluminationPower))
 
 initializeCoherent :: EquipmentDescription -> IO EquipmentW
 initializeCoherent (CoherentLightSourceDesc name portName) =
     let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS19200}) (TimeoutMillis 10000) SerialPortNoDebug
     in  openSerialPort portName serialSettings >>= \port ->
-        newIORef (False, 0.0, 0.0) >>= \powerRange ->
-        newIORef (False, 0.0) >>= \currentPower ->
+        newIORef (False, LSIlluminationPower 0.0, LSIlluminationPower 0.0) >>= \powerRange ->
+        newIORef (False, LSIlluminationPower 0.0) >>= \currentPower ->
         return (EquipmentW $ Coherent (LSName name) port powerRange currentPower)
 
 instance Equipment Coherent where
@@ -49,14 +49,15 @@ instance Equipment Coherent where
                 case cp of
                     (False, _) -> return True
                     (True, p)  -> return (p /= power)
-            setPower :: Double -> IO ()
+            setPower :: LSIlluminationPower -> IO ()
             setPower p = powerStr p >>= sendAndReadResponse >>
                          writeIORef currentPower (True, p)
-            powerStr :: Double -> IO ByteString
-            powerStr p = minMaxPower >>= \(minPower, maxPower) ->
-                        let powerVal = floor (minPower + p / 100.0 * (maxPower - minPower)) :: Int
-                        in return ("P=" <> T.encodeUtf8 (T.pack $ show powerVal) <> "\r")
-            minMaxPower :: IO (Double, Double)
+            powerStr :: LSIlluminationPower -> IO ByteString
+            powerStr (LSIlluminationPower p) =
+                minMaxPower >>= \(LSIlluminationPower minPower, LSIlluminationPower maxPower) ->
+                let powerVal = floor (minPower + p / 100.0 * (maxPower - minPower)) :: Int
+                in return ("P=" <> T.encodeUtf8 (T.pack $ show powerVal) <> "\r")
+            minMaxPower :: IO (LSIlluminationPower, LSIlluminationPower)
             minMaxPower = readIORef powerRange >>= \(haveRange, minP, maxP) ->
                           if (haveRange)
                           then return (minP, maxP)
@@ -64,8 +65,8 @@ instance Equipment Coherent where
                                writeIORef powerRange (True, minPower, maxPower) >>
                                sendAndReadResponse "CDRH=0\r" >> sendAndReadResponse "CW=1\r" >>
                                return (minPower, maxPower)
-            minPowerQ = parseQuery "?MINLP\r"
-            maxPowerQ = parseQuery "?MAXLP\r"
+            minPowerQ = LSIlluminationPower <$> parseQuery "?MINLP\r"
+            maxPowerQ = LSIlluminationPower <$> parseQuery "?MAXLP\r"
             parseQuery :: ByteString -> IO Double
             parseQuery q = sendAndReadResponse q >>= return . read . filter (`elem` ('.' : ['0' .. '9'])) . T.unpack . T.decodeUtf8
             sendAndReadResponse :: ByteString -> IO ByteString

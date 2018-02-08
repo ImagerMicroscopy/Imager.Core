@@ -57,7 +57,7 @@ data RequestMessage = AcquireData !DetectionParams
                         alsEquipmentName :: !EqName
                       , alsName :: !LSName
                       , alsChannels :: ![LSChannelName]
-                      , alsPowers :: ![Double]
+                      , alsPowers :: ![LSIlluminationPower]
                     }
                     | DeactivateLightSource !EqName
                     | TurnOffLightSource !EqName
