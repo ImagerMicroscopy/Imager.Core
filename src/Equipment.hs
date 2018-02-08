@@ -18,11 +18,13 @@ newtype LSChannelName = LSChannelName {
 newtype LSIlluminationPower = LSIlluminationPower {
                                   fromLSIlluminationPower :: Double
                               } deriving (Show, Eq, Ord, ToJSON, FromJSON)
+newtype FWName = FWName {
+                     fromFWName :: Text
+                 } deriving (Show, Eq, Ord, ToJSON, FromJSON)
 
 type Name = Text
 type FilterName = Text
 type StagePosition = (Double, Double, Double)
-type ChannelName = Text
 
 data LightSourceDescription = LightSourceDescription {
                                   lsdName :: !LSName
@@ -39,8 +41,8 @@ class Equipment e where
     activateLightSource :: e -> LSName -> [(LSChannelName, LSIlluminationPower)] -> IO ()
     deactivateLightSource :: e -> IO ()
 
-    availableFilterWheels  :: e -> [(Name, [FilterName])]
-    switchToFilter :: e -> Name -> FilterName -> IO ()
+    availableFilterWheels  :: e -> [(FWName, [FilterName])]
+    switchToFilter :: e -> FWName -> FilterName -> IO ()
 
     hasMotorizedStage :: e -> Bool
     motorizedStageName :: e -> Text

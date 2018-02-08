@@ -54,7 +54,7 @@ data IrradiationParams = IrradiationParams {
 
 data FilterParams = FilterParams {
                         fpEquipmentName :: !EqName
-                      , fpFilterWheelName :: !Text
+                      , fpFilterWheelName :: !FWName
                       , fpFilterName :: !Text
                     } deriving (Show, Eq)
 

@@ -119,7 +119,7 @@ validateDetection eqs DetectionParams{..} =
     where
         filterParams = dpFilterParams
         filtersAreValid = noEmptyFilterWheelNames && noEmptyFilterNames && noDupFilterWheels && all filterExists filterParams
-        noEmptyFilterWheelNames = all (not . T.null) (map fpFilterWheelName filterParams)
+        noEmptyFilterWheelNames = all (not . T.null . fromFWName) (map fpFilterWheelName filterParams)
         noEmptyFilterNames = all (not . T.null) (map fpFilterName filterParams)
         noDupFilterWheels = nodups (map fpFilterWheelName filterParams)
         filterExists (FilterParams eqName fwName fName) =
