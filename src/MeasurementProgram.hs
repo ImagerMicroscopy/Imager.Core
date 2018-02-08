@@ -227,7 +227,7 @@ eqNamesUsedAsLightSourceIn me = S.toList (eqNamesUsedAsLightSourceIn' S.empty me
         eqNamesUsedAsLightSourceIn' s (MEStageLoop _ _ mes) = s <> mconcat (map (eqNamesUsedAsLightSourceIn' S.empty) mes)
         eqNamesUsedAsLightSourceIn' s _ = s
 
-switchFilterWheel :: [EquipmentW] -> EqName -> FWName -> Text -> IO ()
+switchFilterWheel :: [EquipmentW] -> EqName -> FWName -> FName -> IO ()
 switchFilterWheel eqs eqName fwName fName =
     let [eq] = filter (\e -> equipmentName e == eqName) eqs
     in ST.timeout (floor 10e6) (switchToFilter eq fwName fName) >>= \result ->

@@ -21,6 +21,9 @@ newtype LSIlluminationPower = LSIlluminationPower {
 newtype FWName = FWName {
                      fromFWName :: Text
                  } deriving (Show, Eq, Ord, ToJSON, FromJSON)
+newtype FName = FName {
+                   fromFName :: Text
+                } deriving (Show, Eq, Ord, ToJSON, FromJSON)
 
 type Name = Text
 type FilterName = Text
@@ -41,8 +44,8 @@ class Equipment e where
     activateLightSource :: e -> LSName -> [(LSChannelName, LSIlluminationPower)] -> IO ()
     deactivateLightSource :: e -> IO ()
 
-    availableFilterWheels  :: e -> [(FWName, [FilterName])]
-    switchToFilter :: e -> FWName -> FilterName -> IO ()
+    availableFilterWheels  :: e -> [(FWName, [FName])]
+    switchToFilter :: e -> FWName -> FName -> IO ()
 
     hasMotorizedStage :: e -> Bool
     motorizedStageName :: e -> Text

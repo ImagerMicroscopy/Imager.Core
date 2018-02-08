@@ -9,7 +9,7 @@ import EquipmentTypes
 import FilterUtils
 
 data DummyLightSource = DummyLightSource !LSName
-data DummyFilterWheel = DummyFilterWheel !FWName ![(Text, Int)]
+data DummyFilterWheel = DummyFilterWheel !FWName ![(FName, Int)]
 data DummyStage = DummyStage !Text
 
 initializeDummyLightSource :: EquipmentDescription -> IO EquipmentW
@@ -19,7 +19,7 @@ initializeDummyLightSource (DummyLightSourceDesc name) =
 initializeDummyFilterWheel :: EquipmentDescription -> IO EquipmentW
 initializeDummyFilterWheel (DummyFilterWheelDesc name chs) =
     putStrLn ("Opened dummy filter wheel " ++ T.unpack name ++ " with filters " ++ show chs) >>
-    return (EquipmentW $ DummyFilterWheel (FWName name) (validateFilters id (0,5) chs))
+    return (EquipmentW $ DummyFilterWheel (FWName name) (validateFilters FName (0,5) chs))
 
 initializeDummyStage :: EquipmentDescription -> IO EquipmentW
 initializeDummyStage (DummyStageDesc name) =
@@ -41,8 +41,8 @@ instance Equipment DummyFilterWheel where
     equipmentName _ = (EqName "Dummy filter wheel")
     closeDevice (DummyFilterWheel name _) = putStrLn ("Closed filter wheel " ++ T.unpack (fromFWName name))
     availableFilterWheels (DummyFilterWheel n chs) = [(n, map fst chs)]
-    switchToFilter (DummyFilterWheel name chs) _ chName =
-        putStrLn ("Switched filter wheel " ++ T.unpack (fromFWName name) ++ " to filter " ++ T.unpack chName)
+    switchToFilter (DummyFilterWheel name chs) _ fName =
+        putStrLn ("Switched filter wheel " ++ T.unpack (fromFWName name) ++ " to filter " ++ T.unpack (fromFName fName))
 
 instance Equipment DummyStage where
     equipmentName _ = (EqName "Dummy stage")

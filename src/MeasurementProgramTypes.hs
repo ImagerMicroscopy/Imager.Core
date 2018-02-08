@@ -55,7 +55,7 @@ data IrradiationParams = IrradiationParams {
 data FilterParams = FilterParams {
                         fpEquipmentName :: !EqName
                       , fpFilterWheelName :: !FWName
-                      , fpFilterName :: !Text
+                      , fpFilterName :: !FName
                     } deriving (Show, Eq)
 
 data PositionNameAndCoords = PositionNameAndCoords !Text !StagePosition

@@ -26,7 +26,7 @@ import FilterUtils
 import MiscUtils
 import RCSerialPort
 
-data OlympusIX71Dichroic = OlympusIX71Dichroic !FWName ![(Text, Int)] !(IORef (Bool, Int)) !SerialPort
+data OlympusIX71Dichroic = OlympusIX71Dichroic !FWName ![(FName, Int)] !(IORef (Bool, Int)) !SerialPort
 
 initializeOlympusIX71Dichroic :: EquipmentDescription -> IO EquipmentW
 initializeOlympusIX71Dichroic (OlympusIX71DichroicDesc name portName chs) =
@@ -37,7 +37,7 @@ initializeOlympusIX71Dichroic (OlympusIX71DichroicDesc name portName chs) =
         when (response /= "1LOG +\r") (
             putStrLn ("unexpected response from Olymus IX71 DM: " ++ show response) >> putStrLn "press return to close" >> getLine >> error "failed") >>
         putStrLn "done!" >> newIORef (False, 0) >>= \currFilterRef ->
-        return (EquipmentW $ OlympusIX71Dichroic (FWName name) (validateFilters id (0, 5) chs) currFilterRef port)
+        return (EquipmentW $ OlympusIX71Dichroic (FWName name) (validateFilters FName (0, 5) chs) currFilterRef port)
 
 instance Equipment OlympusIX71Dichroic where
     equipmentName _ = (EqName "Olympus IX71 Dichroic")
