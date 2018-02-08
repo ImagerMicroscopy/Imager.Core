@@ -48,7 +48,7 @@ data RequestMessage = AcquireData !DetectionParams
                     | ListAvailableEquipment
                     | GetMotorizedStagePosition !StageName
                     | SetMotorizedStagePosition !StageName !(Double, Double, Double)
-                    | ListRobotPrograms !EqName
+                    | ListRobotPrograms !RobotName
                     | GetDetectorLimits !(Int, Int) Int
                     | GetDetectorParameters
                     | SetDetectorTemperature !Double

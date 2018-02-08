@@ -26,7 +26,7 @@ lookupStageThrows eqs name = case eligibleStages of
     where
       eligibleStages = filter (\e -> hasMotorizedStage e && (name == motorizedStageName e)) eqs
 
-lookupRobotThrows :: [EquipmentW] -> EqName -> EquipmentW
-lookupRobotThrows eqs eqName = case (filter (\e -> hasRobot e && (equipmentName e == eqName)) eqs) of
+lookupRobotThrows :: [EquipmentW] -> RobotName -> EquipmentW
+lookupRobotThrows eqs eqName = case (filter (\e -> hasRobot e && (robotName e == eqName)) eqs) of
                                    [r] -> r
                                    _   -> throw (userError "missing robot in program validation")

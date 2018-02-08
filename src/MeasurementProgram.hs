@@ -49,7 +49,7 @@ executeMeasurement env me = withAsync (forever $ resetSystemSleepTimer >> thread
         eqsUsedAsLightSource = eqNamesUsedAsLightSourceIn me
         deactiveUsedLightSources = mapM_ deactivateLightSource (filter (\e -> equipmentName e `elem` eqsUsedAsLightSource) eqs)
         usedRobots = let usedRobotEqNames = robotNamesUsedIn me
-                     in  filter (\e -> (equipmentName e) `elem` usedRobotEqNames) eqs
+                     in  filter (\e -> (robotName e) `elem` usedRobotEqNames) eqs
 
 executeMeasurementElements :: Detector a => ProgramEnvironment a -> [MeasurementElement] -> IO ()
 executeMeasurementElements env es = mapM_ (executeMeasurementElement env) es
@@ -73,11 +73,11 @@ executeMeasurementElement env (MEIrradiation dur ips) =
 executeMeasurementElement env (MEWait dur) =
     withStatusMessage env (T.format "waiting {} s" (T.Only dur)) (
         threadDelay (round $ dur * 1e6))
-executeMeasurementElement env (MEExecuteRobotProgram rEqName pName wait) =
-    withStatusMessage env (T.format "executing program {} on {}" (pName, fromEqName rEqName)) (
+executeMeasurementElement env (MEExecuteRobotProgram rName pName wait) =
+    withStatusMessage env (T.format "executing program {} on {}" (pName, fromRobotName rName)) (
         executeRobotProgram robot pName wait)
     where
-        [robot] = filter (\e -> equipmentName e == rEqName) (peEquipment env)
+        [robot] = filter (\e -> hasRobot e && robotName e == rName) (peEquipment env)
 executeMeasurementElement env (MEDoTimes n es) =
     withStatusMessage env "do times" (
         forM_ (zip [1 ..] (take n . repeat $ es)) (\(index :: Int, ses) ->
@@ -235,10 +235,10 @@ switchFilterWheel eqs eqName fwName fName =
            Nothing -> throwIO (userError ("timeout communicating with filterwheel " ++ T.unpack (fromFWName fwName)))
            Just v -> return v
 
-robotNamesUsedIn :: MeasurementElement -> [EqName]
+robotNamesUsedIn :: MeasurementElement -> [RobotName]
 robotNamesUsedIn = foldMeasurementElement f
     where
-        f :: MeasurementElement -> [EqName]
+        f :: MeasurementElement -> [RobotName]
         f (MEExecuteRobotProgram rName _ _) = [rName]
         f _ = []
 

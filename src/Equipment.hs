@@ -27,6 +27,9 @@ newtype FName = FName {
 newtype StageName = StageName {
                         fromStageName :: Text
                     } deriving (Show, Eq, Ord, ToJSON, FromJSON)
+newtype RobotName = RobotName {
+                        fromRobotName :: Text
+                    } deriving (Show, Eq, Ord, ToJSON, FromJSON)
 
 type StagePosition = (Double, Double, Double)
 
@@ -54,7 +57,7 @@ class Equipment e where
     setStagePosition :: e -> StagePosition -> IO ()
 
     hasRobot :: e -> Bool
-    robotName :: e -> Text
+    robotName :: e -> RobotName
     listRobotPrograms :: e -> IO [Text]
     robotAcceptsExternalCommands :: e -> IO Bool
     executeRobotProgram :: e -> Text -> Bool -> IO ()

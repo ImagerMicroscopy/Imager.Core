@@ -15,13 +15,13 @@ import EquipmentTypes
 import MiscUtils
 
 data Robottor = Robottor {
-                    roName :: !Text
+                    roName :: !RobotName
                   , roIPAddress :: !String
                   , roPortNum :: !Int
                 }
 
 initializeRobottor :: EquipmentDescription -> IO EquipmentW
-initializeRobottor (RobottorDesc name ip port) = return (EquipmentW $ Robottor name ip port)
+initializeRobottor (RobottorDesc name ip port) = return (EquipmentW $ Robottor (RobotName name) ip port)
 
 instance Equipment Robottor where
     equipmentName _ = (EqName "Robottor")
