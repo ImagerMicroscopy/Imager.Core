@@ -6,14 +6,14 @@ import qualified Data.Text as T
 
 import MiscUtils
 
-validateFilters :: (Int, Int) -> [(Text, Int)] -> [(Text, Int)]
-validateFilters idxLimits chs
+validateFilters :: (Text -> c) -> (Int, Int) -> [(Text, Int)] -> [(c, Int)] -- c is LSChannelNane or FName
+validateFilters f idxLimits chs
     | haveDuplicates chs = error ("duplicate channels in " ++ show chs)
     | invalidFilterIndices idxLimits chs = error ("invalid filter indices in "  ++ show chs)
     | invalidFilterNames chs = error ("invalid filter names in " ++ show chs)
-    | otherwise = chs
+    | otherwise = mapFirst f chs
     where
         haveDuplicates chs = not ((nodups (map fst chs)) && (nodups (map snd chs)))
         nodups xs = (nub xs) == xs
         invalidFilterIndices (minIdx, maxIdx) = any (\(_, i) -> not (within i minIdx maxIdx))
-        invalidFilterNames = any (\(n, _) -> T.null n)
+        invalidFilterNames = any (T.null . fst)

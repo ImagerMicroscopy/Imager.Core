@@ -56,7 +56,7 @@ data RequestMessage = AcquireData !DetectionParams
                     | ActivateLightSource {
                         alsEquipmentName :: !EqName
                       , alsName :: !LSName
-                      , alsChannels :: ![Text]
+                      , alsChannels :: ![LSChannelName]
                       , alsPowers :: ![Double]
                     }
                     | DeactivateLightSource !EqName

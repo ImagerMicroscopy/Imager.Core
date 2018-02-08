@@ -38,12 +38,12 @@ initializeThorlabsFW130H (ThorlabsFW103HDesc name portName chs) =
         serialWrite port fw103HStopUpdatesMessage >> serialWrite port fw103HMoveHomeMessage >>
         fw103HWaitUntilHomingStops port >>
         putStrLn "done!" >>
-        return (EquipmentW $ ThorlabsFW103H name (validateFilters (0, 5) chs) port)
+        return (EquipmentW $ ThorlabsFW103H name (validateFilters id (0, 5) chs) port)
 
 initializeThorlabsFW102C :: EquipmentDescription -> IO EquipmentW
 initializeThorlabsFW102C (ThorlabsFW102CDesc name portName chs) =
     let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS115200}) (TimeoutMillis 30000) SerialPortNoDebug
-    in  EquipmentW <$> (ThorlabsFW102C name (validateFilters (0, 5) chs) <$> openSerialPort portName serialSettings)
+    in  EquipmentW <$> (ThorlabsFW102C name (validateFilters id (0, 5) chs) <$> openSerialPort portName serialSettings)
 
 instance Equipment ThorlabsFW103H where
     equipmentName _ = (EqName "ThorlabsFW103H")

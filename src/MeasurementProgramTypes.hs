@@ -47,7 +47,7 @@ data DetectionParams = DetectionParams {
 data IrradiationParams = IrradiationParams {
                             ipEquipmentName :: !EqName
                           , ipLightSourceName :: !LSName
-                          , ipLightSourceChannels :: ![Text]
+                          , ipLightSourceChannels :: ![LSChannelName]
                           , ipPowers :: ![Double]
                         }
                         deriving (Show, Eq)

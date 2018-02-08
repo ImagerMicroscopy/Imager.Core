@@ -23,7 +23,7 @@ import FilterUtils
 import MiscUtils
 import RCSerialPort
 
-data AsahiLightSource = AsahiLightSource !LSName ![(Text, Int)] !SerialPort
+data AsahiLightSource = AsahiLightSource !LSName ![(LSChannelName, Int)] !SerialPort
 
 initializeAsahiLightSource :: EquipmentDescription -> IO EquipmentW
 initializeAsahiLightSource (AsahiLightSourceDesc name portName chs) =
@@ -31,7 +31,7 @@ initializeAsahiLightSource (AsahiLightSourceDesc name portName chs) =
     in  openSerialPort portName serialSettings >>= \port ->
         readLampLife port >>= \life ->
         putStrLn ("Asahi lamp has been on " ++ show life ++ " hours (recommended lamp life 500 hours, max lamp life 1000 hours)") >>
-                  return (EquipmentW $ AsahiLightSource (LSName name) (validateFilters (1, 8) chs) port)
+                  return (EquipmentW $ AsahiLightSource (LSName name) (validateFilters LSChannelName (1, 8) chs) port)
     where
         readLampLife :: SerialPort -> IO Double
         readLampLife port =
@@ -45,7 +45,7 @@ instance Equipment AsahiLightSource where
         [LightSourceDescription n True False (map fst chs)]
     activateLightSource (AsahiLightSource _ chs port) _ ((filter, power) : _) =
         case (lookup filter chs) of
-            Nothing -> throwIO (userError ("missing filter " ++ T.unpack filter))
+            Nothing -> throwIO (userError ("missing filter " ++ T.unpack (fromLSChannelName filter)))
             Just idx ->
                 handleAsahiMessage port "S=0\r\n" >> -- close shutter
                 handleAsahiMessage port ("F=" ++ show idx ++ "\r\n") >> -- set filter

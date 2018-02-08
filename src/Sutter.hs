@@ -34,7 +34,7 @@ initializeSutterLambda10B (SutterLambda10BDesc name portName chs) =
     in  openSerialPort portName serialSettings >>= \port ->
         serialWriteByte port 238 >> serialReadUntilChar port '\r'>>
         serialWriteByte port 253 >> serialReadUntilChar port '\r' >>
-        return (EquipmentW $ SutterLambda10B name (validateFilters (0, 9) chs) port)
+        return (EquipmentW $ SutterLambda10B name (validateFilters id (0, 9) chs) port)
 
 instance Equipment SutterLambda10B where
     equipmentName _ = (EqName "SutterLambda10B")

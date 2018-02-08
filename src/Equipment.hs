@@ -12,6 +12,9 @@ newtype EqName = EqName {
 newtype LSName = LSName {
                      fromLSName :: Text
                  } deriving (Show, Eq, Ord, Monoid, ToJSON, FromJSON)
+newtype LSChannelName = LSChannelName {
+                            fromLSChannelName :: Text
+                        } deriving (Show, Eq, Ord, Monoid, ToJSON, FromJSON)
 
 type Name = Text
 type FilterName = Text
@@ -22,7 +25,7 @@ data LightSourceDescription = LightSourceDescription {
                                   lsdName :: !LSName
                                 , lsdCanControlPower :: !Bool
                                 , lsdAllowsMultipleChannels :: !Bool
-                                , lsdChannels :: ![ChannelName]
+                                , lsdChannels :: ![LSChannelName]
                               }
 
 class Equipment e where
@@ -30,7 +33,7 @@ class Equipment e where
     closeDevice :: e -> IO ()
 
     availableLightSources :: e -> [LightSourceDescription]
-    activateLightSource :: e -> LSName -> [(ChannelName, Double)] -> IO ()
+    activateLightSource :: e -> LSName -> [(LSChannelName, Double)] -> IO ()
     deactivateLightSource :: e -> IO ()
 
     availableFilterWheels  :: e -> [(Name, [FilterName])]

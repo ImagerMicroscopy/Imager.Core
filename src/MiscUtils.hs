@@ -44,6 +44,9 @@ sequenceEither [] = return ()
 sequenceEither xs = let (ls, rs) = partitionEithers xs
                in if (null ls) then Right (head rs) else Left (head ls)
 
+mapFirst :: (a -> b) -> [(a, c)] -> [(b, c)]
+mapFirst f = map (\(a, b) -> (f a, b))
+
 byteStringFromVector :: forall a . Storable a => Vector a -> ByteString
 byteStringFromVector v = unsafePerformIO $
     let sizeOfElem = sizeOf (undefined :: a)

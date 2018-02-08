@@ -19,7 +19,7 @@ initializeDummyLightSource (DummyLightSourceDesc name) =
 initializeDummyFilterWheel :: EquipmentDescription -> IO EquipmentW
 initializeDummyFilterWheel (DummyFilterWheelDesc name chs) =
     putStrLn ("Opened dummy filter wheel " ++ T.unpack name ++ " with filters " ++ show chs) >>
-    return (EquipmentW $ DummyFilterWheel name (validateFilters (0,5) chs))
+    return (EquipmentW $ DummyFilterWheel name (validateFilters id (0,5) chs))
 
 initializeDummyStage :: EquipmentDescription -> IO EquipmentW
 initializeDummyStage (DummyStageDesc name) =
@@ -30,7 +30,7 @@ instance Equipment DummyLightSource where
     equipmentName _ = (EqName "Dummy light source")
     closeDevice (DummyLightSource name) = putStr ("closed light source " ++ T.unpack (fromLSName name)) >> return ()
     availableLightSources (DummyLightSource n) =
-        [LightSourceDescription n True True ["ch1", "ch2"]]
+        [LightSourceDescription n True True (map LSChannelName ["ch1", "ch2"])]
     activateLightSource (DummyLightSource name) _ chs =
         putStrLn ("activated " ++ T.unpack (fromLSName name) ++ " with channels " ++ show channels ++ " with powers " ++ show powers)
         where

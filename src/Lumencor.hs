@@ -37,7 +37,7 @@ instance Equipment Lumencor where
     equipmentName _ = (EqName "Lumencor")
     closeDevice (Lumencor _ port _ _) = closeSerialPort port
     availableLightSources (Lumencor n _ _ _) =
-        [LightSourceDescription n True True (map fst lumencorChannels)]
+        [LightSourceDescription n True True (map (LSChannelName . fst) lumencorChannels)]
     activateLightSource (Lumencor _ port haveInitRef currFilterRef) _ chs =
         readIORef haveInitRef >>= \haveInit ->
         when (not haveInit) (   -- init RS232 and arbitrarily select the green filter
@@ -53,7 +53,7 @@ instance Equipment Lumencor where
         return ()
         where
             (channels, powers) = unzip chs
-            lcChannels = map (fromJust . (flip lookup lumencorChannels)) channels
+            lcChannels = map (fromJust . (flip lookup lumencorChannels) . fromLSChannelName) channels
             changeFilter filter =
                 serialWrite port (lumencorFilterMessage filter) >>
                 threadDelay (floor (0.3 * 1.0e6)) >>
