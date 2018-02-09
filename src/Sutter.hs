@@ -26,7 +26,7 @@ import FilterUtils
 import MiscUtils
 import RCSerialPort
 
-data SutterLambda10B = SutterLambda10B !FWName ![(FName, Int)] !SerialPort
+data SutterLambda10B = SutterLambda10B !EqName ![(FName, Int)] !SerialPort
 
 initializeSutterLambda10B :: EquipmentDescription -> IO EquipmentW
 initializeSutterLambda10B (SutterLambda10BDesc name portName chs) =
@@ -34,12 +34,12 @@ initializeSutterLambda10B (SutterLambda10BDesc name portName chs) =
     in  openSerialPort portName serialSettings >>= \port ->
         serialWriteByte port 238 >> serialReadUntilChar port '\r'>>
         serialWriteByte port 253 >> serialReadUntilChar port '\r' >>
-        return (EquipmentW $ SutterLambda10B (FWName name) (validateFilters FName (0, 9) chs) port)
+        return (EquipmentW $ SutterLambda10B (EqName name) (validateFilters FName (0, 9) chs) port)
 
 instance Equipment SutterLambda10B where
-    equipmentName _ = (EqName "SutterLambda10B")
+    equipmentName (SutterLambda10B n _ _) = n
     closeDevice (SutterLambda10B _ _ port) = closeSerialPort port
-    availableFilterWheels (SutterLambda10B n chs _) = [(n, map fst chs)]
+    availableFilterWheels (SutterLambda10B _ chs _) = [FilterWheelDescription (FWName "FW") (map fst chs)]
     switchToFilter (SutterLambda10B _ chs port) _ chName =
         let filterIndex = (fromIntegral . fromJust . lookup chName) chs
             speed = 3

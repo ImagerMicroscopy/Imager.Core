@@ -118,15 +118,15 @@ validateDetection eqs DetectionParams{..} =
     else ["invalid detection params"]
     where
         filterParams = dpFilterParams
-        filtersAreValid = noEmptyFilterWheelNames && noEmptyFilterNames && noDupFilterWheels && all filterExists filterParams
+        filtersAreValid = noEmptyFilterWheelNames && noEmptyFilterNames && noDupEqsFWs && all filterExists filterParams
         noEmptyFilterWheelNames = all (not . T.null . fromFWName) (map fpFilterWheelName filterParams)
         noEmptyFilterNames = all (not . T.null . fromFName) (map fpFilterName filterParams)
-        noDupFilterWheels = nodups (map fpFilterWheelName filterParams)
+        noDupEqsFWs = nodups $ zip (map fpFilterWheelName filterParams) (map fpEquipmentName filterParams)
         filterExists (FilterParams eqName fwName fName) =
             let eqExists = eqName `elem` (map equipmentName eqs)
                 eq = head (filter ((==) eqName  . equipmentName) eqs)
-                filterWheelExists = fwName `elem` (map fst (availableFilterWheels eq))
-                filtersInFW = snd . head . filter ((==) fwName . fst) $ availableFilterWheels eq
+                filterWheelExists = fwName `elem` (map fwdName (availableFilterWheels eq))
+                filtersInFW = fwdFilters . head . filter ((==) fwName . fwdName) $ availableFilterWheels eq
                 filterExists = fName `elem` filtersInFW
             in (eqExists && filterWheelExists && filterExists)
 

@@ -23,7 +23,7 @@ import FilterUtils
 import MiscUtils
 import RCSerialPort
 
-data AsahiLightSource = AsahiLightSource !LSName ![(LSChannelName, Int)] !SerialPort
+data AsahiLightSource = AsahiLightSource !EqName ![(LSChannelName, Int)] !SerialPort
 
 initializeAsahiLightSource :: EquipmentDescription -> IO EquipmentW
 initializeAsahiLightSource (AsahiLightSourceDesc name portName chs) =
@@ -31,7 +31,7 @@ initializeAsahiLightSource (AsahiLightSourceDesc name portName chs) =
     in  openSerialPort portName serialSettings >>= \port ->
         readLampLife port >>= \life ->
         putStrLn ("Asahi lamp has been on " ++ show life ++ " hours (recommended lamp life 500 hours, max lamp life 1000 hours)") >>
-                  return (EquipmentW $ AsahiLightSource (LSName name) (validateFilters LSChannelName (1, 8) chs) port)
+                  return (EquipmentW $ AsahiLightSource (EqName name) (validateFilters LSChannelName (1, 8) chs) port)
     where
         readLampLife :: SerialPort -> IO Double
         readLampLife port =
@@ -39,10 +39,10 @@ initializeAsahiLightSource (AsahiLightSourceDesc name portName chs) =
             return . read . filter (`elem` ("01234567890." :: String)) . byteStringAsString
 
 instance Equipment AsahiLightSource where
-    equipmentName _ = (EqName "Asahi lamp")
+    equipmentName (AsahiLightSource n _ _) = n
     closeDevice (AsahiLightSource _ _ port) = closeSerialPort port
     availableLightSources (AsahiLightSource n chs _) =
-        [LightSourceDescription n True False (map fst chs)]
+        [LightSourceDescription (LSName "ls") True False (map fst chs)]
     activateLightSource (AsahiLightSource _ chs port) _ ((filter, power) : _) =
         case (lookup filter chs) of
             Nothing -> throwIO (userError ("missing filter " ++ T.unpack (fromLSChannelName filter)))

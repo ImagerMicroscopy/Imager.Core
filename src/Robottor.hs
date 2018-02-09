@@ -37,7 +37,7 @@ instance Equipment Robottor where
         executeRobotProgram' `onException` (abortRobotProgramExecution r)
         where
             executeRobotProgram' =
-                _handleRobottorRequest r (ExecuteRobottorProgram progName) >>
+                _handleRobottorRequest r (ExecuteRobottorProgram (fromRobotProgramName progName)) >>
                 if (not waitForCompletion)
                 then return ()
                 else waitUntilDone

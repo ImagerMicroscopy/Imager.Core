@@ -46,7 +46,7 @@ withEquipment descs action =
     bracket (initializeEquipment descs) closeEquipment action
 
 initializeEquipment :: [EquipmentDescription] -> IO [EquipmentW]
-initializeEquipment = mapM initializeDevice
+initializeEquipment descs = mapM initializeDevice descs >>= verifyEquipmentThrows
 
 closeEquipment :: [EquipmentW] -> IO ()
 closeEquipment = mapM_ closeDevice
@@ -66,3 +66,8 @@ initializeDevice d@(PriorDesc _ _) = initializePriorStage d
 initializeDevice d@(DummyStageDesc name) = initializeDummyStage d
 initializeDevice d@(RobottorDesc name ip port) = initializeRobottor d
 initializeDevice _ = error "unknown type of device description"
+
+verifyEquipmentThrows :: [EquipmentW] -> IO [EquipmentW]
+verifyEquipmentThrows eqs = when (not (nodups (map equipmentName eqs)))
+                                (displayStringThenError "some of the equipment has duplicate names") >>
+                            pure eqs

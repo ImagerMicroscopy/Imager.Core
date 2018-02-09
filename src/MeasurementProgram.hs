@@ -74,7 +74,7 @@ executeMeasurementElement env (MEWait dur) =
     withStatusMessage env (T.format "waiting {} s" (T.Only dur)) (
         threadDelay (round $ dur * 1e6))
 executeMeasurementElement env (MEExecuteRobotProgram rName pName wait) =
-    withStatusMessage env (T.format "executing program {} on {}" (pName, fromRobotName rName)) (
+    withStatusMessage env (T.format "executing program {} on {}" ((fromRobotProgramName pName), fromRobotName rName)) (
         executeRobotProgram robot pName wait)
     where
         [robot] = filter (\e -> hasRobot e && robotName e == rName) (peEquipment env)

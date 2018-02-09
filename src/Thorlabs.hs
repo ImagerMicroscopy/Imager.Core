@@ -26,8 +26,8 @@ import FilterUtils
 import MiscUtils
 import RCSerialPort
 
-data ThorlabsFW103H = ThorlabsFW103H !FWName ![(FName, Int)] !SerialPort
-data ThorlabsFW102C = ThorlabsFW102C !FWName ![(FName, Int)] !SerialPort
+data ThorlabsFW103H = ThorlabsFW103H !EqName ![(FName, Int)] !SerialPort
+data ThorlabsFW102C = ThorlabsFW102C !EqName ![(FName, Int)] !SerialPort
 
 initializeThorlabsFW130H :: EquipmentDescription -> IO EquipmentW
 initializeThorlabsFW130H (ThorlabsFW103HDesc name portName chs) =
@@ -38,17 +38,17 @@ initializeThorlabsFW130H (ThorlabsFW103HDesc name portName chs) =
         serialWrite port fw103HStopUpdatesMessage >> serialWrite port fw103HMoveHomeMessage >>
         fw103HWaitUntilHomingStops port >>
         putStrLn "done!" >>
-        return (EquipmentW $ ThorlabsFW103H (FWName name) (validateFilters FName (0, 5) chs) port)
+        return (EquipmentW $ ThorlabsFW103H (EqName name) (validateFilters FName (0, 5) chs) port)
 
 initializeThorlabsFW102C :: EquipmentDescription -> IO EquipmentW
 initializeThorlabsFW102C (ThorlabsFW102CDesc name portName chs) =
     let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS115200}) (TimeoutMillis 30000) SerialPortNoDebug
-    in  EquipmentW <$> (ThorlabsFW102C (FWName name) (validateFilters FName (0, 5) chs) <$> openSerialPort portName serialSettings)
+    in  EquipmentW <$> (ThorlabsFW102C (EqName name) (validateFilters FName (0, 5) chs) <$> openSerialPort portName serialSettings)
 
 instance Equipment ThorlabsFW103H where
-    equipmentName _ = (EqName "ThorlabsFW103H")
+    equipmentName (ThorlabsFW103H n _ _) = n
     closeDevice (ThorlabsFW103H _ _ port) = closeSerialPort port
-    availableFilterWheels (ThorlabsFW103H n chs _) = [(n, map fst chs)]
+    availableFilterWheels (ThorlabsFW103H _ chs _) = [FilterWheelDescription (FWName "FW") (map fst chs)]
     switchToFilter (ThorlabsFW103H _ chs port) _ chName =
         let filterIndex = fromJust (lookup chName chs)
             wheelPos = (409600 `div` 6) * filterIndex -- Thorlabs:  1 turn represents 360 degrees which is 409600 micro steps
@@ -57,9 +57,9 @@ instance Equipment ThorlabsFW103H where
 
 
 instance Equipment ThorlabsFW102C where
-    equipmentName _ = (EqName "ThorlabsFW102C")
+    equipmentName (ThorlabsFW102C n _ _) = n
     closeDevice (ThorlabsFW102C _ _ port) = closeSerialPort port
-    availableFilterWheels (ThorlabsFW102C n chs _) = [(n, map fst chs)]
+    availableFilterWheels (ThorlabsFW102C _ chs _) = [FilterWheelDescription (FWName "FW") (map fst chs)]
     switchToFilter (ThorlabsFW102C _ chs port) _ chName =
         let filterIndex = fromJust (lookup chName chs)
         in flushSerialPort port >> serialWrite port (T.encodeUtf8 . T.pack $ "pos=" ++ show filterIndex) >>

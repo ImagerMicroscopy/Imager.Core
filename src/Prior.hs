@@ -37,7 +37,7 @@ import EquipmentTypes
 import MiscUtils
 import RCSerialPort
 
-data PriorStage = PriorStage !StageName !(MVar SerialPort)
+data PriorStage = PriorStage !EqName !(MVar SerialPort)
 
 initializePriorStage :: EquipmentDescription -> IO EquipmentW
 initializePriorStage (PriorDesc name portName) =
@@ -47,13 +47,13 @@ initializePriorStage (PriorDesc name portName) =
         if ((resp /= "0\r") && (resp /= "R\r"))
         then throwIO (userError "unexpected reply from prior stage")
         else putStrLn "Connected to Prior stage" >>
-             EquipmentW <$> (PriorStage (StageName name) <$> newMVar port)
+             EquipmentW <$> (PriorStage (EqName name) <$> newMVar port)
 
 instance Equipment PriorStage where
-    equipmentName _ = (EqName "Prior stage")
+    equipmentName (PriorStage n _) = n
     closeDevice (PriorStage _ portVar) = withMVar portVar $ (\port -> closeSerialPort port)
     hasMotorizedStage _ = True
-    motorizedStageName (PriorStage n _) = n
+    motorizedStageName (PriorStage n _) = StageName "stage"
     getStagePosition (PriorStage _ portVar) = withMVar portVar $ \port ->
         (,,) <$> readNumberP port "PX\r" <*> readNumberP port "PY\r" <*> ((/10) <$> readNumberP port "PZ\r")
         where

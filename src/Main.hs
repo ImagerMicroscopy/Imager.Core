@@ -94,7 +94,8 @@ performAction env ListWavelengths =
         nWavelengths = SB.length wavelengths `div` 8
         numType = FP64
 
-performAction env ListAvailableEquipment = return (AvailableEquipment es, env)
+performAction env ListAvailableEquipment =
+    return (AvailableEquipment es, env)
     where
       es = envEquipment env
 

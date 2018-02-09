@@ -56,8 +56,7 @@ newtype TimeoutValue = TimeoutMillis {toMillis :: Int}
 openSerialPort :: FilePath -> RCSerialPortSettings -> IO SerialPort
 openSerialPort name (RCSerialPortSettings settings timeout debugMode) = do
     port <- catch (SP.openSerial name settings)
-                (\(e :: IOException) -> putStrLn ("Unable to open serial port " ++ name ++ "\nPress return to continue") >>
-                                        getLine >> error "unable to open")
+                (\(e :: IOException) -> displayStringThenError ("Unable to open serial port " ++ name))
     return (SerialPort port (T.pack name) timeout debugMode)
 
 closeSerialPort :: SerialPort -> IO ()

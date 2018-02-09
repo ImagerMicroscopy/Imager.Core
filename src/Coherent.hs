@@ -23,7 +23,7 @@ import EquipmentTypes
 import MiscUtils
 import RCSerialPort
 
-data Coherent = Coherent !LSName !SerialPort !(IORef (Bool, LSIlluminationPower, LSIlluminationPower)) !(IORef (Bool, LSIlluminationPower))
+data Coherent = Coherent !EqName !SerialPort !(IORef (Bool, LSIlluminationPower, LSIlluminationPower)) !(IORef (Bool, LSIlluminationPower))
 
 initializeCoherent :: EquipmentDescription -> IO EquipmentW
 initializeCoherent (CoherentLightSourceDesc name portName) =
@@ -31,13 +31,13 @@ initializeCoherent (CoherentLightSourceDesc name portName) =
     in  openSerialPort portName serialSettings >>= \port ->
         newIORef (False, LSIlluminationPower 0.0, LSIlluminationPower 0.0) >>= \powerRange ->
         newIORef (False, LSIlluminationPower 0.0) >>= \currentPower ->
-        return (EquipmentW $ Coherent (LSName name) port powerRange currentPower)
+        return (EquipmentW $ Coherent (EqName name) port powerRange currentPower)
 
 instance Equipment Coherent where
-    equipmentName _ = (EqName "Coherent laser")
+    equipmentName (Coherent n _ _ _) = n
     closeDevice (Coherent _ port _ _) = closeSerialPort port
     availableLightSources (Coherent n _ _ _) =
-        [LightSourceDescription n True False [LSChannelName "laser"]]
+        [LightSourceDescription (LSName "ls") True False [LSChannelName "laser"]]
     activateLightSource (Coherent _ port powerRange currentPower) _ ((_, power) : _) =
         needToSetPower >>= \needPower ->
         when (needPower) (setPower power) >>

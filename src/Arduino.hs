@@ -24,7 +24,7 @@ import EquipmentTypes
 import MiscUtils
 import RCSerialPort
 
-data ArduinoLightSource = ArduinoLightSource !LSName ![(LSChannelName, (Int, Double))] !(IORef [(Int, Double)]) !SerialPort
+data ArduinoLightSource = ArduinoLightSource !EqName ![(LSChannelName, (Int, Double))] !(IORef [(Int, Double)]) !SerialPort
 
 initializeArduinoLightSource :: EquipmentDescription -> IO EquipmentW
 initializeArduinoLightSource (ArduinoLightSourceDesc name portName chs) =
@@ -34,14 +34,14 @@ initializeArduinoLightSource (ArduinoLightSourceDesc name portName chs) =
     in  openSerialPort portName serialSettings >>= \port -> threadDelay (floor 2e6) >> -- delay needed, otherwise the arduino won't receive the messages.
         setArduinoPinsState ArduinoOutput (map (fst . snd) chs) port >>
         newIORef [] >>= \activeSet ->
-        return (EquipmentW (ArduinoLightSource (LSName name) (mapFirst LSChannelName chs) activeSet port))
+        return (EquipmentW (ArduinoLightSource (EqName name) (mapFirst LSChannelName chs) activeSet port))
 
 instance Equipment ArduinoLightSource where
-    equipmentName _ = (EqName "Arduino")
+    equipmentName (ArduinoLightSource n _ _ _) = n
     closeDevice (ArduinoLightSource _ chs _ port) =
         setArduinoPinsState ArduinoInput (map (fst . snd) chs) port >> closeSerialPort port
-    availableLightSources (ArduinoLightSource n chs _ _) =
-        [LightSourceDescription n False True (map fst chs)]
+    availableLightSources (ArduinoLightSource _ chs _ _) =
+        [LightSourceDescription (LSName "ls") False True (map fst chs)]
     activateLightSource (ArduinoLightSource _ availChs activePinRef port) _ chs =
         case (concatMaybes $ map ((\ch -> lookup ch availChs) . fst) chs) of
             Nothing -> throwIO (userError "unknown arduino channel")

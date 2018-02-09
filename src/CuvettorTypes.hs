@@ -134,7 +134,7 @@ data ResponseMessage = StatusOK
                      | Wavelengths !AcquiredData
                      | AvailableEquipment ![EquipmentW]
                      | MotorizedStagePosition !(Double, Double, Double)
-                     | RobotProgramsResponse ![Text]
+                     | RobotProgramsResponse ![RobotProgramName]
                      | DetectorLimitsResponse !DetectorLimits
                      | DetectorParametersResponse !DetectorParameters
                      | DetectorTemperatureResponse !Double

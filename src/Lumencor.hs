@@ -25,19 +25,19 @@ import EquipmentTypes
 import MiscUtils
 import RCSerialPort
 
-data Lumencor = Lumencor !LSName !SerialPort !(IORef Bool) !(IORef LumencorFilter)
+data Lumencor = Lumencor !EqName !SerialPort !(IORef Bool) !(IORef LumencorFilter)
 
 initializeLumencor :: EquipmentDescription -> IO EquipmentW
 initializeLumencor (LumencorLightSourceDesc name portName) =
     let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS9600}) (TimeoutMillis 10000) SerialPortNoDebug
         port = openSerialPort portName serialSettings
-    in  EquipmentW <$> (Lumencor (LSName name) <$> port <*> newIORef False <*> newIORef LCGreenFilter)
+    in  EquipmentW <$> (Lumencor (EqName name) <$> port <*> newIORef False <*> newIORef LCGreenFilter)
 
 instance Equipment Lumencor where
-    equipmentName _ = (EqName "Lumencor")
+    equipmentName (Lumencor n _ _ _) = n
     closeDevice (Lumencor _ port _ _) = closeSerialPort port
     availableLightSources (Lumencor n _ _ _) =
-        [LightSourceDescription n True True (map (LSChannelName . fst) lumencorChannels)]
+        [LightSourceDescription (LSName "ls") True True (map (LSChannelName . fst) lumencorChannels)]
     activateLightSource (Lumencor _ port haveInitRef currFilterRef) _ chs =
         readIORef haveInitRef >>= \haveInit ->
         when (not haveInit) (   -- init RS232 and arbitrarily select the green filter

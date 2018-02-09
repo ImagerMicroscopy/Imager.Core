@@ -42,6 +42,10 @@ data LightSourceDescription = LightSourceDescription {
                                 , lsdAllowsMultipleChannels :: !Bool
                                 , lsdChannels :: ![LSChannelName]
                               }
+data FilterWheelDescription = FilterWheelDescription {
+                                  fwdName :: !FWName
+                                , fwdFilters :: ![FName]
+                              }
 
 class Equipment e where
     equipmentName :: e -> EqName
@@ -51,7 +55,7 @@ class Equipment e where
     activateLightSource :: e -> LSName -> [(LSChannelName, LSIlluminationPower)] -> IO ()
     deactivateLightSource :: e -> IO ()
 
-    availableFilterWheels  :: e -> [(FWName, [FName])]
+    availableFilterWheels  :: e -> [FilterWheelDescription]
     switchToFilter :: e -> FWName -> FName -> IO ()
 
     hasMotorizedStage :: e -> Bool
@@ -68,20 +72,20 @@ class Equipment e where
 
 
     availableLightSources _ = []
-    activateLightSource _ _ _ = error "calling activateLightSource"
-    deactivateLightSource _ = error "calling deactivateLightSource"
+    activateLightSource e _ _ = error ("calling activateLightSource on " ++ show (fromEqName (equipmentName e)))
+    deactivateLightSource e = error ("calling deactivateLightSource on " ++ show (fromEqName (equipmentName e)))
     availableFilterWheels _ = []
-    switchToFilter _ _ = error "calling switchToFilter"
+    switchToFilter e _ = error ("calling switchToFilter on " ++ show (fromEqName (equipmentName e)))
     hasMotorizedStage _ = False
-    motorizedStageName _  = error "calling motorizedStageName"
-    getStagePosition _ = error "calling getStagePosition"
-    setStagePosition _ _ = error "calling setStagePosition"
-    hasRobot _ = False
-    robotName _ = error "calling robotName"
-    listRobotPrograms _ = error "calling listRobotPrograms"
-    robotAcceptsExternalCommands _ = error "calling robotAcceptsExternalCommands"
-    executeRobotProgram _ _ = error "calling executeRobotProgram"
-    abortRobotProgramExecution _ = error "calling abortRobotProgramExecution"
+    motorizedStageName e  = error ("calling motorizedStageName on " ++ show (fromEqName (equipmentName e)))
+    getStagePosition e = error ("calling getStagePosition on " ++ show (fromEqName (equipmentName e)))
+    setStagePosition e _ = error ("calling setStagePosition on " ++ show (fromEqName (equipmentName e)))
+    hasRobot e = False
+    robotName e = error ("calling robotName on " ++ show (fromEqName (equipmentName e)))
+    listRobotPrograms e = error ("calling listRobotPrograms on " ++ show (fromEqName (equipmentName e)))
+    robotAcceptsExternalCommands e = error ("calling robotAcceptsExternalCommands on " ++ show (fromEqName (equipmentName e)))
+    executeRobotProgram e _ = error ("calling executeRobotProgram on " ++ show (fromEqName (equipmentName e)))
+    abortRobotProgramExecution e = error ("calling abortRobotProgramExecution on " ++ show (fromEqName (equipmentName e)))
 
 instance Equipment EquipmentW where
     equipmentName (EquipmentW e) = equipmentName e

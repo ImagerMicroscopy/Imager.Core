@@ -47,6 +47,11 @@ sequenceEither xs = let (ls, rs) = partitionEithers xs
 mapFirst :: (a -> b) -> [(a, c)] -> [(b, c)]
 mapFirst f = map (\(a, b) -> (f a, b))
 
+displayStringThenError :: String -> IO a
+displayStringThenError s = putStrLn "ERROR:" >> putStrLn s >>
+                           putStrLn "Press return to continue" >>
+                           getLine >> error "terminating"
+
 byteStringFromVector :: forall a . Storable a => Vector a -> ByteString
 byteStringFromVector v = unsafePerformIO $
     let sizeOfElem = sizeOf (undefined :: a)
