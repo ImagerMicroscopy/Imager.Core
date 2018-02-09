@@ -54,6 +54,7 @@ initializeMarcelLumencor (MarcelLumencorLightSourceDesc name lcPortName arPortNa
 
 instance Equipment Lumencor where
     equipmentName (Lumencor n _ _ _) = n
+    flushSerialPorts (Lumencor _ port _ _) = flushSerialPort port
     closeDevice (Lumencor _ port _ _) = closeSerialPort port
     availableLightSources (Lumencor n _ _ _) =
         [LightSourceDescription (LSName "ls") True True (map (LSChannelName . fst) lumencorChannels)]
@@ -72,6 +73,7 @@ instance Equipment Lumencor where
 
 instance Equipment MarcelLumencor where
     equipmentName e = equipmentName (lumencorFromMarcelLumencor e)
+    flushSerialPorts (MarcelLumencor _ lcP arP _ _) = flushSerialPort lcP >> flushSerialPort arP
     closeDevice (MarcelLumencor _ lcP arP _ _) = closeSerialPort lcP >> closeSerialPort arP
     availableLightSources e = availableLightSources (lumencorFromMarcelLumencor e)
     activateLightSource e = activateLightSource (lumencorFromMarcelLumencor e)

@@ -25,6 +25,7 @@ initializeRobottor (RobottorDesc name ip port) = return (EquipmentW $ Robottor (
 
 instance Equipment Robottor where
     equipmentName _ = (EqName "Robottor")
+    flushSerialPorts _ = pure ()
     closeDevice (Robottor _ ip port) = return ()
     hasRobot _ = True
     robotName (Robottor n _ _) = n

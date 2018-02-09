@@ -47,6 +47,7 @@ initializeThorlabsFW102C (ThorlabsFW102CDesc name portName chs) =
 
 instance Equipment ThorlabsFW103H where
     equipmentName (ThorlabsFW103H n _ _) = n
+    flushSerialPorts (ThorlabsFW103H _ _ port) = flushSerialPort port
     closeDevice (ThorlabsFW103H _ _ port) = closeSerialPort port
     availableFilterWheels (ThorlabsFW103H _ chs _) = [FilterWheelDescription (FWName "FW") (map fst chs)]
     switchToFilter (ThorlabsFW103H _ chs port) _ chName =
@@ -58,9 +59,10 @@ instance Equipment ThorlabsFW103H where
 
 instance Equipment ThorlabsFW102C where
     equipmentName (ThorlabsFW102C n _ _) = n
+    flushSerialPorts (ThorlabsFW102C _ _ port) = flushSerialPort port
     closeDevice (ThorlabsFW102C _ _ port) = closeSerialPort port
     availableFilterWheels (ThorlabsFW102C _ chs _) = [FilterWheelDescription (FWName "FW") (map fst chs)]
     switchToFilter (ThorlabsFW102C _ chs port) _ chName =
         let filterIndex = fromJust (lookup chName chs)
-        in flushSerialPort port >> serialWrite port (T.encodeUtf8 . T.pack $ "pos=" ++ show filterIndex) >>
+        in  serialWrite port (T.encodeUtf8 . T.pack $ "pos=" ++ show filterIndex) >>
             serialReadUntilChar port '>' >> return ()

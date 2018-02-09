@@ -28,6 +28,7 @@ initializeDummyStage (DummyStageDesc name) =
 
 instance Equipment DummyLightSource where
     equipmentName (DummyLightSource n) = n
+    flushSerialPorts _ = pure ()
     closeDevice (DummyLightSource name) = putStr ("closed light source " ++ T.unpack (fromEqName name)) >> return ()
     availableLightSources (DummyLightSource n) =
         [LightSourceDescription (LSName "ls") True True (map LSChannelName ["ch1", "ch2"])]
@@ -40,6 +41,7 @@ instance Equipment DummyLightSource where
 
 instance Equipment DummyFilterWheel where
     equipmentName (DummyFilterWheel n _) = n
+    flushSerialPorts _ = pure ()
     closeDevice (DummyFilterWheel name _) = putStrLn ("Closed filter wheel " ++ T.unpack (fromEqName name))
     availableFilterWheels (DummyFilterWheel n chs) = [FilterWheelDescription (FWName "fw") (map fst chs)]
     switchToFilter (DummyFilterWheel name chs) _ fName =
@@ -47,6 +49,7 @@ instance Equipment DummyFilterWheel where
 
 instance Equipment DummyStage where
     equipmentName _ = (EqName "Dummy stage")
+    flushSerialPorts _ = pure ()
     closeDevice (DummyStage n) = putStrLn ("dummy stage " ++ (T.unpack (fromStageName n)) ++ " closed")
     hasMotorizedStage _ = True
     motorizedStageName (DummyStage n) = n

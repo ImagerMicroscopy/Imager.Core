@@ -35,6 +35,7 @@ initializeCoherent (CoherentLightSourceDesc name portName) =
 
 instance Equipment Coherent where
     equipmentName (Coherent n _ _ _) = n
+    flushSerialPorts (Coherent _ port _ _) = flushSerialPort port
     closeDevice (Coherent _ port _ _) = closeSerialPort port
     availableLightSources (Coherent n _ _ _) =
         [LightSourceDescription (LSName "ls") True False [LSChannelName "laser"]]
@@ -70,6 +71,6 @@ instance Equipment Coherent where
             parseQuery :: ByteString -> IO Double
             parseQuery q = sendAndReadResponse q >>= return . read . filter (`elem` ('.' : ['0' .. '9'])) . T.unpack . T.decodeUtf8
             sendAndReadResponse :: ByteString -> IO ByteString
-            sendAndReadResponse msg = flushSerialPort port >> serialWrite port msg >> serialReadUntilChar port '\n'
+            sendAndReadResponse msg = serialWrite port msg >> serialReadUntilChar port '\n'
     deactivateLightSource (Coherent _ port _ _) =
-        flushSerialPort port >> serialWrite port "L=0\r" >> serialReadUntilChar port '\n' >> return ()
+        serialWrite port "L=0\r" >> serialReadUntilChar port '\n' >> return ()

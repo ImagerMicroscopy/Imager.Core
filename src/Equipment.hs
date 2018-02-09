@@ -49,6 +49,7 @@ data FilterWheelDescription = FilterWheelDescription {
 
 class Equipment e where
     equipmentName :: e -> EqName
+    flushSerialPorts :: e -> IO ()
     closeDevice :: e -> IO ()
 
     availableLightSources :: e -> [LightSourceDescription]
@@ -71,7 +72,6 @@ class Equipment e where
     executeRobotProgram :: e -> RobotProgramName -> Bool -> IO ()
     abortRobotProgramExecution :: e -> IO ()
 
-
     availableLightSources _ = []
     activateLightSource e _ _ = error ("calling activateLightSource on " ++ show (fromEqName (equipmentName e)))
     activateLightSourceGated = activateLightSource
@@ -91,6 +91,7 @@ class Equipment e where
 
 instance Equipment EquipmentW where
     equipmentName (EquipmentW e) = equipmentName e
+    flushSerialPorts (EquipmentW e) = flushSerialPorts e
     closeDevice (EquipmentW e) = closeDevice e
     availableLightSources (EquipmentW e) = availableLightSources e
     activateLightSource (EquipmentW e) = activateLightSource e

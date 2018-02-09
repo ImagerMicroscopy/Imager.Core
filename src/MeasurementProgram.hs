@@ -39,6 +39,7 @@ import MiscUtils
 
 executeMeasurement :: Detector a => ProgramEnvironment a -> MeasurementElement -> IO ()
 executeMeasurement env me = withAsync (forever $ resetSystemSleepTimer >> threadDelay (round 60.0e6)) (\_ ->
+                                forM_ eqs (flushSerialPorts) >>
                                 executeMeasurementElement env (insertFastAcquisitionLoops me)
                                 `catch` (\e -> deactiveUsedLightSources >>
                                                mapM_ abortRobotProgramExecution usedRobots >>

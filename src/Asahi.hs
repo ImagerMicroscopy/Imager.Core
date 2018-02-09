@@ -35,11 +35,12 @@ initializeAsahiLightSource (AsahiLightSourceDesc name portName chs) =
     where
         readLampLife :: SerialPort -> IO Double
         readLampLife port =
-            flushSerialPort port >> serialWrite port "LIFE?\r\n" >> serialReadUntilChar port '\n' >>= -- response is of format "LF %d\r"
+            serialWrite port "LIFE?\r\n" >> serialReadUntilChar port '\n' >>= -- response is of format "LF %d\r"
             return . read . filter (`elem` ("01234567890." :: String)) . byteStringAsString
 
 instance Equipment AsahiLightSource where
     equipmentName (AsahiLightSource n _ _) = n
+    flushSerialPorts (AsahiLightSource _ _ port) = flushSerialPort port
     closeDevice (AsahiLightSource _ _ port) = closeSerialPort port
     availableLightSources (AsahiLightSource n chs _) =
         [LightSourceDescription (LSName "ls") True False (map fst chs)]
@@ -55,7 +56,7 @@ instance Equipment AsahiLightSource where
 
 handleAsahiMessage :: SerialPort -> String -> IO ()
 handleAsahiMessage port ss =
-    flushSerialPort port >> serialWrite port (T.encodeUtf8 $ T.pack ss) >> serialReadUntilChar port '\n' >>= \response ->
+    serialWrite port (T.encodeUtf8 $ T.pack ss) >> serialReadUntilChar port '\n' >>= \response ->
     if (response == "OK\r\n")
     then return ()
     else throwIO (userError ("sent " ++ ss ++ "to asahi, received " ++ (T.unpack $ T.decodeUtf8 response)))

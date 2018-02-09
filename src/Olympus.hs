@@ -41,13 +41,14 @@ initializeOlympusIX71Dichroic (OlympusIX71DichroicDesc name portName chs) =
 
 instance Equipment OlympusIX71Dichroic where
     equipmentName (OlympusIX71Dichroic n _ _ _) = n
+    flushSerialPorts (OlympusIX71Dichroic _ _ _ port) = flushSerialPort port
     closeDevice (OlympusIX71Dichroic _ _ _ port) = closeSerialPort port
     availableFilterWheels (OlympusIX71Dichroic _ chs _ _) = [FilterWheelDescription (FWName "DM") (map fst chs)]
     switchToFilter (OlympusIX71Dichroic _ chs currFilter port) _ chName =
         let filterIndex = fromJust (lookup chName chs)
         in  readIORef currFilter >>= \(haveInit, currFilterIdx) ->
             when ((not haveInit) || (currFilterIdx /= filterIndex)) (
-                flushSerialPort port >> serialWrite port (T.encodeUtf8 . T.pack $ "1MU " ++ show (filterIndex + 1) ++ "\r") >>
+                serialWrite port (T.encodeUtf8 . T.pack $ "1MU " ++ show (filterIndex + 1) ++ "\r") >>
                 serialReadUntilChar port '\r' >>= \result ->
                 case result of
                     "1MU +\r" -> writeIORef currFilter (True, filterIndex) >> return ()

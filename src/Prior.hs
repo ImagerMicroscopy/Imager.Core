@@ -51,6 +51,7 @@ initializePriorStage (PriorDesc name portName) =
 
 instance Equipment PriorStage where
     equipmentName (PriorStage n _) = n
+    flushSerialPorts (PriorStage _ portVar) = withMVar portVar $ (\port -> flushSerialPort port)
     closeDevice (PriorStage _ portVar) = withMVar portVar $ (\port -> closeSerialPort port)
     hasMotorizedStage _ = True
     motorizedStageName (PriorStage n _) = StageName "stage"
@@ -58,12 +59,12 @@ instance Equipment PriorStage where
         (,,) <$> readNumberP port "PX\r" <*> readNumberP port "PY\r" <*> ((/10) <$> readNumberP port "PZ\r")
         where
           readNumberP :: SerialPort -> ByteString -> IO Double
-          readNumberP port query = flushSerialPort port >> serialWrite port query >>
+          readNumberP port query = serialWrite port query >>
                                    serialReadUntilChar port '\r' >>=
                                    return . read . T.unpack . T.decodeUtf8
     setStagePosition (PriorStage _ portVar) (x, y, z) =
         (withMVar portVar $ \port ->
-            flushSerialPort port >> serialWrite port posStr >> serialReadUntilChar port '\r') >>= \resp ->
+            serialWrite port posStr >> serialReadUntilChar port '\r') >>= \resp ->
         case resp of
           "R\r" -> return ()
           _     -> throwIO (userError "unexpected response from stage")

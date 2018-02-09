@@ -38,6 +38,7 @@ initializeArduinoLightSource (ArduinoLightSourceDesc name portName chs) =
 
 instance Equipment ArduinoLightSource where
     equipmentName (ArduinoLightSource n _ _ _) = n
+    flushSerialPorts (ArduinoLightSource _ _ _ p) = flushSerialPort p
     closeDevice (ArduinoLightSource _ chs _ port) =
         setArduinoPinsState ArduinoInput (map (fst . snd) chs) port >> closeSerialPort port
     availableLightSources (ArduinoLightSource _ chs _ _) =
@@ -67,7 +68,7 @@ setArduinoPinsState state ps port =
 
 handleArduinoMessage :: SerialPort -> String -> IO ()
 handleArduinoMessage port ss =
-    flushSerialPort port >> serialWrite port (T.encodeUtf8 . T.pack $ ss) >>
+    serialWrite port (T.encodeUtf8 . T.pack $ ss) >>
     serialReadUntilChar port '\r' >>= \response ->
     case response of
         "OK\r" -> return ()
