@@ -27,26 +27,38 @@ import RCSerialPort
 
 data Lumencor = Lumencor !EqName !SerialPort !(IORef Bool) !(IORef LumencorFilter)
 
+data MarcelLumencor = MarcelLumencor {
+                          mlcName :: !EqName
+                        , mlcLumencorPort :: !SerialPort
+                        , mlcArduinoPort :: !SerialPort
+                        , mlcFilterHasInitialization :: !(IORef Bool)
+                        , mlcCurrentFilter :: !(IORef LumencorFilter)
+                      }
+
+lumencorFromMarcelLumencor :: MarcelLumencor -> Lumencor
+lumencorFromMarcelLumencor e = Lumencor (mlcName e) (mlcLumencorPort e) (mlcFilterHasInitialization e) (mlcCurrentFilter e)
+
 initializeLumencor :: EquipmentDescription -> IO EquipmentW
 initializeLumencor (LumencorLightSourceDesc name portName) =
-    let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS9600}) (TimeoutMillis 10000) SerialPortNoDebug
+    let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS9600}) (TimeoutMillis 1000) SerialPortNoDebug
         port = openSerialPort portName serialSettings
     in  EquipmentW <$> (Lumencor (EqName name) <$> port <*> newIORef False <*> newIORef LCGreenFilter)
+
+initializeMarcelLumencor :: EquipmentDescription -> IO EquipmentW
+initializeMarcelLumencor (MarcelLumencorLightSourceDesc name lcPortName arPortName) =
+    let lcSerialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS9600}) (TimeoutMillis 1000) SerialPortDebugBinary
+        arSerialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS19200}) (TimeoutMillis 1000) SerialPortDebugText
+        lcPort = openSerialPort lcPortName lcSerialSettings
+        arPort = openSerialPort arPortName arSerialSettings
+    in  EquipmentW <$> (MarcelLumencor (EqName name) <$> lcPort <*> arPort <*> newIORef False <*> newIORef LCGreenFilter)
 
 instance Equipment Lumencor where
     equipmentName (Lumencor n _ _ _) = n
     closeDevice (Lumencor _ port _ _) = closeSerialPort port
     availableLightSources (Lumencor n _ _ _) =
         [LightSourceDescription (LSName "ls") True True (map (LSChannelName . fst) lumencorChannels)]
-    activateLightSource (Lumencor _ port haveInitRef currFilterRef) _ chs =
-        readIORef haveInitRef >>= \haveInit ->
-        when (not haveInit) (   -- init RS232 and arbitrarily select the green filter
-            serialWrite port lumencorEnableRS232Message >>
-            changeFilter LCGreenFilter >>
-            writeIORef haveInitRef True) >>
-        readIORef currFilterRef >>= \currFilter ->
-        when ((isJust filterForChannel) && (currFilter /= fromJust filterForChannel)) (
-             changeFilter $ fromJust filterForChannel) >>
+    activateLightSource lc@(Lumencor _ port haveInitRef currFilterRef) _ chs =
+        maybeChangeLumencorFilter lc lcChannels >>
         readIORef currFilterRef >>= \possiblyUpdatedFilter ->
         serialWrite port (lumencorIntensityMessage lcChannels powers) >>
         serialWrite port (lumencorEnableMessage lcChannels possiblyUpdatedFilter) >>
@@ -54,16 +66,25 @@ instance Equipment Lumencor where
         where
             (channels, powers) = unzip chs
             lcChannels = map (fromJust . (flip lookup lumencorChannels) . fromLSChannelName) channels
-            changeFilter filter =
-                serialWrite port (lumencorFilterMessage filter) >>
-                threadDelay (floor (0.3 * 1.0e6)) >>
-                writeIORef currFilterRef filter
-            filterForChannel | LCGreen `elem` lcChannels  = Just LCGreenFilter
-                             | LCYellow `elem` lcChannels = Just LCYellowFilter
-                             | otherwise                  = Nothing
     deactivateLightSource (Lumencor _ port _ currFilterRef) =
         readIORef currFilterRef >>= \currFilter ->
         serialWrite port (lumencorDisableMessage currFilter) >> return ()
+
+instance Equipment MarcelLumencor where
+    equipmentName e = equipmentName (lumencorFromMarcelLumencor e)
+    closeDevice (MarcelLumencor _ lcP arP _ _) = closeSerialPort lcP >> closeSerialPort arP
+    availableLightSources e = availableLightSources (lumencorFromMarcelLumencor e)
+    activateLightSource e = activateLightSource (lumencorFromMarcelLumencor e)
+    activateLightSourceGated ml@(MarcelLumencor _ _ arPort _ _) _ chs =
+        maybeChangeLumencorFilter (lumencorFromMarcelLumencor ml) lcChannels >>
+        forM_ lcChannels (\ch -> let ardMsg = fromJust $ lookup ch marcelLumencorChannelCoding
+                                 in  handleMarcelLumencorMessage ml ardMsg)
+        where
+            (channels, powers) = unzip chs
+            lcChannels = map (fromJust . (flip lookup lumencorChannels) . fromLSChannelName) channels
+    deactivateLightSource ml@(MarcelLumencor _ _ arPort _ _) =
+        handleMarcelLumencorMessage ml "d" >>
+        deactivateLightSource (lumencorFromMarcelLumencor ml)
 
 data LumencorChannel = LCViolet | LCBlue | LCCyan |LCTeal
                      | LCGreen | LCYellow | LCRed
@@ -74,6 +95,30 @@ data LumencorFilter = LCGreenFilter | LCYellowFilter
 lumencorChannels :: [(Text, LumencorChannel)]
 lumencorChannels = [("violet", LCViolet), ("blue", LCBlue), ("cyan", LCCyan), ("teal", LCTeal),
                     ("green", LCGreen), ("yellow", LCYellow), ("red", LCRed)]
+
+marcelLumencorChannelCoding :: [(LumencorChannel, ByteString)]
+marcelLumencorChannelCoding = [(LCViolet, "V"), (LCBlue, "B"), (LCCyan, "C"),
+                               (LCTeal, "T"), (LCGreen, "G"), (LCYellow, "Y"),
+                               (LCRed, "R")]
+
+maybeChangeLumencorFilter :: Lumencor -> [LumencorChannel] -> IO ()
+maybeChangeLumencorFilter (Lumencor _ port haveInitRef currFilterRef) lcChannels =
+   readIORef haveInitRef >>= \haveInit ->
+   when (not haveInit) (   -- init RS232 and arbitrarily select the green filter
+       serialWrite port lumencorEnableRS232Message >>
+       changeFilter LCGreenFilter >>
+       writeIORef haveInitRef True) >>
+   readIORef currFilterRef >>= \currFilter ->
+   when ((isJust filterForChannel) && (currFilter /= fromJust filterForChannel)) (
+        changeFilter $ fromJust filterForChannel)
+    where
+       filterForChannel | LCGreen `elem` lcChannels  = Just LCGreenFilter
+                        | LCYellow `elem` lcChannels = Just LCYellowFilter
+                        | otherwise                  = Nothing
+       changeFilter filter =
+         serialWrite port (lumencorFilterMessage filter) >>
+         threadDelay (floor (0.3 * 1.0e6)) >>
+         writeIORef currFilterRef filter
 
 lumencorEnableRS232Message :: ByteString
 lumencorEnableRS232Message =
@@ -125,3 +170,9 @@ lumencorDisableMessage filter =
     where
         filterSelectByte LCGreenFilter = 0x7F
         filterSelectByte LCYellowFilter = 0x6F
+
+handleMarcelLumencorMessage :: MarcelLumencor -> ByteString -> IO ()
+handleMarcelLumencorMessage (MarcelLumencor _ _ arPort _ _) bs =
+    serialWrite arPort (B.append bs "\r\n") >>
+    serialReadUntilChar arPort '\n' >>= \resp ->
+    when (B.take 2 resp /= "OK") (throwIO $ userError "Error response from MarcelLumencor Arduino")

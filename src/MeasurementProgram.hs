@@ -162,7 +162,7 @@ executeDetection det eqs DetectionParams{..} =
     setBinningFactor det dpBinningFactor >>
     setCropSize det dpCropSize >>
     switchToFilters eqs dpFilterParams >>
-    enableLightSources eqs dpIrradiation >>
+    enableLightSourcesGated eqs dpIrradiation >>
     acquireData det dpExposureTime dpGain dpNSpectraToAverage >>= \acquiredData ->
     disableLightSources eqs dpIrradiation >>
     return acquiredData
@@ -205,6 +205,12 @@ enableLightSources eqs params =
     forM_ params (\(IrradiationParams eqName sourceName channels powers) ->
         let [eq] = filter (\e -> equipmentName e == eqName) eqs
         in  activateLightSource eq sourceName (zip channels powers))
+
+enableLightSourcesGated :: [EquipmentW] -> [IrradiationParams] -> IO ()
+enableLightSourcesGated eqs params =
+    forM_ params (\(IrradiationParams eqName sourceName channels powers) ->
+        let [eq] = filter (\e -> equipmentName e == eqName) eqs
+        in  activateLightSourceGated eq sourceName (zip channels powers))
 
 disableLightSources :: [EquipmentW] -> [IrradiationParams] -> IO ()
 disableLightSources eqs params =

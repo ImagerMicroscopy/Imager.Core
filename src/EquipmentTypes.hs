@@ -16,6 +16,11 @@ data EquipmentDescription = CoherentLightSourceDesc {
                                 llsdName :: !Text
                               , llsdSerialPortName :: !String
                             }
+                          | MarcelLumencorLightSourceDesc {
+                                mllsdName :: !Text
+                              , mllsdLumencorPortName :: !String
+                              , mllsdArduinoPortName :: !String
+                            }
                           | AsahiLightSourceDesc {
                                 alsName :: !Text
                               , alsSerialPortName :: !String

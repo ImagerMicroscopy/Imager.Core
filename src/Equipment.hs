@@ -53,6 +53,7 @@ class Equipment e where
 
     availableLightSources :: e -> [LightSourceDescription]
     activateLightSource :: e -> LSName -> [(LSChannelName, LSIlluminationPower)] -> IO ()
+    activateLightSourceGated :: e -> LSName -> [(LSChannelName, LSIlluminationPower)] -> IO ()
     deactivateLightSource :: e -> IO ()
 
     availableFilterWheels  :: e -> [FilterWheelDescription]
@@ -73,6 +74,7 @@ class Equipment e where
 
     availableLightSources _ = []
     activateLightSource e _ _ = error ("calling activateLightSource on " ++ show (fromEqName (equipmentName e)))
+    activateLightSourceGated = activateLightSource
     deactivateLightSource e = error ("calling deactivateLightSource on " ++ show (fromEqName (equipmentName e)))
     availableFilterWheels _ = []
     switchToFilter e _ = error ("calling switchToFilter on " ++ show (fromEqName (equipmentName e)))

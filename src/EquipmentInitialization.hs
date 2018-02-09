@@ -54,6 +54,7 @@ closeEquipment = mapM_ closeDevice
 initializeDevice :: EquipmentDescription -> IO EquipmentW
 initializeDevice d@(CoherentLightSourceDesc _ _) = initializeCoherent d
 initializeDevice d@(LumencorLightSourceDesc _ _) = initializeLumencor d
+initializeDevice d@(MarcelLumencorLightSourceDesc _ _ _) = initializeMarcelLumencor d
 initializeDevice d@(AsahiLightSourceDesc _ _ _) = initializeAsahiLightSource d
 initializeDevice d@(ArduinoLightSourceDesc _ _ _) = initializeArduinoLightSource d
 initializeDevice d@(DummyLightSourceDesc _) = initializeDummyLightSource d
