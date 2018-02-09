@@ -94,6 +94,7 @@ instance Equipment EquipmentW where
     closeDevice (EquipmentW e) = closeDevice e
     availableLightSources (EquipmentW e) = availableLightSources e
     activateLightSource (EquipmentW e) = activateLightSource e
+    activateLightSourceGated (EquipmentW e) = activateLightSourceGated e
     deactivateLightSource (EquipmentW e) = deactivateLightSource e
     availableFilterWheels (EquipmentW e) = availableFilterWheels e
     switchToFilter (EquipmentW e) = switchToFilter e

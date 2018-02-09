@@ -49,7 +49,7 @@ initializeMarcelLumencor (MarcelLumencorLightSourceDesc name lcPortName arPortNa
     let lcSerialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS9600}) (TimeoutMillis 1000) SerialPortDebugBinary
         arSerialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS19200}) (TimeoutMillis 1000) SerialPortDebugText
         lcPort = openSerialPort lcPortName lcSerialSettings
-        arPort = openSerialPort arPortName arSerialSettings
+        arPort = openSerialPort arPortName arSerialSettings >>= \p -> threadDelay 2000000 >> pure p
     in  EquipmentW <$> (MarcelLumencor (EqName name) <$> lcPort <*> arPort <*> newIORef False <*> newIORef LCGreenFilter)
 
 instance Equipment Lumencor where
@@ -78,11 +78,13 @@ instance Equipment MarcelLumencor where
     activateLightSourceGated ml@(MarcelLumencor _ _ arPort _ _) _ chs =
         maybeChangeLumencorFilter (lumencorFromMarcelLumencor ml) lcChannels >>
         forM_ lcChannels (\ch -> let ardMsg = fromJust $ lookup ch marcelLumencorChannelCoding
-                                 in  handleMarcelLumencorMessage ml ardMsg)
+                                 in  handleMarcelLumencorMessage ml ardMsg) >>
+        handleMarcelLumencorMessage ml "X"
         where
             (channels, powers) = unzip chs
             lcChannels = map (fromJust . (flip lookup lumencorChannels) . fromLSChannelName) channels
     deactivateLightSource ml@(MarcelLumencor _ _ arPort _ _) =
+        handleMarcelLumencorMessage ml "x" >>
         handleMarcelLumencorMessage ml "d" >>
         deactivateLightSource (lumencorFromMarcelLumencor ml)
 
