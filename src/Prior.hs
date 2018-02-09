@@ -43,7 +43,7 @@ initializePriorStage :: EquipmentDescription -> IO EquipmentW
 initializePriorStage (PriorDesc name portName) =
     let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS9600}) (TimeoutMillis 30000) SerialPortNoDebug
     in  openSerialPort portName serialSettings >>= \port ->
-        serialWrite port "COMP 1\r" >> serialReadUntilChar port '\r' >>= \resp ->
+        serialWriteAndReadUntilChar port "COMP 1\r" '\r' >>= \resp ->
         if ((resp /= "0\r") && (resp /= "R\r"))
         then throwIO (userError "unexpected reply from prior stage")
         else putStrLn "Connected to Prior stage" >>
@@ -59,12 +59,11 @@ instance Equipment PriorStage where
         (,,) <$> readNumberP port "PX\r" <*> readNumberP port "PY\r" <*> ((/10) <$> readNumberP port "PZ\r")
         where
           readNumberP :: SerialPort -> ByteString -> IO Double
-          readNumberP port query = serialWrite port query >>
-                                   serialReadUntilChar port '\r' >>=
+          readNumberP port query = serialWriteAndReadUntilChar port query '\r' >>=
                                    return . read . T.unpack . T.decodeUtf8
     setStagePosition (PriorStage _ portVar) (x, y, z) =
         (withMVar portVar $ \port ->
-            serialWrite port posStr >> serialReadUntilChar port '\r') >>= \resp ->
+            serialWriteAndReadUntilChar port posStr '\r') >>= \resp ->
         case resp of
           "R\r" -> return ()
           _     -> throwIO (userError "unexpected response from stage")

@@ -68,8 +68,7 @@ setArduinoPinsState state ps port =
 
 handleArduinoMessage :: SerialPort -> String -> IO ()
 handleArduinoMessage port ss =
-    serialWrite port (T.encodeUtf8 . T.pack $ ss) >>
-    serialReadUntilChar port '\r' >>= \response ->
+    serialWriteAndReadUntilChar port (T.encodeUtf8 . T.pack $ ss) '\r' >>= \response ->
     case response of
         "OK\r" -> return ()
         e -> throwIO (userError ("arduino responded \"" ++ T.unpack (T.decodeUtf8 e) ++ "\""))

@@ -2,6 +2,7 @@
 module Asahi where
 
 import Control.Exception
+import Control.Monad
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import Data.Either
@@ -35,7 +36,7 @@ initializeAsahiLightSource (AsahiLightSourceDesc name portName chs) =
     where
         readLampLife :: SerialPort -> IO Double
         readLampLife port =
-            serialWrite port "LIFE?\r\n" >> serialReadUntilChar port '\n' >>= -- response is of format "LF %d\r"
+            serialWriteAndReadUntilChar port "LIFE?\r\n" '\n' >>= -- response is of format "LF %d\r"
             return . read . filter (`elem` ("01234567890." :: String)) . byteStringAsString
 
 instance Equipment AsahiLightSource where
@@ -56,7 +57,6 @@ instance Equipment AsahiLightSource where
 
 handleAsahiMessage :: SerialPort -> String -> IO ()
 handleAsahiMessage port ss =
-    serialWrite port (T.encodeUtf8 $ T.pack ss) >> serialReadUntilChar port '\n' >>= \response ->
-    if (response == "OK\r\n")
-    then return ()
-    else throwIO (userError ("sent " ++ ss ++ "to asahi, received " ++ (T.unpack $ T.decodeUtf8 response)))
+    serialWriteAndReadUntilChar port (T.encodeUtf8 $ T.pack ss) '\n' >>= \response ->
+    when (response /= "OK\r\n")
+        (throwIO (userError ("sent " ++ ss ++ "to asahi, received " ++ (T.unpack $ T.decodeUtf8 response))))

@@ -17,7 +17,6 @@ import System.Environment
 import System.FilePath
 
 import Equipment
-import EquipmentMessaging
 import EquipmentTypes
 import MiscUtils
 import RCSerialPort

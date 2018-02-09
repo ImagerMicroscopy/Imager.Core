@@ -71,6 +71,6 @@ instance Equipment Coherent where
             parseQuery :: ByteString -> IO Double
             parseQuery q = sendAndReadResponse q >>= return . read . filter (`elem` ('.' : ['0' .. '9'])) . T.unpack . T.decodeUtf8
             sendAndReadResponse :: ByteString -> IO ByteString
-            sendAndReadResponse msg = serialWrite port msg >> serialReadUntilChar port '\n'
+            sendAndReadResponse msg = serialWriteAndReadUntilChar port msg '\n'
     deactivateLightSource (Coherent _ port _ _) =
-        serialWrite port "L=0\r" >> serialReadUntilChar port '\n' >> return ()
+        serialWriteAndReadUntilChar port "L=0\r" '\n' >> pure ()

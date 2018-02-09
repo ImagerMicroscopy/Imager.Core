@@ -5,6 +5,7 @@ import Control.Monad
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import Data.List
+import Data.Monoid
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.Lazy as LT
@@ -38,5 +39,5 @@ instance Equipment MarzhauserStage where
         in  handleMarzhauserMessage port (T.encodeUtf8 msg) >> pure ()
 
 handleMarzhauserMessage :: SerialPort -> ByteString -> IO ByteString
-handleMarzhauserMessage port bs = serialWrite port (B.append bs "\r") >>
-                                  serialReadUntilChar port '\r'
+handleMarzhauserMessage port bs =
+    serialWriteAndReadUntilChar port (bs <> "\r") '\r'

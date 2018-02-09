@@ -54,7 +54,6 @@ executable RaspCuvettor
                      , CuvettorTypes
                      , BinaryEncoding
                      , Equipment
-                     , EquipmentMessaging
                      , EquipmentTypes
                      , EquipmentInitialization
                      , EquipmentEncoding

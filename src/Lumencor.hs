@@ -177,6 +177,5 @@ lumencorDisableMessage filter =
 
 handleMarcelLumencorMessage :: MarcelLumencor -> ByteString -> IO ()
 handleMarcelLumencorMessage (MarcelLumencor _ _ arPort _ _) bs =
-    serialWrite arPort (B.append bs "\r\n") >>
-    serialReadUntilChar arPort '\n' >>= \resp ->
+    serialWriteAndReadUntilChar arPort (bs <> "\r\n") '\n' >>= \resp ->
     when (B.take 2 resp /= "OK") (throwIO $ userError "Error response from MarcelLumencor Arduino")

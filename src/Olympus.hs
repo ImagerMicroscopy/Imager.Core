@@ -20,7 +20,6 @@ import qualified Data.Text.Encoding as T
 import qualified System.Timeout as ST
 
 import Equipment
-import EquipmentMessaging
 import EquipmentTypes
 import FilterUtils
 import MiscUtils
@@ -33,7 +32,7 @@ initializeOlympusIX71Dichroic (OlympusIX71DichroicDesc name portName chs) =
     let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS19200}) (TimeoutMillis 20000) SerialPortNoDebug
     in  openSerialPort portName serialSettings >>= \port ->
         putStr "initializing IX71 motorized dichroic..." >>
-        serialWrite port "1LOG IN\r" >> serialReadUntilChar port '\r' >>= \response ->
+        serialWriteAndReadUntilChar port "1LOG IN\r" '\r' >>= \response ->
         when (response /= "1LOG +\r") (
             putStrLn ("unexpected response from Olymus IX71 DM: " ++ show response) >> putStrLn "press return to close" >> getLine >> error "failed") >>
         putStrLn "done!" >> newIORef (False, 0) >>= \currFilterRef ->
@@ -46,10 +45,10 @@ instance Equipment OlympusIX71Dichroic where
     availableFilterWheels (OlympusIX71Dichroic _ chs _ _) = [FilterWheelDescription (FWName "DM") (map fst chs)]
     switchToFilter (OlympusIX71Dichroic _ chs currFilter port) _ chName =
         let filterIndex = fromJust (lookup chName chs)
+            msg = (T.encodeUtf8 . T.pack $ "1MU " ++ show (filterIndex + 1) ++ "\r")
         in  readIORef currFilter >>= \(haveInit, currFilterIdx) ->
             when ((not haveInit) || (currFilterIdx /= filterIndex)) (
-                serialWrite port (T.encodeUtf8 . T.pack $ "1MU " ++ show (filterIndex + 1) ++ "\r") >>
-                serialReadUntilChar port '\r' >>= \result ->
+                serialWriteAndReadUntilChar port msg '\r' >>= \result ->
                 case result of
                     "1MU +\r" -> writeIORef currFilter (True, filterIndex) >> return ()
                     v         -> throwIO (userError ("unknown response from ix71 dichroic turret: " ++ show v)))

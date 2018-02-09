@@ -12,14 +12,15 @@ module RCSerialPort (
   , openSerialPort
   , closeSerialPort
   , serialWrite
-  , serialWriteByte
-  , serialReadUntilTerminator
-  , serialReadUntilChar
-  , serialReadNBytes
+  , serialWriteAndReadUntilTerminator
+  , serialWriteAndReadUntilChar
+  , serialWriteByteAndReadUntilChar
+  , serialWriteAndReadAtLeastNBytes
   , flushSerialPort
 )
 where
 
+import Control.Concurrent.MVar
 import Control.Exception
 import Control.Monad
 import Data.ByteString (ByteString)
@@ -49,6 +50,7 @@ data SerialPort = SerialPort {
                     , spPortName :: !Text
                     , spTimeout :: !TimeoutValue
                     , spDebugMode :: !SerialPortDebugMode
+                    , spMVar :: !(MVar ())
                   }
 
 newtype TimeoutValue = TimeoutMillis {toMillis :: Int}
@@ -57,31 +59,47 @@ openSerialPort :: FilePath -> RCSerialPortSettings -> IO SerialPort
 openSerialPort name (RCSerialPortSettings settings timeout debugMode) = do
     port <- catch (SP.openSerial name settings)
                 (\(e :: IOException) -> displayStringThenError ("Unable to open serial port " ++ name))
-    return (SerialPort port (T.pack name) timeout debugMode)
+    SerialPort port (T.pack name) timeout debugMode <$> newMVar ()
 
 closeSerialPort :: SerialPort -> IO ()
-closeSerialPort (SerialPort port _ _ _) = SP.closeSerial port
+closeSerialPort (SerialPort port _ _ _ _) = SP.closeSerial port
 
 serialWrite :: SerialPort -> ByteString -> IO ()
 serialWrite port bs
     | B.null bs = return ()
-    | otherwise = SP.send (spPort port) bs >>= \nBytesSent ->
-                  possiblyPrintMessage (spPortName port) (spDebugMode port) "SENT" (B.take nBytesSent bs) >>
-                  serialWrite port (B.drop nBytesSent bs)
+    | otherwise = withMVar (spMVar port) (\_ ->
+                      serialWrite' port bs)
 
-serialWriteByte :: SerialPort -> Word8 -> IO ()
-serialWriteByte port b = serialWrite port (B.pack [b])
+serialWrite' :: SerialPort -> ByteString -> IO ()
+serialWrite' port bs
+    | B.null bs = pure ()
+    | otherwise =
+          SP.send (spPort port) bs >>= \nBytesSent ->
+          possiblyPrintMessage (spPortName port) (spDebugMode port) "SENT" (B.take nBytesSent bs) >>
+          serialWrite' port (B.drop nBytesSent bs)
 
-serialReadUntilTerminator :: SerialPort -> Word8 -> IO ByteString
-serialReadUntilTerminator p terminator = serialRead p satisfiedP
-    where satisfiedP bs = not (B.null bs) && (B.last bs == terminator)
+serialWriteAndReadUntilTerminator :: SerialPort -> ByteString -> Word8 -> IO ByteString
+serialWriteAndReadUntilTerminator port bs term =
+    withMVar (spMVar port) (\_ ->
+        serialWrite' port bs >>
+        serialReadUntilTerminator' port term)
+    where
+        serialReadUntilTerminator' :: SerialPort -> Word8 -> IO ByteString
+        serialReadUntilTerminator' p terminator = serialRead p satisfiedP
+            where satisfiedP bs = not (B.null bs) && (B.last bs == terminator)
 
-serialReadUntilChar :: SerialPort -> Char -> IO ByteString
-serialReadUntilChar p c = serialReadUntilTerminator p (fromIntegral . fromEnum $ c)
+serialWriteAndReadUntilChar :: SerialPort -> ByteString -> Char -> IO ByteString
+serialWriteAndReadUntilChar port bs c = serialWriteAndReadUntilTerminator port bs (fromIntegral . fromEnum $ c)
 
-serialReadNBytes :: SerialPort -> Int -> IO ByteString
-serialReadNBytes p n = serialRead p satisfiedP
-    where satisfiedP bs = B.length bs == n
+serialWriteByteAndReadUntilChar :: SerialPort -> Word8 -> Char -> IO ByteString
+serialWriteByteAndReadUntilChar port byte c = serialWriteAndReadUntilChar port (B.pack [byte]) c
+
+serialWriteAndReadAtLeastNBytes :: SerialPort -> ByteString -> Int -> IO ByteString
+serialWriteAndReadAtLeastNBytes port bs n =
+    withMVar (spMVar port) (\_ ->
+        serialWrite' port bs >>
+        let satisfiedP bs = B.length bs >= n
+        in  serialRead port satisfiedP)
 
 serialRead :: SerialPort -> (ByteString -> Bool) -> IO ByteString
 serialRead port satisfiedP =
@@ -90,7 +108,7 @@ serialRead port satisfiedP =
     where
         timeoutMillis = toMillis $ spTimeout port
         readWorker :: SerialPort -> (ByteString -> Bool) -> ByteString -> TimeSpec -> IO ByteString
-        readWorker p@(SerialPort port portName _ debugMode) satisfiedP accum deadline =
+        readWorker p@(SerialPort port portName _ debugMode _) satisfiedP accum deadline =
             getTime Monotonic >>= \now ->
             when (now > deadline)
                 (throwIO (userError ("time limit exceeded reading from serial port " ++ show portName))) >>
@@ -107,4 +125,4 @@ possiblyPrintMessage portName dbgMode prefix msg =
         SerialPortDebugText   -> T.print "{}: {} {}\n" (portName, prefix, T.decodeUtf8 msg)
 
 flushSerialPort :: SerialPort -> IO ()
-flushSerialPort (SerialPort port _ _ _) = SP.flush port
+flushSerialPort (SerialPort port _ _ _ _) = SP.flush port

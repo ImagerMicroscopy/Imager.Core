@@ -20,7 +20,6 @@ import qualified Data.Text.Encoding as T
 import qualified System.Timeout as ST
 
 import Equipment
-import EquipmentMessaging
 import EquipmentTypes
 import FilterUtils
 import MiscUtils
@@ -32,8 +31,8 @@ initializeSutterLambda10B :: EquipmentDescription -> IO EquipmentW
 initializeSutterLambda10B (SutterLambda10BDesc name portName chs) =
     let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS128000}) (TimeoutMillis 10000) SerialPortNoDebug
     in  openSerialPort portName serialSettings >>= \port ->
-        serialWriteByte port 238 >> serialReadUntilChar port '\r'>>
-        serialWriteByte port 253 >> serialReadUntilChar port '\r' >>
+        serialWriteByteAndReadUntilChar port 238 '\r'>>
+        serialWriteByteAndReadUntilChar port 253 '\r' >>
         return (EquipmentW $ SutterLambda10B (EqName name) (validateFilters FName (0, 9) chs) port)
 
 instance Equipment SutterLambda10B where
@@ -45,5 +44,4 @@ instance Equipment SutterLambda10B where
         let filterIndex = (fromIntegral . fromJust . lookup chName) chs
             speed = 3
             byte = (speed `shiftL` 4) .|. filterIndex
-        in serialWrite port (B.pack [byte]) >>
-           serialReadUntilChar port '\r' >> return ()
+        in serialWriteByteAndReadUntilChar port byte '\r' >> pure ()
