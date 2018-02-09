@@ -46,8 +46,8 @@ initializeLumencor (LumencorLightSourceDesc name portName) =
 
 initializeMarcelLumencor :: EquipmentDescription -> IO EquipmentW
 initializeMarcelLumencor (MarcelLumencorLightSourceDesc name lcPortName arPortName) =
-    let lcSerialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS9600}) (TimeoutMillis 1000) SerialPortDebugBinary
-        arSerialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS19200}) (TimeoutMillis 1000) SerialPortDebugText
+    let lcSerialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS9600}) (TimeoutMillis 1000) SerialPortNoDebug
+        arSerialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS19200}) (TimeoutMillis 1000) SerialPortNoDebug
         lcPort = openSerialPort lcPortName lcSerialSettings
         arPort = openSerialPort arPortName arSerialSettings >>= \p -> threadDelay 2000000 >> pure p
     in  EquipmentW <$> (MarcelLumencor (EqName name) <$> lcPort <*> arPort <*> newIORef False <*> newIORef LCGreenFilter)

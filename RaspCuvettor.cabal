@@ -72,12 +72,13 @@ executable RaspCuvettor
                      , Coherent
                      , DummyEquipment
                      , Lumencor
+                     , Marzhauser
                      , Olympus
                      , Prior
                      , Robottor
                      , Sutter
                      , Thorlabs
-  default-extensions:  CPP
+  default-extensions:  CPP, BangPatterns, OverloadedStrings
   ghc-options:         -O2 -threaded -rtsopts -funbox-strict-fields
 
   if (flag(withoceanoptics))
