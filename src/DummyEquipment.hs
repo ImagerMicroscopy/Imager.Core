@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module DummyEquipment where
 
+import Data.IORef
 import Data.Text (Text)
 import qualified Data.Text as T
 
@@ -10,7 +11,7 @@ import FilterUtils
 
 data DummyLightSource = DummyLightSource !EqName
 data DummyFilterWheel = DummyFilterWheel !EqName ![(FName, Int)]
-data DummyStage = DummyStage !StageName
+data DummyStage = DummyStage !StageName !(IORef StagePosition)
 
 initializeDummyLightSource :: EquipmentDescription -> IO EquipmentW
 initializeDummyLightSource (DummyLightSourceDesc name) =
@@ -24,7 +25,7 @@ initializeDummyFilterWheel (DummyFilterWheelDesc name chs) =
 initializeDummyStage :: EquipmentDescription -> IO EquipmentW
 initializeDummyStage (DummyStageDesc name) =
     putStrLn ("dummy stage " ++ (T.unpack name) ++ " open") >>
-    return (EquipmentW $ DummyStage (StageName name))
+    EquipmentW <$> (DummyStage (StageName name) <$> newIORef (0,0,0))
 
 instance Equipment DummyLightSource where
     equipmentName (DummyLightSource n) = n
@@ -50,10 +51,12 @@ instance Equipment DummyFilterWheel where
 instance Equipment DummyStage where
     equipmentName _ = (EqName "Dummy stage")
     flushSerialPorts _ = pure ()
-    closeDevice (DummyStage n) = putStrLn ("dummy stage " ++ (T.unpack (fromStageName n)) ++ " closed")
+    closeDevice (DummyStage n _) = putStrLn ("dummy stage " ++ (T.unpack (fromStageName n)) ++ " closed")
     hasMotorizedStage _ = True
-    motorizedStageName (DummyStage n) = n
-    getStagePosition (DummyStage n) =
-        putStrLn ("read position of " ++ T.unpack (fromStageName n)) >> return (0.0, 0.0, 0.0)
-    setStagePosition (DummyStage n) ds =
+    motorizedStageName (DummyStage n _) = n
+    getStagePosition (DummyStage n posRef) =
+        readIORef posRef >>= \pos ->
+        putStrLn ("read position of " ++ T.unpack (fromStageName n) ++ " as " ++ show pos) >> pure pos
+    setStagePosition (DummyStage n posRef) ds =
+        writeIORef posRef ds >>
         putStrLn ("set position of " ++ T.unpack (fromStageName n) ++ " to " ++ show ds)
