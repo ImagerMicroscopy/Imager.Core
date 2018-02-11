@@ -28,7 +28,6 @@ data ArduinoLightSource = ArduinoLightSource !EqName ![(LSChannelName, (Int, Dou
 
 initializeArduinoLightSource :: EquipmentDescription -> IO EquipmentW
 initializeArduinoLightSource (ArduinoLightSourceDesc name portName chs) =
-    putStrLn "Connecting to Arduino" >>
     let chs' = validArduinoChannelNames chs (2, 13)
         serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS115200}) (TimeoutMillis 10000) SerialPortNoDebug
     in  openSerialPort portName serialSettings >>= \port -> threadDelay (floor 2e6) >> -- delay needed, otherwise the arduino won't receive the messages.

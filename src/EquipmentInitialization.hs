@@ -46,7 +46,12 @@ withEquipment descs action =
     bracket (initializeEquipment descs) closeEquipment action
 
 initializeEquipment :: [EquipmentDescription] -> IO [EquipmentW]
-initializeEquipment descs = mapM initializeDevice descs >>= verifyEquipmentThrows
+initializeEquipment descs = forM descs (\desc ->
+                                putStr ("Initializing " ++ deviceDescName desc ++ "...") >>
+                                initializeDevice desc >>= \dev ->
+                                putStr " done!\n" >>
+                                pure dev) >>=
+                            verifyEquipmentThrows
 
 closeEquipment :: [EquipmentW] -> IO ()
 closeEquipment = mapM_ closeDevice
@@ -68,6 +73,24 @@ initializeDevice d@(MarzhauserStageDesc _ _) = initializeMarzhauserStage d
 initializeDevice d@(DummyStageDesc name) = initializeDummyStage d
 initializeDevice d@(RobottorDesc name ip port) = initializeRobottor d
 initializeDevice _ = error "unknown type of device description"
+
+deviceDescName :: EquipmentDescription -> String
+deviceDescName (CoherentLightSourceDesc _ _) = "Coherent laser"
+deviceDescName (LumencorLightSourceDesc _ _) = "Lumencor"
+deviceDescName (MarcelLumencorLightSourceDesc _ _ _) = "MarcelLumencor"
+deviceDescName (AsahiLightSourceDesc _ _ _) = "Asahi lamp"
+deviceDescName (ArduinoLightSourceDesc _ _ _) = "Arduino-controlled light source"
+deviceDescName (DummyLightSourceDesc _) = "Dummy light source"
+deviceDescName (ThorlabsFW103HDesc _ _ _) = "Thorlabs FW130H filter wheel"
+deviceDescName (ThorlabsFW102CDesc _ _ _) = "ThorlabsFW102C filter wheel"
+deviceDescName (SutterLambda10BDesc _ _ _) = "Sutter filter wheel"
+deviceDescName (OlympusIX71DichroicDesc _ _ _) = "Olympus IX71 dichroic turret"
+deviceDescName (DummyFilterWheelDesc _ _) = "Dummy filter wheel"
+deviceDescName (PriorDesc _ _) = "Prior motorized stage"
+deviceDescName (MarzhauserStageDesc _ _) = "Marzhauser motorized stage"
+deviceDescName (DummyStageDesc name) = "Dummy motorized stage"
+deviceDescName (RobottorDesc name ip port) = "Robottor"
+deviceDescName _ = error "unknown type of device description"
 
 verifyEquipmentThrows :: [EquipmentW] -> IO [EquipmentW]
 verifyEquipmentThrows eqs = when (not (nodups (map equipmentName eqs)))

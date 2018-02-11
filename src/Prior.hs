@@ -32,7 +32,6 @@ initializePriorStage (PriorDesc name portName) =
     in  openSerialPort portName serialSettings >>= \port ->
         handlePriorMessage port "COMP 0" >>= \resp ->
         when (resp /= "0\r") (throwIO (userError "unexpected reply from Prior stage")) >>
-        putStrLn "Connected to Prior stage" >>
         pure (EquipmentW (PriorStage (EqName name) port))
 
 instance Equipment PriorStage where

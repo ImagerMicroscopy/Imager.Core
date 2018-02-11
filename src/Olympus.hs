@@ -31,11 +31,10 @@ initializeOlympusIX71Dichroic :: EquipmentDescription -> IO EquipmentW
 initializeOlympusIX71Dichroic (OlympusIX71DichroicDesc name portName chs) =
     let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS19200}) (TimeoutMillis 20000) SerialPortNoDebug
     in  openSerialPort portName serialSettings >>= \port ->
-        putStr "initializing IX71 motorized dichroic..." >>
         serialWriteAndReadUntilChar port "1LOG IN\r" '\r' >>= \response ->
         when (response /= "1LOG +\r") (
             putStrLn ("unexpected response from Olymus IX71 DM: " ++ show response) >> putStrLn "press return to close" >> getLine >> error "failed") >>
-        putStrLn "done!" >> newIORef (False, 0) >>= \currFilterRef ->
+        newIORef (False, 0) >>= \currFilterRef ->
         return (EquipmentW $ OlympusIX71Dichroic (EqName name) (validateFilters FName (0, 5) chs) currFilterRef port)
 
 instance Equipment OlympusIX71Dichroic where

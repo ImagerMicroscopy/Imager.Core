@@ -32,11 +32,9 @@ initializeThorlabsFW130H :: EquipmentDescription -> IO EquipmentW
 initializeThorlabsFW130H (ThorlabsFW103HDesc name portName chs) =
     let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS115200}) (TimeoutMillis 10000) SerialPortNoDebug
     in  openSerialPort portName serialSettings >>= \port ->
-        putStr "initializing Thorlabs FW103H filter wheel..." >>
         forM_ fw103HStartupMessages (\msg -> serialWrite port msg >> threadDelay (floor 25e3)) >>
         serialWrite port fw103HStopUpdatesMessage >> serialWrite port fw103HMoveHomeMessage >>
         fw103HWaitUntilHomingStops port >>
-        putStrLn "done!" >>
         return (EquipmentW $ ThorlabsFW103H (EqName name) (validateFilters FName (0, 5) chs) port)
 
 initializeThorlabsFW102C :: EquipmentDescription -> IO EquipmentW
