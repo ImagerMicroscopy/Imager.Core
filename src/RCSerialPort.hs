@@ -125,4 +125,4 @@ possiblyPrintMessage portName dbgMode prefix msg =
         SerialPortDebugText   -> T.print "{}: {} {}\n" (portName, prefix, T.decodeUtf8 msg)
 
 flushSerialPort :: SerialPort -> IO ()
-flushSerialPort (SerialPort port _ _ _ _) = SP.flush port
+flushSerialPort (SerialPort port _ _ _ mVar) = withMVar mVar (\_ -> SP.flush port)
