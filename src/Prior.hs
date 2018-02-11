@@ -1,32 +1,19 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Prior where
 
-import Control.Concurrent.MVar
+import Control.Concurrent
 import Control.Exception
+import Control.Monad
 import Data.Aeson
+import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
+import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
-import System.Environment
-import System.FilePath
-import qualified System.Timeout as ST
-import Text.Printf
-
-import EquipmentTypes
-import MiscUtils
-import RCSerialPort
-import Equipment
-
-import Control.Concurrent.MVar
-import Control.Exception
-import Data.Aeson
-import Data.ByteString (ByteString)
-import qualified Data.ByteString as B
-import Data.Text (Text)
-import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
+import qualified Data.Text.Format as T
+import qualified Data.Text.Lazy as LT
 import System.Environment
 import System.FilePath
 import qualified System.Timeout as ST
@@ -37,35 +24,48 @@ import EquipmentTypes
 import MiscUtils
 import RCSerialPort
 
-data PriorStage = PriorStage !EqName !(MVar SerialPort)
+data PriorStage = PriorStage !EqName !SerialPort
 
 initializePriorStage :: EquipmentDescription -> IO EquipmentW
 initializePriorStage (PriorDesc name portName) =
     let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS9600}) (TimeoutMillis 30000) SerialPortNoDebug
     in  openSerialPort portName serialSettings >>= \port ->
-        serialWriteAndReadUntilChar port "COMP 1\r" '\r' >>= \resp ->
-        if ((resp /= "0\r") && (resp /= "R\r"))
-        then throwIO (userError "unexpected reply from prior stage")
-        else putStrLn "Connected to Prior stage" >>
-             EquipmentW <$> (PriorStage (EqName name) <$> newMVar port)
+        handlePriorMessage port "COMP 0" >>= \resp ->
+        when (resp /= "0\r") (throwIO (userError "unexpected reply from Prior stage")) >>
+        putStrLn "Connected to Prior stage" >>
+        pure (EquipmentW (PriorStage (EqName name) port))
 
 instance Equipment PriorStage where
     equipmentName (PriorStage n _) = n
-    flushSerialPorts (PriorStage _ portVar) = withMVar portVar $ (\port -> flushSerialPort port)
-    closeDevice (PriorStage _ portVar) = withMVar portVar $ (\port -> closeSerialPort port)
+    flushSerialPorts (PriorStage _ port) = flushSerialPort port
+    closeDevice (PriorStage _ port) = closeSerialPort port
     hasMotorizedStage _ = True
     motorizedStageName (PriorStage n _) = StageName "stage"
-    getStagePosition (PriorStage _ portVar) = withMVar portVar $ \port ->
-        (,,) <$> readNumberP port "PX\r" <*> readNumberP port "PY\r" <*> ((/10) <$> readNumberP port "PZ\r")
+    getStagePosition (PriorStage _ port) = (,,) <$> readNumberP port "PX"
+                                                <*> readNumberP port "PY"
+                                                <*> ((/10) <$> readNumberP port "PZ")
         where
           readNumberP :: SerialPort -> ByteString -> IO Double
-          readNumberP port query = serialWriteAndReadUntilChar port query '\r' >>=
+          readNumberP port query = handlePriorMessage port query >>=
                                    return . read . T.unpack . T.decodeUtf8
-    setStagePosition (PriorStage _ portVar) (x, y, z) =
-        (withMVar portVar $ \port ->
-            serialWriteAndReadUntilChar port posStr '\r') >>= \resp ->
-        case resp of
-          "R\r" -> return ()
-          _     -> throwIO (userError "unexpected response from stage")
+    setStagePosition (PriorStage _ port) (x, y, z) =
+        doMove `onException` abortMovement
         where
-          posStr = T.encodeUtf8 . T.pack $ printf "G %d, %d, %d\r" (round x :: Int) (round y :: Int) (round (z * 10) :: Int)
+          doMove = sendPriorCommand port posMsg >> waitUntilMovementStops
+          posMsg = T.encodeUtf8 . LT.toStrict $ T.format "G {}, {}, {}" ((round x, round y, round (z * 10)) :: (Int, Int, Int))
+          waitUntilMovementStops = isMoving . read . T.unpack . T.decodeUtf8 <$> handlePriorMessage port "$" >>= \moves ->
+                                   if (moves)
+                                   then threadDelay 20000 >> waitUntilMovementStops
+                                   else pure ()
+          isMoving :: Int -> Bool
+          isMoving a = any ((/=) 0) [a .&. (2^0), a .&. (2^1), a .&. (2^2)]
+          abortMovement = sendPriorCommand port "I"
+
+handlePriorMessage :: SerialPort -> ByteString -> IO ByteString
+handlePriorMessage port bs = serialWriteAndReadUntilChar port (bs <> "\r") '\r'
+
+sendPriorCommand :: SerialPort -> ByteString -> IO ()
+sendPriorCommand port bs = handlePriorMessage port bs >>= \resp ->
+                           case resp of
+                               "R\r" -> return ()
+                               e     -> throwIO (userError ("unexpected response " ++ show e ++ " from Prior stage"))
