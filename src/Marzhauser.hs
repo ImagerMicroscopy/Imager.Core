@@ -1,5 +1,6 @@
 module Marzhauser where
 
+import Control.Concurrent
 import Control.Exception
 import Control.Monad
 import Data.ByteString (ByteString)
@@ -19,10 +20,11 @@ data MarzhauserStage = MarzhauserStage !EqName !SerialPort
 
 initializeMarzhauserStage :: EquipmentDescription -> IO EquipmentW
 initializeMarzhauserStage (MarzhauserStageDesc name portName) =
-    let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS57600}) (TimeoutMillis 30000) SerialPortNoDebug
+    let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS57600, stopb = Two}) (TimeoutMillis 30000) SerialPortNoDebug
     in  openSerialPort portName serialSettings >>= \port ->
-        handleMarzhauserMessage port "!dim 2" >>= \resp ->
+        handleMarzhauserMessage port "!dim 1" >>= \resp ->
         when (resp /= "2\r") (throwIO $ userError "unexpected response from Marzhauser stage") >>
+        handleMarzhauserMessage port "!autostatus 0" >> -- we will poll for move completion
         return (EquipmentW (MarzhauserStage (EqName name) port))
 
 instance Equipment MarzhauserStage where
@@ -35,9 +37,21 @@ instance Equipment MarzhauserStage where
         map read . words . T.unpack . T.decodeUtf8 <$> handleMarzhauserMessage port "?pos" >>= \[x, y, z] ->
         pure (x, y, z)
     setStagePosition (MarzhauserStage _ port) (x, y, z) =
-        let msg = LT.toStrict $ format "pos {} {} {}" (x, y, z)
-        in  handleMarzhauserMessage port (T.encodeUtf8 msg) >> pure ()
+        doMove `onException` abortMovement
+        where
+            doMove = sendMarzhauserMessageNoResponse port (T.encodeUtf8 msg) >>
+                     waitUntilMovementStops
+            msg = LT.toStrict $ format "!moa {} {} {}" (x, y, z)
+            waitUntilMovementStops =
+                handleMarzhauserMessage port "?statusaxis" >>= \resp ->
+                if (any (== (fromIntegral $ fromEnum 'M')) (B.unpack (B.take 3 resp)))
+                then threadDelay 20000 >> waitUntilMovementStops
+                else pure ()
+            abortMovement = sendMarzhauserMessageNoResponse port "a -1"
 
 handleMarzhauserMessage :: SerialPort -> ByteString -> IO ByteString
 handleMarzhauserMessage port bs =
     serialWriteAndReadUntilChar port (bs <> "\r") '\r'
+
+sendMarzhauserMessageNoResponse :: SerialPort -> ByteString -> IO ()
+sendMarzhauserMessageNoResponse port bs = serialWrite port (bs <> "\r")

@@ -1,11 +1,11 @@
 {-# LANGUAGE OverloadedStrings, BangPatterns, ScopedTypeVariables, NumDecimals #-}
 
 module RCSerialPort (
-
     SerialPort
   , SP.SerialPortSettings (..)
   , SP.defaultSerialSettings
   , SP.CommSpeed (..)
+  , SP.StopBits (..)
   , RCSerialPortSettings (..)
   , TimeoutValue (..)
   , SerialPortDebugMode (..)

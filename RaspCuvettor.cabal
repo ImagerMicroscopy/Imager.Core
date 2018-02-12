@@ -58,6 +58,7 @@ executable RaspCuvettor
                      , EquipmentInitialization
                      , EquipmentEncoding
                      , FilterUtils
+                     , Marzhauser
                      , MeasurementProgram
                      , MeasurementProgramTypes
                      , MeasurementProgramUtils
