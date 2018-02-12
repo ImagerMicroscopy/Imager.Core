@@ -22,9 +22,8 @@ initializeMarzhauserStage :: EquipmentDescription -> IO EquipmentW
 initializeMarzhauserStage (MarzhauserStageDesc name portName) =
     let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS57600, stopb = Two}) (TimeoutMillis 30000) SerialPortNoDebug
     in  openSerialPort portName serialSettings >>= \port ->
-        handleMarzhauserMessage port "!dim 1" >>= \resp ->
-        when (resp /= "2\r") (throwIO $ userError "unexpected response from Marzhauser stage") >>
-        handleMarzhauserMessage port "!autostatus 0" >> -- we will poll for move completion
+        sendMarzhauserMessageNoResponse port "!dim 1 1 1" >>
+        sendMarzhauserMessageNoResponse port "!autostatus 0" >> -- we will poll for move completion
         return (EquipmentW (MarzhauserStage (EqName name) port))
 
 instance Equipment MarzhauserStage where
