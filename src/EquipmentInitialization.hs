@@ -46,12 +46,14 @@ withEquipment descs action =
     bracket (initializeEquipment descs) closeEquipment action
 
 initializeEquipment :: [EquipmentDescription] -> IO [EquipmentW]
-initializeEquipment descs = forM descs (\desc ->
-                                putStr ("Initializing " ++ deviceDescName desc ++ "...") >>
-                                initializeDevice desc >>= \dev ->
-                                putStr " done!\n" >>
-                                pure dev) >>=
-                            verifyEquipmentThrows
+initializeEquipment descs = doInit `catch` (\e -> displayStringThenError (displayException (e :: IOException)))
+    where
+        doInit = forM descs (\desc ->
+                     putStr ("Initializing " ++ deviceDescName desc ++ "...") >>
+                     initializeDevice desc >>= \dev ->
+                     putStr " done!\n" >>
+                     pure dev) >>=
+                 verifyEquipmentThrows
 
 closeEquipment :: [EquipmentW] -> IO ()
 closeEquipment = mapM_ closeDevice
