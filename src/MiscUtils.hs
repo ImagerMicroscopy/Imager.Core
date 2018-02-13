@@ -20,6 +20,7 @@ import qualified Data.Text.Encoding as T
 import Data.Word
 import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
+import Foreign.C.Types
 import Foreign.Storable
 import Foreign.Marshal
 import Foreign.Ptr
@@ -174,3 +175,5 @@ thd3 (a, b, c) = c
 concatMaybes :: (Eq a) => [Maybe a] -> Maybe [a]
 concatMaybes ms | Nothing `elem` ms = Nothing
                 | otherwise = Just (map fromJust ms)
+
+fromCDouble (CDouble d) = d

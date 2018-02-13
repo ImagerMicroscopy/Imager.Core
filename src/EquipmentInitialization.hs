@@ -27,6 +27,7 @@ import Coherent
 import DummyEquipment
 import Lumencor
 import Marzhauser
+import MicroscopeController
 import Olympus
 import Prior
 import Robottor
@@ -65,6 +66,7 @@ initializeDevice d@(MarcelLumencorLightSourceDesc _ _ _) = initializeMarcelLumen
 initializeDevice d@(AsahiLightSourceDesc _ _ _) = initializeAsahiLightSource d
 initializeDevice d@(ArduinoLightSourceDesc _ _ _) = initializeArduinoLightSource d
 initializeDevice d@(DummyLightSourceDesc _) = initializeDummyLightSource d
+initializeDevice d@(MicroscopeControllerDesc _) = initializeMicroscopeController d
 initializeDevice d@(ThorlabsFW103HDesc _ _ _) = initializeThorlabsFW130H d
 initializeDevice d@(ThorlabsFW102CDesc _ _ _) = initializeThorlabsFW102C d
 initializeDevice d@(SutterLambda10BDesc _ _ _) = initializeSutterLambda10B d
@@ -83,6 +85,7 @@ deviceDescName (MarcelLumencorLightSourceDesc _ _ _) = "MarcelLumencor"
 deviceDescName (AsahiLightSourceDesc _ _ _) = "Asahi lamp"
 deviceDescName (ArduinoLightSourceDesc _ _ _) = "Arduino-controlled light source"
 deviceDescName (DummyLightSourceDesc _) = "Dummy light source"
+deviceDescName (MicroscopeControllerDesc _) = "Microscope"
 deviceDescName (ThorlabsFW103HDesc _ _ _) = "Thorlabs FW130H filter wheel"
 deviceDescName (ThorlabsFW102CDesc _ _ _) = "ThorlabsFW102C filter wheel"
 deviceDescName (SutterLambda10BDesc _ _ _) = "Sutter filter wheel"
