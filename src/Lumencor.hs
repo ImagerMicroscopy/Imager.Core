@@ -61,12 +61,13 @@ instance Equipment Lumencor where
     activateLightSource lc@(Lumencor _ port haveInitRef currFilterRef) _ chs =
         maybeChangeLumencorFilter lc lcChannels >>
         readIORef currFilterRef >>= \possiblyUpdatedFilter ->
-        serialWrite port (lumencorIntensityMessage lcChannels powers) >>
+        setLumencorChannelIntensities lc withLCChannels >>
         serialWrite port (lumencorEnableMessage lcChannels possiblyUpdatedFilter) >>
         return ()
         where
-            (channels, powers) = unzip chs
-            lcChannels = map (fromJust . (flip lookup lumencorChannels) . fromLSChannelName) channels
+            withLCChannels = mapFirst channelNameToLCChannel chs
+            lcChannels = map channelNameToLCChannel (map fst chs)
+            channelNameToLCChannel = fromJust . (flip lookup lumencorChannels) . fromLSChannelName
     deactivateLightSource (Lumencor _ port _ currFilterRef) =
         readIORef currFilterRef >>= \currFilter ->
         serialWrite port (lumencorDisableMessage currFilter) >> return ()
@@ -77,17 +78,18 @@ instance Equipment MarcelLumencor where
     closeDevice (MarcelLumencor _ lcP arP _ _) = closeSerialPort lcP >> closeSerialPort arP
     availableLightSources e = availableLightSources (lumencorFromMarcelLumencor e)
     activateLightSource e = activateLightSource (lumencorFromMarcelLumencor e)
-    activateLightSourceGated ml@(MarcelLumencor _ _ arPort _ _) _ chs =
-        maybeChangeLumencorFilter (lumencorFromMarcelLumencor ml) lcChannels >>
-        forM_ lcChannels (\ch -> let ardMsg = fromJust $ lookup ch marcelLumencorChannelCoding
-                                 in  handleMarcelLumencorMessage ml ardMsg) >>
-        handleMarcelLumencorMessage ml "X"
+    activateLightSourceGated ml _ chs =
+        maybeChangeLumencorFilter (lumencorFromMarcelLumencor ml) (map fst withLCChannels) >>
+        setLumencorChannelIntensities (lumencorFromMarcelLumencor ml) withLCChannels >>
+        handleMarcelLumencorMessage ml prepareMsg
         where
-            (channels, powers) = unzip chs
-            lcChannels = map (fromJust . (flip lookup lumencorChannels) . fromLSChannelName) channels
-    deactivateLightSource ml@(MarcelLumencor _ _ arPort _ _) =
+            withLCChannels = mapFirst channelNameToLCChannel chs
+            channelNameToLCChannel = fromJust . (flip lookup lumencorChannels) . fromLSChannelName
+            prepareMsg = B.intercalate " " (map singleChannelMsg (map fst withLCChannels))
+            singleChannelMsg lch = let chCode = fromJust $ lookup lch marcelLumencorChannelCoding
+                                   in  chCode <> "1"
+    deactivateLightSource ml =
         handleMarcelLumencorMessage ml "x" >>
-        handleMarcelLumencorMessage ml "d" >>
         deactivateLightSource (lumencorFromMarcelLumencor ml)
 
 data LumencorChannel = LCViolet | LCBlue | LCCyan |LCTeal
@@ -123,6 +125,12 @@ maybeChangeLumencorFilter (Lumencor _ port haveInitRef currFilterRef) lcChannels
          serialWrite port (lumencorFilterMessage filter) >>
          threadDelay (floor (0.3 * 1.0e6)) >>
          writeIORef currFilterRef filter
+
+setLumencorChannelIntensities :: Lumencor -> [(LumencorChannel, LSIlluminationPower)] -> IO ()
+setLumencorChannelIntensities (Lumencor _ port _ _) lcs =
+    serialWrite port (lumencorIntensityMessage channels powers)
+    where
+        (channels, powers) = unzip lcs
 
 lumencorEnableRS232Message :: ByteString
 lumencorEnableRS232Message =
