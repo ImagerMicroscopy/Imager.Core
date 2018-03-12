@@ -18,6 +18,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
+import Data.Word
 import Foreign
 import System.Clock
 import System.IO.Unsafe
@@ -36,7 +37,7 @@ data Environment a = Environment {
                     , envDetector :: !a
                     , envRearrangementFuncs :: ![ExternalRearrangementFunc]
                     , envEncodedSpectrometerWavelengths :: !SB.ByteString
-                    , envAsyncDataMVar :: !(MVar [AcquiredData])
+                    , envAsyncDataMVar :: !(MVar [(Word64, AcquiredData)])
                     , envAsyncStatusMessagesMVar :: !(MVar [Text])
                     , envAsyncProgramWorker :: !(Async ())
 }
@@ -66,6 +67,7 @@ data RequestMessage = AcquireData !DetectionParams
                         execMeasurementProgram :: !MeasurementElement
                       }
                     | FetchAsyncData
+                    | AcknowledgeDataReceipt !Word64
                     | FetchAsyncStatusMessages
                     | CancelAsyncAcquisition
                     | IsAsyncAcquisitionRunning
@@ -91,6 +93,7 @@ instance ToJSON RequestMessage where
     toEncoding Ping = pairs ("action" .= ("ping" :: Text))
     toEncoding (ExecuteMeasurementProgram prog) = pairs ("action" .= ("executemeasurementprogram" :: Text) <> "program" .= prog)
     toEncoding FetchAsyncData = pairs ("action" .= ("fetchasyncspectra" :: Text))
+    toEncoding (AcknowledgeDataReceipt upToIdx) = pairs ("action" .= ("acknowledgedatareceipt" :: Text) <> "uptoandincluding" .= upToIdx)
     toEncoding FetchAsyncStatusMessages = pairs ("action" .= ("fetchasyncstatusmessages" :: Text))
     toEncoding CancelAsyncAcquisition = pairs ("action" .= ("cancelasyncacquisition" :: Text))
     toEncoding IsAsyncAcquisitionRunning = pairs ("action" .= ("isasyncacquisitionrunning" :: Text))
@@ -119,6 +122,7 @@ instance FromJSON RequestMessage where
             "ping"      -> return Ping
             "executemeasurementprogram" -> ExecuteMeasurementProgram <$> v .: "program"
             "fetchasyncspectra" -> return FetchAsyncData
+            "acknowledgedatareceipt" -> AcknowledgeDataReceipt <$> v .: "uptoandincluding"
             "fetchasyncstatusmessages" -> return FetchAsyncStatusMessages
             "cancelasyncacquisition" -> return CancelAsyncAcquisition
             "isasyncacquisitionrunning" -> return IsAsyncAcquisitionRunning
@@ -130,7 +134,7 @@ data ResponseMessage = StatusOK
                      | StatusError !String
                      | StatusNoNewAsyncData
                      | StatusNoNewAsyncDataComing
-                     | AcquiredDataResponse !AcquiredData
+                     | AcquiredDataResponse !(Word64, AcquiredData)
                      | Wavelengths !AcquiredData
                      | AvailableEquipment ![EquipmentW]
                      | MotorizedStagePosition !(Double, Double, Double)
@@ -139,7 +143,7 @@ data ResponseMessage = StatusOK
                      | DetectorParametersResponse !DetectorParameters
                      | DetectorTemperatureResponse !Double
                      | Pong
-                     | AsyncAcquiredData ![AcquiredData]
+                     | AsyncAcquiredData ![(Word64, AcquiredData)]
                      | AsyncStatusMessages ![Text]
                      | AsyncAcquisitionIsRunning !Bool
                      deriving (Generic)

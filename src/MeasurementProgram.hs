@@ -12,6 +12,7 @@ import Control.Exception
 import Control.Monad
 import Control.Monad.Trans.Except
 import Data.Either
+import Data.IORef
 import Data.List
 import Data.Monoid
 import Data.Map.Strict (Map)
@@ -24,6 +25,7 @@ import qualified Data.Text.Lazy as LT
 import qualified Data.Text.Format as T
 import Data.Time.Clock
 import Data.Time.LocalTime
+import Data.Word
 import System.Mem
 import System.Clock
 import qualified System.Timeout as ST
@@ -59,13 +61,16 @@ executeMeasurementElement :: Detector a => ProgramEnvironment a -> MeasurementEl
 executeMeasurementElement env (MEDetection detParams) =
     forM_ detParams (\p -> executeDetection detector eqs p >>=
                            return . rearrangeImageExternal rearrangeFuncs >>= \r ->
-                           r `deepseq` addDataToMVar mvar startTime r)
+                           readIORef counter >>= \idx ->
+                           writeIORef counter (idx + 1) >>
+                           r `deepseq` addDataToMVar mvar startTime idx r)
     where
       eqs = peEquipment env
       detector = peDetector env
       rearrangeFuncs = peRearrangementFuncs env
       mvar = peDataMVar env
       startTime = peStartTime env
+      counter = peDataCounter env
 executeMeasurementElement env (MEIrradiation dur ips) =
     withStatusMessage env (T.format "irradiating {} s" (T.Only dur)) (
         executeIrradiation eqs ips dur)
@@ -87,13 +92,14 @@ executeMeasurementElement env (MEDoTimes n es) =
         ))
 executeMeasurementElement env (MEFastAcquisitionLoop n detParams) =
     withStatusMessage env (T.format "fast acquisition ({} images)" (T.Only n)) (
-        executeFastDetectionLoop detector eqs detParams rearrangeFuncs n startTime mvar)
+        executeFastDetectionLoop detector eqs detParams rearrangeFuncs n startTime counter mvar)
     where
       eqs = peEquipment env
       rearrangeFuncs = peRearrangementFuncs env
       mvar = peDataMVar env
       startTime = peStartTime env
       detector = peDetector env
+      counter = peDataCounter env
 executeMeasurementElement env (METimeLapse n dur es) =
     futureTimes >>= \fts ->
     timeSpecToUTCTimes fts >>= \utcs ->
@@ -168,8 +174,8 @@ executeDetection det eqs DetectionParams{..} =
     disableLightSources eqs dpIrradiation >>
     return acquiredData
 
-executeFastDetectionLoop :: Detector a => a -> [EquipmentW] -> DetectionParams -> [ExternalRearrangementFunc] -> Int -> TimeSpec -> MVar [AcquiredData] -> IO ()
-executeFastDetectionLoop detector eqs detParams rearrangeFuncs nTimesToPerform startTime dataMVar =
+executeFastDetectionLoop :: Detector a => a -> [EquipmentW] -> DetectionParams -> [ExternalRearrangementFunc] -> Int -> TimeSpec -> IORef Word64 -> MVar [(Word64, AcquiredData)] -> IO ()
+executeFastDetectionLoop detector eqs detParams rearrangeFuncs nTimesToPerform startTime dataCounter dataMVar =
     setBinningFactor detector (dpBinningFactor detParams) >>
     setCropSize detector (dpCropSize detParams) >>
     switchToFilters eqs (dpFilterParams detParams) >>
@@ -187,7 +193,9 @@ executeFastDetectionLoop detector eqs detParams rearrangeFuncs nTimesToPerform s
                                          AsyncError    -> performMajorGC >> wait as
                                          AsyncData d   -> let r = rearrangeImageExternal rearrangeFuncs d
                                                           in  when (nFetched `mod` 50 == 49) (performMajorGC) >>
-                                                              r `deepseq` addDataToMVar dataMVar startTime r >>
+                                                              readIORef dataCounter >>= \idx ->
+                                                              writeIORef dataCounter (idx + 1) >>
+                                                              r `deepseq` addDataToMVar dataMVar startTime idx r >>
                                                               fetchData (nFetched + 1) as chan
 
 executeIrradiation :: [EquipmentW] -> [IrradiationParams] -> Double -> IO ()
@@ -267,12 +275,12 @@ updateStatusMessage env newMsg =
     where
         statusMVar = peStatusMVar env
 
-addDataToMVar :: MVar [AcquiredData] -> TimeSpec -> AcquiredData -> IO ()
-addDataToMVar dataMVar startTime d = modifyMVar_ dataMVar (\previousData ->
-                                 when (length previousData > 250) (throwIO (userError "too many async data stored")) >>
-                                 if (null previousData)
-                                 then pure [adjustTime d]
-                                 else pure (adjustTime d : previousData))
+addDataToMVar :: MVar [(Word64, AcquiredData)] -> TimeSpec -> Word64 -> AcquiredData -> IO ()
+addDataToMVar dataMVar startTime idx d = modifyMVar_ dataMVar (\previousData ->
+                                         when (length previousData > 250) (throwIO (userError "too many async data stored")) >>
+                                         if (null previousData)
+                                         then pure [(idx, adjustTime d)]
+                                         else pure ((idx, adjustTime d) : previousData))
     where
        adjustTime :: AcquiredData -> AcquiredData
        adjustTime acqDat = let t = acqTimeStamp acqDat

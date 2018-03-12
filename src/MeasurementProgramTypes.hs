@@ -4,8 +4,10 @@ module MeasurementProgramTypes where
 import Control.Concurrent
 import Data.Aeson
 import Data.Either
+import Data.IORef
 import Data.Monoid
 import Data.Text (Text)
+import Data.Word
 import System.Clock
 
 import CameraImageProcessing
@@ -29,7 +31,8 @@ data ProgramEnvironment a = ProgramEnvironment {
                               , peStartTime :: !TimeSpec
                               , peEquipment :: ![EquipmentW]
                               , peRearrangementFuncs :: ![ExternalRearrangementFunc]
-                              , peDataMVar :: !(MVar [AcquiredData])
+                              , peDataCounter :: !(IORef Word64)
+                              , peDataMVar :: !(MVar [(Word64, AcquiredData)])
                               , peStatusMVar :: !(MVar [Text])
                             }
 

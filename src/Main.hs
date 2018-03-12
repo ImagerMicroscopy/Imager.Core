@@ -6,12 +6,14 @@ module Main (
 
 import Control.Concurrent
 import Control.Concurrent.Async
+import Control.DeepSeq
 import Control.Exception
 import Control.Monad
 import Control.Monad.Trans.Except
 import Data.Aeson
 import qualified Data.ByteString as SB
 import Data.Either
+import Data.IORef
 import Data.List
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -20,6 +22,7 @@ import qualified Data.ByteString.Base64 as B64
 import Data.Maybe
 import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
+import Data.Word
 import System.Clock
 import System.Environment
 import System.FilePath
@@ -71,13 +74,12 @@ messageHandler :: Detector a => MessageHandler (Environment a)
 messageHandler msg env =
     case (fromJSON msg) of
       Error e   -> return (ResponseJSON (object [("responsetype", String (T.pack ("invalidquery: " ++ e)))]), env)
-      Success v -> perform env v >>= \(resp, newEnv) ->
-                   if (shouldBinaryEncode resp)
-                     then return (ResponseBSList (binaryEncode resp), newEnv)
-                     else return (ResponseLBS (encode resp), newEnv)
-    where
-       perform env v = (performAction env v) `catch` (\(e :: IOException) -> putStrLn (displayException e) >>
-                                                                             return (StatusError (displayException e), env))
+      Success v -> (performAction env v >>= \(resp, newEnv) ->
+                   let response = if (shouldBinaryEncode resp)
+                                  then ResponseBSList (binaryEncode resp)
+                                  else ResponseLBS (encode resp)
+                   in response `deepseq` return (response, newEnv)) `catch` (\(e :: IOException) -> putStrLn (displayException e) >>
+                                                                                                    return (ResponseLBS (encode (StatusError (displayException e))), env))
 
 performAction :: Detector a => Environment a -> RequestMessage -> IO (ResponseMessage, Environment a)
 performAction env (AcquireData params) =
@@ -172,7 +174,7 @@ performAction env (ExecuteMeasurementProgram me) =
 
 performAction env FetchAsyncData =
     asyncAcquisitionRunning env >>= \asyncIsRunning ->
-    modifyMVar dataMVar (\s -> return ([], s)) >>= \newData ->
+    readMVar dataMVar >>= \newData ->
     asyncAcquisitionErrorMessage env >>= \asyncErrorMsg ->
     return (dataResponse asyncErrorMsg asyncIsRunning (reverse newData), env)
     where
@@ -182,6 +184,12 @@ performAction env FetchAsyncData =
             | not (null asyncErrorMsg) = StatusError asyncErrorMsg
             | asyncIsRunning           = if (null newData) then StatusNoNewAsyncData else (AsyncAcquiredData newData)
             | otherwise                = if (null newData) then StatusNoNewAsyncDataComing else (AsyncAcquiredData newData)
+
+performAction env (AcknowledgeDataReceipt upToIdx) =
+    modifyMVar_ dataMVar (\ds -> pure (filter (\d -> fst d > upToIdx) ds)) >>
+    return (StatusOK, env)
+    where
+        dataMVar = envAsyncDataMVar env
 
 performAction env FetchAsyncStatusMessages =
     asyncAcquisitionErrorMessage env >>= \asyncErrorMsg ->
@@ -207,14 +215,15 @@ performAction env IsAsyncAcquisitionRunning =
     asyncAcquisitionRunning env >>= \asyncIsRunning ->
     return (AsyncAcquisitionIsRunning asyncIsRunning, env)
 
-startAsyncAcquisition :: Detector a => Environment a -> MeasurementElement -> IO (Async (), MVar [AcquiredData], MVar [Text])
+startAsyncAcquisition :: Detector a => Environment a -> MeasurementElement -> IO (Async (), MVar [(Word64, AcquiredData)], MVar [Text])
 startAsyncAcquisition env me =
     ensureAsyncAcquisitionNotRunning env >>
     validateMeasurementElementThrows (envEquipment env) me >>
     newMVar [] >>= \spectraMVar ->
     newMVar [] >>= \statusMVar ->
+    newIORef 0 >>= \dataCounter ->
     getTime Monotonic >>= \startTime ->
-    async (executeMeasurement (ProgramEnvironment detector startTime (envEquipment env) rearrangementFuncs spectraMVar statusMVar) me >>
+    async (executeMeasurement (ProgramEnvironment detector startTime (envEquipment env) rearrangementFuncs dataCounter spectraMVar statusMVar) me >>
            return ()) >>= \asyncWorker ->
     return (asyncWorker, spectraMVar, statusMVar)
     where
