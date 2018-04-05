@@ -30,7 +30,7 @@ initializeOxxiusLC :: EquipmentDescription -> IO EquipmentW
 initializeOxxiusLC (OxxiusLCDesc name portName) =
     let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS19200}) (TimeoutMillis 1000) SerialPortDebugText
     in  openSerialPort portName serialSettings >>= \port ->
-        handleOxxiusCombinerCommand port "SH1=1" >> -- open shutter 1
+        handleOxxiusCombinerOKCommand port "SH1=1" >> -- open shutter 1
         getLaserDetails port >>= \lasers ->
         forM_ (map snd lasers) (\(OxxiusLaserParams lType _ idx) ->
             handleOxxiusLaserCommand port idx "CDRH=0" >>
@@ -57,15 +57,17 @@ initializeOxxiusLC (OxxiusLCDesc name portName) =
               extractMaxPower :: Text -> Double
               extractMaxPower = read . T.unpack . T.reverse . T.takeWhile ((/=) '-') . T.reverse
         oxxiusTypeSpecificInit :: SerialPort -> OxxiusLaserType -> Int -> IO ()
-        oxxiusTypeSpecificInit port LBX idx =
-            mapM_ (handleOxxiusLaserCommand port idx) ["CW=1", "APC=1"]
+        --oxxiusTypeSpecificInit port LBX idx =
+            --mapM_ (handleOxxiusLaserCommand port idx) ["CW=1", "APC=1"]
         oxxiusTypeSpecificInit _ _ _ = pure ()
 
 instance Equipment OxxiusLC where
     equipmentName (OxxiusLC n _ _) = n
     flushSerialPorts (OxxiusLC _ port _) = flushSerialPort port
-    closeDevice (OxxiusLC _ port _) = handleOxxiusCombinerCommand port "SH1 0" >> -- close shutter 1
-                                      closeSerialPort port
+    closeDevice (OxxiusLC _ port chs) =
+        forM_ (map (oxxIndex . snd) chs) (\idx -> handleOxxiusLaserCommand port idx "L=0") >>
+        handleOxxiusCombinerOKCommand port "SH1 0" >> -- close shutter 1
+        closeSerialPort port
     availableLightSources (OxxiusLC n _ chs) =
         [LightSourceDescription (LSName "ls") True True (map fst chs)]
     activateLightSource olc@(OxxiusLC _ port availChs) _ chs =
@@ -81,10 +83,9 @@ instance Equipment OxxiusLC where
             setLaserPower port (OxxiusLaserParams lType maxP idx) p =
                 let actualP = (p / 100.0 * maxP)
                     powerStr = LT.toStrict (T.format "{}.{}" (separateParts actualP)) -- Oxxius seems to like exactly one number after the comma
-                    cmd = case lType of
-                              LCX -> "P 20" --LT.toStrict (T.format "P={}" (T.Only powerStr))
-                              LBX -> LT.toStrict (T.format "PM={}" (T.Only powerStr))
-                in  handleOxxiusLaserCommand port idx cmd
+                in  case lType of
+                        LBX -> handleOxxiusLaserCommand port idx ("PM=" <> powerStr)
+                        LCX -> handleOxxiusCombinerEchoCommand port ("P=" <> powerStr)
                 where
                     separateParts :: Double -> (Int, Int)
                     separateParts d = (round d, round (10.0 * (d - (fromIntegral (floor d)))))
@@ -94,15 +95,26 @@ instance Equipment OxxiusLC where
                         idx = oxxIndex . fromJust $ (lookup chName availChs)
                     in  handleOxxiusLaserCommand port idx cmd)
     deactivateLightSource (OxxiusLC _ port chs) =
-        forM_ (map (oxxIndex . snd) chs) (\idx ->
-            handleOxxiusLaserCommand port idx "L=0")
+        forM_ (map snd chs) (\(OxxiusLaserParams lType _ idx) ->
+            case lType of
+                LBX -> handleOxxiusLaserCommand port idx "L=0"
+                LCX -> handleOxxiusCombinerEchoCommand port "P=0.0")
 
-handleOxxiusCombinerCommand :: SerialPort -> Text -> IO ()
-handleOxxiusCombinerCommand port comm =
+handleOxxiusCombinerOKCommand :: SerialPort -> Text -> IO ()
+handleOxxiusCombinerOKCommand port cmd =
     let expectedResponse = "OK\r\n"
-    in  T.decodeUtf8 <$> serialWriteAndReadUntilChar port (T.encodeUtf8 comm <> "\n") '\n' >>= \resp ->
-        when (resp /= expectedResponse) (
-            throwIO (userError ("unexpected response from Oxxius: sent " ++ T.unpack comm ++ " received " ++ T.unpack resp)))
+    in  handleOxxiusCombinerCommand port cmd expectedResponse
+
+handleOxxiusCombinerEchoCommand :: SerialPort -> Text -> IO ()
+handleOxxiusCombinerEchoCommand port cmd =
+    let expectedResponse = cmd <> "\r\n"
+    in  handleOxxiusCombinerCommand port cmd expectedResponse
+
+handleOxxiusCombinerCommand :: SerialPort -> Text -> Text -> IO ()
+handleOxxiusCombinerCommand port cmd expectedResponse =
+    T.decodeUtf8 <$> serialWriteAndReadUntilChar port (T.encodeUtf8 cmd <> "\n") '\n' >>= \resp ->
+    when (resp /= expectedResponse) (
+        throwIO (userError ("unexpected response from Oxxius: sent " ++ T.unpack cmd ++ " received " ++ T.unpack resp)))
 
 handleOxxiusLaserQuery :: SerialPort -> Int -> Text -> IO Text
 handleOxxiusLaserQuery port idx q =
