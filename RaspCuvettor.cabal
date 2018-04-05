@@ -75,6 +75,7 @@ executable RaspCuvettor
                      , Lumencor
                      , Marzhauser
                      , Olympus
+                     , Oxxius
                      , Prior
                      , Robottor
                      , Sutter

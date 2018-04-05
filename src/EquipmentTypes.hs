@@ -52,6 +52,10 @@ data EquipmentDescription = CoherentLightSourceDesc {
                               , ix71DescPortName :: !String
                               , ix71DescFilters :: ![(Text, Int)]
                             }
+                          | OxxiusLCDesc {
+                                oxxDescName :: !Text
+                              , oxxDescPortName :: !String
+                          }
                           | SutterLambda10BDesc {
                                 sl10BDescName :: !Text
                               , sl10BDescPortName :: !String

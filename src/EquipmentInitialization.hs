@@ -29,6 +29,7 @@ import Lumencor
 import Marzhauser
 import MicroscopeController
 import Olympus
+import Oxxius
 import Prior
 import Robottor
 import Sutter
@@ -71,11 +72,12 @@ initializeDevice d@(ThorlabsFW103HDesc _ _ _) = initializeThorlabsFW130H d
 initializeDevice d@(ThorlabsFW102CDesc _ _ _) = initializeThorlabsFW102C d
 initializeDevice d@(SutterLambda10BDesc _ _ _) = initializeSutterLambda10B d
 initializeDevice d@(OlympusIX71DichroicDesc _ _ _) = initializeOlympusIX71Dichroic d
+initializeDevice d@(OxxiusLCDesc _ _) = initializeOxxiusLC d
 initializeDevice d@(DummyFilterWheelDesc _ _) = initializeDummyFilterWheel d
 initializeDevice d@(PriorDesc _ _) = initializePriorStage d
 initializeDevice d@(MarzhauserStageDesc _ _) = initializeMarzhauserStage d
-initializeDevice d@(DummyStageDesc name) = initializeDummyStage d
-initializeDevice d@(RobottorDesc name ip port) = initializeRobottor d
+initializeDevice d@(DummyStageDesc _) = initializeDummyStage d
+initializeDevice d@(RobottorDesc _ _ _) = initializeRobottor d
 initializeDevice _ = error "unknown type of device description"
 
 deviceDescName :: EquipmentDescription -> String
