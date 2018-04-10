@@ -66,6 +66,7 @@ main =
           getDetectorWavelengths det >>= \wl ->
           return (byteStringFromVector wl) >>= \encodedWl ->
           putStrLn "ready to measure!" >>
+          putStrLn "HOLD CONTROL-C UNTIL YOU SEE \"USER INTERRUPT\" BEFORE CLOSING THIS WINDOW" >>
           let env = Environment availableEquipment det procFuncs encodedWl
                                 asyncSpectraMVar asyncStatusMessagesMVar asyncProgramWorker
           in wait =<< async (runServer 3200 messageHandler env serverSettings))
