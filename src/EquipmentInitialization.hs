@@ -13,6 +13,7 @@ import Data.List
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+import GHC.ConsoleHandler
 import System.Environment
 import System.FilePath
 
@@ -45,7 +46,18 @@ readAvailableEquipment =
 
 withEquipment :: [EquipmentDescription] -> ([EquipmentW] -> IO ()) -> IO ()
 withEquipment descs action =
-    bracket (initializeEquipment descs) closeEquipment action
+    bracket (initializeEquipment descs) closeEquipment (\eqs ->
+        installHandlers eqs >> action eqs)
+    where
+        installHandlers eqs =
+            myThreadId >>= \mainThreadID ->
+            installHandler (Catch (f eqs mainThreadID))
+        f eqs mainThreadID event =
+            case event of
+                ControlC -> putStrLn "User Interrupt" >> throwTo mainThreadID UserInterrupt
+                Break    -> putStrLn "User Interrupt" >> throwTo mainThreadID UserInterrupt
+                Close    -> putStrLn "Close Event"    >> throwTo mainThreadID ThreadKilled >> threadDelay maxBound
+                _        -> pure ()
 
 initializeEquipment :: [EquipmentDescription] -> IO [EquipmentW]
 initializeEquipment descs = doInit `catch` (\e -> displayStringThenError (displayException (e :: IOException)))

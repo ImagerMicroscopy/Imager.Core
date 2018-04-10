@@ -51,24 +51,24 @@ serverSettings = defaultSettings {ssBindToAllInterfaces = False,
                                   ssMaxMessageSize = round 2e6}
 
 main :: IO ()
-main = wait =<< async (
+main =
     getExecutablePath >>= \exePath ->
     readAvailableEquipment >>= \descs ->
     withEquipment descs $ \availableEquipment ->
-    (map processingFunc . read) <$> readFile (takeDirectory exePath </> "cameraoptions.txt") >>= \procFuncs ->
+      (map processingFunc . read) <$> readFile (takeDirectory exePath </> "cameraoptions.txt") >>= \procFuncs ->
 
-    newMVar [] >>= \asyncSpectraMVar ->
-    newMVar [] >>= \asyncStatusMessagesMVar ->
-    async (return ()) >>= \asyncProgramWorker ->
-    wait asyncProgramWorker >>
+      newMVar [] >>= \asyncSpectraMVar ->
+      newMVar [] >>= \asyncStatusMessagesMVar ->
+      async (return ()) >>= \asyncProgramWorker ->
+      wait asyncProgramWorker >>
 
-    withAvailableDetector (\det ->
-        getDetectorWavelengths det >>= \wl ->
-        return (byteStringFromVector wl) >>= \encodedWl ->
-        putStrLn "ready to measure!" >>
-        let env = Environment availableEquipment det procFuncs encodedWl
-                              asyncSpectraMVar asyncStatusMessagesMVar asyncProgramWorker
-        in runServer 3200 messageHandler env serverSettings))
+      withAvailableDetector (\det ->
+          getDetectorWavelengths det >>= \wl ->
+          return (byteStringFromVector wl) >>= \encodedWl ->
+          putStrLn "ready to measure!" >>
+          let env = Environment availableEquipment det procFuncs encodedWl
+                                asyncSpectraMVar asyncStatusMessagesMVar asyncProgramWorker
+          in wait =<< async (runServer 3200 messageHandler env serverSettings))
 
 messageHandler :: Detector a => MessageHandler (Environment a)
 messageHandler msg env =
