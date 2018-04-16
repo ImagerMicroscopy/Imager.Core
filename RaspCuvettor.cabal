@@ -50,6 +50,7 @@ executable RaspCuvettor
                      , filepath
                      , SimpleJSONServer
   other-modules:       AcquiredDataTypes
+                     , AggregateMotorizedStage
                      , CameraImageProcessing
                      , CuvettorTypes
                      , BinaryEncoding

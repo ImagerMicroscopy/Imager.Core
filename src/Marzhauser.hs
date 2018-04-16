@@ -32,6 +32,7 @@ instance Equipment MarzhauserStage where
     closeDevice (MarzhauserStage _ port) = closeSerialPort port
     hasMotorizedStage _ = True
     motorizedStageName _ = StageName "stage"
+    supportedStageAxes _ = [XAxis, YAxis, ZAxis]
     getStagePosition (MarzhauserStage _ port) =
         map read . words . T.unpack . T.decodeUtf8 <$> handleMarzhauserMessage port "?pos" >>= \[x, y, z] ->
         pure (x, y, z)

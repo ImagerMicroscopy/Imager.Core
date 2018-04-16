@@ -47,6 +47,9 @@ data FilterWheelDescription = FilterWheelDescription {
                                 , fwdFilters :: ![FName]
                               }
 
+data StageAxis = XAxis | YAxis | ZAxis
+               deriving (Eq, Show)
+
 class Equipment e where
     equipmentName :: e -> EqName
     flushSerialPorts :: e -> IO ()
@@ -62,6 +65,7 @@ class Equipment e where
 
     hasMotorizedStage :: e -> Bool
     motorizedStageName :: e -> StageName
+    supportedStageAxes :: e -> [StageAxis]
     getStagePosition :: e -> IO StagePosition
     setStagePosition :: e -> StagePosition -> IO ()
 
@@ -80,6 +84,7 @@ class Equipment e where
     switchToFilter e _ = error ("calling switchToFilter on " ++ show (fromEqName (equipmentName e)))
     hasMotorizedStage _ = False
     motorizedStageName e  = error ("calling motorizedStageName on " ++ show (fromEqName (equipmentName e)))
+    supportedStageAxes _ = error ("calling supportedStageAxes on " ++ show (fromEqName (equipmentName e)))
     getStagePosition e = error ("calling getStagePosition on " ++ show (fromEqName (equipmentName e)))
     setStagePosition e _ = error ("calling setStagePosition on " ++ show (fromEqName (equipmentName e)))
     hasRobot e = False
@@ -101,6 +106,7 @@ instance Equipment EquipmentW where
     switchToFilter (EquipmentW e) = switchToFilter e
     hasMotorizedStage (EquipmentW e) = hasMotorizedStage e
     motorizedStageName (EquipmentW e)  = motorizedStageName e
+    supportedStageAxes (EquipmentW e) = supportedStageAxes e
     getStagePosition (EquipmentW e) = getStagePosition e
     setStagePosition (EquipmentW e) = setStagePosition e
     hasRobot (EquipmentW e) = hasRobot e

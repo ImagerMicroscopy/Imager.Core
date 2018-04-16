@@ -17,6 +17,7 @@ import GHC.ConsoleHandler
 import System.Environment
 import System.FilePath
 
+import AggregateMotorizedStage
 import Equipment
 import EquipmentTypes
 import MiscUtils
@@ -67,7 +68,7 @@ initializeEquipment descs = doInit `catch` (\e -> displayStringThenError (displa
                      initializeDevice desc >>= \dev ->
                      putStr " done!\n" >>
                      pure dev) >>=
-                 verifyEquipmentThrows
+                 verifyEquipmentThrows . aggregateMotorizedStagesIfNeeded
 
 closeEquipment :: [EquipmentW] -> IO ()
 closeEquipment = mapM_ closeDevice

@@ -40,6 +40,7 @@ instance Equipment PriorStage where
     closeDevice (PriorStage _ port) = closeSerialPort port
     hasMotorizedStage _ = True
     motorizedStageName (PriorStage n _) = StageName "stage"
+    supportedStageAxes _ = [XAxis, yAxis, zAxis]
     getStagePosition (PriorStage _ port) = (,,) <$> readNumberP port "PX"
                                                 <*> readNumberP port "PY"
                                                 <*> ((/10) <$> readNumberP port "PZ")
