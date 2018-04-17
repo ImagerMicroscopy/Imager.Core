@@ -3,6 +3,7 @@ module MicroscopeController where
 
 import Control.Exception
 import Control.Monad
+import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import Data.Text (Text)
@@ -90,6 +91,17 @@ mcHasMotorizedStage = alloca (\hasItPtr ->
                           when (result /= 0) (throwIO $ userError "unable to check MC stage") >>
                           (/=) 0 <$> peek hasItPtr)
 
+mcSupportedStageAxes :: IO [StageAxis]
+mcSupportedStageAxes =
+    alloca (\infoPtr ->
+    c_MCSupportedStageAxes infoPtr >>= \result ->
+    when (result /= 0) (throwIO $ userError "unable to read MC stage axes") >>
+    peek infoPtr) >>= \info ->
+    let x = if ((info .&. 1) /= 0) then [XAxis] else []
+        y = if ((info .&. 2) /= 0) then [YAxis] else []
+        z = if ((info .&. 4) /= 0) then [ZAxis] else []
+    in  pure (concat [x, y, z])
+
 mcGetStagePosition :: IO StagePosition
 mcGetStagePosition = alloca (\xPtr ->
                      alloca (\yPtr ->
@@ -119,6 +131,8 @@ foreign import ccall unsafe "MicroscopeControlDLL.h MCSetFilter"
 
 foreign import ccall unsafe "MicroscopeControlDLL.h MCHasMotorizedStage"
     c_MCHasMotorizedStage :: Ptr CInt -> IO CInt
+foreign import ccall unsafe "MicroscopeControlDLL.h MCSupportedStageAxes"
+    c_MCSupportedStageAxes :: Ptr CInt -> IO CInt
 foreign import ccall unsafe "MicroscopeControlDLL.h MCGetStagePosition"
     c_MCGetStagePosition :: Ptr CDouble -> Ptr CDouble -> Ptr CDouble -> IO CInt
 foreign import ccall unsafe "MicroscopeControlDLL.h MCSetStagePosition"

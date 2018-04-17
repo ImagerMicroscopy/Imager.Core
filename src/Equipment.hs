@@ -84,7 +84,7 @@ class Equipment e where
     switchToFilter e _ = error ("calling switchToFilter on " ++ show (fromEqName (equipmentName e)))
     hasMotorizedStage _ = False
     motorizedStageName e  = error ("calling motorizedStageName on " ++ show (fromEqName (equipmentName e)))
-    supportedStageAxes _ = error ("calling supportedStageAxes on " ++ show (fromEqName (equipmentName e)))
+    supportedStageAxes e = error ("calling supportedStageAxes on " ++ show (fromEqName (equipmentName e)))
     getStagePosition e = error ("calling getStagePosition on " ++ show (fromEqName (equipmentName e)))
     setStagePosition e _ = error ("calling setStagePosition on " ++ show (fromEqName (equipmentName e)))
     hasRobot e = False
