@@ -23,7 +23,6 @@ import Foreign
 import System.Clock
 import System.IO.Unsafe
 
-import CameraImageProcessing
 import MiscUtils
 import Detector
 import Equipment
@@ -35,7 +34,6 @@ import MeasurementProgramTypes
 data Environment a = Environment {
                       envEquipment :: ![EquipmentW]
                     , envDetector :: !a
-                    , envRearrangementFuncs :: ![ExternalRearrangementFunc]
                     , envEncodedSpectrometerWavelengths :: !SB.ByteString
                     , envAsyncDataMVar :: !(MVar [(Word64, AcquiredData)])
                     , envAsyncStatusMessagesMVar :: !(MVar [Text])

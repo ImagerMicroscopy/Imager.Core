@@ -23,7 +23,6 @@ import qualified Data.Vector.Storable.Mutable as MV
 import Detector
 import qualified SCCamera as SC
 import MiscUtils
-import CameraImageProcessing
 
 data SCCamDetector = SCCamDetector {
                          sccCamName :: !Text
@@ -74,6 +73,16 @@ instance Detector SCCamDetector where
                 in  MV.new (nRows * nCols) >>= \image ->
                     MV.unsafeWith image (\imPtr -> copyBytes imPtr offsetPtr nBytesInImage) >>
                     V.freeze image
+
+    setImageOrientation :: SCCamDetector -> [ImageOrientationOperation] -> IO ()
+    setImageOrientation (SCCamDetector camName) ops =
+        SC.setCameraOrientation camName (map toSC ops)
+        where
+            toSC :: ImageOrientationOperation -> SC.OrientationOp
+            toSC IPORotateCW = SC.RotateCWOp
+            toSC IPORotateCCW = SC.RotateCCWOp
+            toSC IPOFlipHorizontal = SC.FlipHorizontalOp
+            toSC IPOFlipVertical = SC.FlipVerticalOp
 
     getDataDimensions :: SCCamDetector -> IO (Int, Int)
     getDataDimensions (SCCamDetector camName) = SC.getImageDimensions camName

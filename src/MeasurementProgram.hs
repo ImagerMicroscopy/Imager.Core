@@ -30,7 +30,6 @@ import System.Mem
 import System.Clock
 import qualified System.Timeout as ST
 
-import CameraImageProcessing
 import Detector
 import Equipment
 import EquipmentTypes
@@ -59,15 +58,13 @@ executeMeasurementElements env es = mapM_ (executeMeasurementElement env) es
 
 executeMeasurementElement :: Detector a => ProgramEnvironment a -> MeasurementElement -> IO ()
 executeMeasurementElement env (MEDetection detParams) =
-    forM_ detParams (\p -> executeDetection detector eqs p >>=
-                           return . rearrangeImageExternal rearrangeFuncs >>= \r ->
+    forM_ detParams (\p -> executeDetection detector eqs p >>= \r ->
                            readIORef counter >>= \idx ->
                            writeIORef counter (idx + 1) >>
                            r `deepseq` addDataToMVar mvar startTime idx r)
     where
       eqs = peEquipment env
       detector = peDetector env
-      rearrangeFuncs = peRearrangementFuncs env
       mvar = peDataMVar env
       startTime = peStartTime env
       counter = peDataCounter env
@@ -92,10 +89,9 @@ executeMeasurementElement env (MEDoTimes n es) =
         ))
 executeMeasurementElement env (MEFastAcquisitionLoop n detParams) =
     withStatusMessage env (T.format "fast acquisition ({} images)" (T.Only n)) (
-        executeFastDetectionLoop detector eqs detParams rearrangeFuncs n startTime counter mvar)
+        executeFastDetectionLoop detector eqs detParams n startTime counter mvar)
     where
       eqs = peEquipment env
-      rearrangeFuncs = peRearrangementFuncs env
       mvar = peDataMVar env
       startTime = peStartTime env
       detector = peDetector env
@@ -174,8 +170,8 @@ executeDetection det eqs DetectionParams{..} =
     disableLightSources eqs dpIrradiation >>
     return acquiredData
 
-executeFastDetectionLoop :: Detector a => a -> [EquipmentW] -> DetectionParams -> [ExternalRearrangementFunc] -> Int -> TimeSpec -> IORef Word64 -> MVar [(Word64, AcquiredData)] -> IO ()
-executeFastDetectionLoop detector eqs detParams rearrangeFuncs nTimesToPerform startTime dataCounter dataMVar =
+executeFastDetectionLoop :: Detector a => a -> [EquipmentW] -> DetectionParams -> Int -> TimeSpec -> IORef Word64 -> MVar [(Word64, AcquiredData)] -> IO ()
+executeFastDetectionLoop detector eqs detParams nTimesToPerform startTime dataCounter dataMVar =
     setBinningFactor detector (dpBinningFactor detParams) >>
     setCropSize detector (dpCropSize detParams) >>
     switchToFilters eqs (dpFilterParams detParams) >>
@@ -191,12 +187,11 @@ executeFastDetectionLoop detector eqs detParams rearrangeFuncs nTimesToPerform s
                                      case val of
                                          AsyncFinished -> performMajorGC >> wait as
                                          AsyncError    -> performMajorGC >> wait as
-                                         AsyncData d   -> let r = rearrangeImageExternal rearrangeFuncs d
-                                                          in  when (nFetched `mod` 50 == 49) (performMajorGC) >>
-                                                              readIORef dataCounter >>= \idx ->
-                                                              writeIORef dataCounter (idx + 1) >>
-                                                              r `deepseq` addDataToMVar dataMVar startTime idx r >>
-                                                              fetchData (nFetched + 1) as chan
+                                         AsyncData r   -> when (nFetched `mod` 50 == 49) (performMajorGC) >>
+                                                          readIORef dataCounter >>= \idx ->
+                                                          writeIORef dataCounter (idx + 1) >>
+                                                          r `deepseq` addDataToMVar dataMVar startTime idx r >>
+                                                          fetchData (nFetched + 1) as chan
 
 executeIrradiation :: [EquipmentW] -> [IrradiationParams] -> Double -> IO ()
 executeIrradiation eqs ips dur =

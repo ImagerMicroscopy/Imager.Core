@@ -10,7 +10,6 @@ import Data.Text (Text)
 import Data.Word
 import System.Clock
 
-import CameraImageProcessing
 import Detector
 import Equipment
 import EquipmentTypes
@@ -30,7 +29,6 @@ data ProgramEnvironment a = ProgramEnvironment {
                                 peDetector :: !a
                               , peStartTime :: !TimeSpec
                               , peEquipment :: ![EquipmentW]
-                              , peRearrangementFuncs :: ![ExternalRearrangementFunc]
                               , peDataCounter :: !(IORef Word64)
                               , peDataMVar :: !(MVar [(Word64, AcquiredData)])
                               , peStatusMVar :: !(MVar [Text])

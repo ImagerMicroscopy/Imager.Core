@@ -7,6 +7,7 @@ module Detector (
   , DetectorParameters (..)
   , DetectorLimits (..)
   , AsyncData (..)
+  , ImageOrientationOperation (..)
   , ExposureTime
   , Gain
   , Temperature
@@ -58,6 +59,12 @@ data AsyncData = AsyncData !AcquiredData
                | AsyncFinished
                | AsyncError
 
+data ImageOrientationOperation = IPORotateCW
+                               | IPORotateCCW
+                               | IPOFlipHorizontal
+                               | IPOFlipVertical
+                               deriving (Read, Show)
+
 class Detector a where
     acquireData :: a -> ExposureTime -> Gain -> NMeasurementsToAverage -> IO AcquiredData
     acquireStreamingData :: a -> ExposureTime -> Gain -> NMeasurementsToAverage ->
@@ -72,6 +79,8 @@ class Detector a where
     getDetectorWavelengths :: a -> IO (Vector Double)
     getDetectorWavelengths _ = return V.empty
 
+    setImageOrientation :: a -> [ImageOrientationOperation] -> IO ()
+    setImageOrientation _ _ = pure ()
     getDataDimensions :: a -> IO (Int, Int)
     getAllowedCropSizes :: a -> IO [(Int, Int)]
     getAllowedCropSizes det = getDataDimensions det >>= \dim -> pure [dim]

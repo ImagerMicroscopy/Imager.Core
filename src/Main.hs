@@ -27,7 +27,6 @@ import System.Clock
 import System.Environment
 import System.FilePath
 
-import CameraImageProcessing
 import CuvettorTypes
 import Detector
 import AvailableDetector
@@ -55,7 +54,7 @@ main =
     getExecutablePath >>= \exePath ->
     readAvailableEquipment >>= \descs ->
     withEquipment descs $ \availableEquipment ->
-      (map processingFunc . read) <$> readFile (takeDirectory exePath </> "cameraoptions.txt") >>= \procFuncs ->
+      read <$> readFile (takeDirectory exePath </> "cameraoptions.txt") >>= \imageOrientationOps ->
 
       newMVar [] >>= \asyncSpectraMVar ->
       newMVar [] >>= \asyncStatusMessagesMVar ->
@@ -63,11 +62,12 @@ main =
       wait asyncProgramWorker >>
 
       withAvailableDetector (\det ->
+          setImageOrientation det imageOrientationOps >>
           getDetectorWavelengths det >>= \wl ->
           return (byteStringFromVector wl) >>= \encodedWl ->
           putStrLn "ready to measure!" >>
           putStrLn "HOLD CONTROL-C UNTIL YOU SEE \"USER INTERRUPT\" BEFORE CLOSING THIS WINDOW" >>
-          let env = Environment availableEquipment det procFuncs encodedWl
+          let env = Environment availableEquipment det encodedWl
                                 asyncSpectraMVar asyncStatusMessagesMVar asyncProgramWorker
           in wait =<< async (runServer 3200 messageHandler env serverSettings))
 
@@ -224,12 +224,11 @@ startAsyncAcquisition env me =
     newMVar [] >>= \statusMVar ->
     newIORef 0 >>= \dataCounter ->
     getTime Monotonic >>= \startTime ->
-    async (executeMeasurement (ProgramEnvironment detector startTime (envEquipment env) rearrangementFuncs dataCounter spectraMVar statusMVar) me >>
+    async (executeMeasurement (ProgramEnvironment detector startTime (envEquipment env) dataCounter spectraMVar statusMVar) me >>
            return ()) >>= \asyncWorker ->
     return (asyncWorker, spectraMVar, statusMVar)
     where
         detector = envDetector env
-        rearrangementFuncs = envRearrangementFuncs env
 
 ensureAsyncAcquisitionNotRunning :: Environment a -> IO ()
 ensureAsyncAcquisitionNotRunning env =
