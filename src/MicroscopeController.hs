@@ -20,23 +20,32 @@ import Equipment
 import EquipmentTypes
 import MiscUtils
 
-data MicroscopeController = MicroscopeController !EqName ![FilterWheelDescription] !Bool
+data MicroscopeController = MicroscopeController {
+                                mcEqName :: !EqName
+                              , mcFWs :: ![FilterWheelDescription]
+                              , mcHasStage :: !Bool
+                              , mcStageAxes :: ![StageAxis]
+                          }
 
 initializeMicroscopeController :: EquipmentDescription -> IO EquipmentW
 initializeMicroscopeController (MicroscopeControllerDesc name) = do
     mcConnectToMicroscope
-    EquipmentW <$> (MicroscopeController (EqName name) <$> mcFilterWheelsAndFilters <*> mcHasMotorizedStage)
+    fws <- mcFilterWheelsAndFilters
+    hasStage <- mcHasMotorizedStage
+    axes <- mcSupportedStageAxes
+    pure (EquipmentW (MicroscopeController (EqName name) fws hasStage axes))
 
 instance Equipment MicroscopeController where
-    equipmentName (MicroscopeController n _ _) = n
+    equipmentName = mcEqName
     flushSerialPorts _ = pure ()
     closeDevice _ = c_MCCloseConnection
 
-    availableFilterWheels (MicroscopeController _ fws _) = fws
+    availableFilterWheels = mcFWs
     switchToFilter _ fw ft = mcSwitchToFilter fw ft
 
-    hasMotorizedStage (MicroscopeController _ _ hasMS) = hasMS
+    hasMotorizedStage = mcHasStage
     motorizedStageName _ = StageName "microscope stage"
+    supportedStageAxes = mcStageAxes
     getStagePosition _ = mcGetStagePosition
     setStagePosition _ pos = mcSetStagePosition pos
 

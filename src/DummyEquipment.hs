@@ -54,6 +54,7 @@ instance Equipment DummyStage where
     closeDevice (DummyStage n _) = putStrLn ("dummy stage " ++ (T.unpack (fromStageName n)) ++ " closed")
     hasMotorizedStage _ = True
     motorizedStageName (DummyStage n _) = n
+    supportedStageAxes _ = [XAxis, YAxis, ZAxis]
     getStagePosition (DummyStage n posRef) =
         readIORef posRef >>= \pos ->
         putStrLn ("read position of " ++ T.unpack (fromStageName n) ++ " as " ++ show pos) >> pure pos

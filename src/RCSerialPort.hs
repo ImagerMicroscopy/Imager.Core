@@ -15,6 +15,7 @@ module RCSerialPort (
   , serialWriteAndReadUntilTerminator
   , serialWriteAndReadUntilChar
   , serialWriteByteAndReadUntilChar
+  , serialWriteAndReadUntilSequence
   , serialWriteAndReadAtLeastNBytes
   , flushSerialPort
 )
@@ -92,6 +93,12 @@ serialWriteAndReadUntilChar port bs c = serialWriteAndReadUntilTerminator port b
 
 serialWriteByteAndReadUntilChar :: SerialPort -> Word8 -> Char -> IO ByteString
 serialWriteByteAndReadUntilChar port byte c = serialWriteAndReadUntilChar port (B.pack [byte]) c
+
+serialWriteAndReadUntilSequence :: SerialPort -> ByteString -> ByteString -> IO ByteString
+serialWriteAndReadUntilSequence port bs sequ =
+    withMVar (spMVar port) (\_ ->
+      serialWrite' port bs >>
+      serialRead port (sequ `B.isSuffixOf`))
 
 serialWriteAndReadAtLeastNBytes :: SerialPort -> ByteString -> Int -> IO ByteString
 serialWriteAndReadAtLeastNBytes port bs n =

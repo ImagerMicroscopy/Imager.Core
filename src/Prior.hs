@@ -8,6 +8,7 @@ import Data.Aeson
 import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
+import Data.List
 import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -24,7 +25,11 @@ import EquipmentTypes
 import MiscUtils
 import RCSerialPort
 
-data PriorStage = PriorStage !EqName !SerialPort
+data PriorStage = PriorStage {
+                      psName :: !EqName
+                    , psPort :: !SerialPort
+                    , psAxes :: ![StageAxis]
+                  }
 
 initializePriorStage :: EquipmentDescription -> IO EquipmentW
 initializePriorStage (PriorDesc name portName) =
@@ -32,23 +37,30 @@ initializePriorStage (PriorDesc name portName) =
     in  openSerialPort portName serialSettings >>= \port ->
         handlePriorMessage port "COMP 0" >>= \resp ->
         when (resp /= "0\r") (throwIO (userError "unexpected reply from Prior stage")) >>
-        pure (EquipmentW (PriorStage (EqName name) port))
+        determineAvailableAxes port >>= \axes ->
+        pure (EquipmentW (PriorStage (EqName name) port axes))
+    where
+        determineAvailableAxes port =
+            B.split (fromIntegral $ fromEnum '\r') <$> serialWriteAndReadUntilSequence port "?\r" "END\r" >>= \responses ->
+            if ("FOCUS = NONE" `elem` responses)
+            then pure [XAxis, YAxis]
+            else pure [XAxis, YAxis, ZAxis]
 
 instance Equipment PriorStage where
-    equipmentName (PriorStage n _) = n
-    flushSerialPorts (PriorStage _ port) = flushSerialPort port
-    closeDevice (PriorStage _ port) = closeSerialPort port
+    equipmentName = psName
+    flushSerialPorts p = flushSerialPort (psPort p)
+    closeDevice p = closeSerialPort (psPort p)
     hasMotorizedStage _ = True
-    motorizedStageName (PriorStage n _) = StageName "stage"
-    supportedStageAxes _ = [XAxis, YAxis, ZAxis]
-    getStagePosition (PriorStage _ port) = (,,) <$> readNumberP port "PX"
-                                                <*> readNumberP port "PY"
-                                                <*> ((/10) <$> readNumberP port "PZ")
+    motorizedStageName _ = StageName "stage"
+    supportedStageAxes = psAxes
+    getStagePosition (PriorStage _ port _) = (,,) <$> readNumberP port "PX"
+                                                  <*> readNumberP port "PY"
+                                                  <*> ((/10) <$> readNumberP port "PZ")
         where
           readNumberP :: SerialPort -> ByteString -> IO Double
           readNumberP port query = handlePriorMessage port query >>=
                                    return . read . T.unpack . T.decodeUtf8
-    setStagePosition (PriorStage _ port) (x, y, z) =
+    setStagePosition (PriorStage _ port _) (x, y, z) =
         doMove `onException` abortMovement
         where
           doMove = sendPriorCommand port posMsg >> waitUntilMovementStops
