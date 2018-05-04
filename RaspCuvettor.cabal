@@ -53,6 +53,7 @@ executable RaspCuvettor
                      , AggregateMotorizedStage
                      , CuvettorTypes
                      , BinaryEncoding
+                     , BlueBoxOptics
                      , Equipment
                      , EquipmentTypes
                      , EquipmentInitialization

@@ -31,6 +31,10 @@ data EquipmentDescription = CoherentLightSourceDesc {
                               , ardSerialPortName :: !String
                               , ardChannels :: ![(Text, (Int, Double))]
                             }
+                          | BlueBoxNijiDesc {
+                                bbnDescName :: !Text
+                              , bbnDescPortName :: !String
+                            }
                           | DummyLightSourceDesc {
                                 dlsdName :: !Text
                             }

@@ -25,6 +25,7 @@ import RCSerialPort
 
 import Arduino
 import Asahi
+import BlueBoxOptics
 import Coherent
 import DummyEquipment
 import Lumencor
@@ -79,6 +80,7 @@ initializeDevice d@(LumencorLightSourceDesc _ _) = initializeLumencor d
 initializeDevice d@(MarcelLumencorLightSourceDesc _ _ _) = initializeMarcelLumencor d
 initializeDevice d@(AsahiLightSourceDesc _ _ _) = initializeAsahiLightSource d
 initializeDevice d@(ArduinoLightSourceDesc _ _ _) = initializeArduinoLightSource d
+initializeDevice d@(BlueBoxNijiDesc _ _) = initializeBlueBoxNiji d
 initializeDevice d@(DummyLightSourceDesc _) = initializeDummyLightSource d
 initializeDevice d@(MicroscopeControllerDesc _) = initializeMicroscopeController d
 initializeDevice d@(ThorlabsFW103HDesc _ _ _) = initializeThorlabsFW130H d
