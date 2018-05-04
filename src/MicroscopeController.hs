@@ -22,6 +22,7 @@ import MiscUtils
 
 data MicroscopeController = MicroscopeController {
                                 mcEqName :: !EqName
+                              , mcLSs :: ![LightSourceDescription]
                               , mcFWs :: ![FilterWheelDescription]
                               , mcHasStage :: !Bool
                               , mcStageAxes :: ![StageAxis]
@@ -30,15 +31,19 @@ data MicroscopeController = MicroscopeController {
 initializeMicroscopeController :: EquipmentDescription -> IO EquipmentW
 initializeMicroscopeController (MicroscopeControllerDesc name) = do
     mcConnectToMicroscope
+    lss <- mcListAvailableLightSources
     fws <- mcFilterWheelsAndFilters
     hasStage <- mcHasMotorizedStage
     axes <- mcSupportedStageAxes
-    pure (EquipmentW (MicroscopeController (EqName name) fws hasStage axes))
+    pure (EquipmentW (MicroscopeController (EqName name) lss fws hasStage axes))
 
 instance Equipment MicroscopeController where
     equipmentName = mcEqName
     flushSerialPorts _ = pure ()
     closeDevice _ = c_MCCloseConnection
+
+    availableLightSources = mcLSs
+
 
     availableFilterWheels = mcFWs
     switchToFilter _ fw ft = mcSwitchToFilter fw ft
@@ -53,20 +58,40 @@ mcConnectToMicroscope ::  IO ()
 mcConnectToMicroscope = c_MCConnectToMicroscope >>= \result ->
                         when (result /= 0) (throwIO $ userError "unable to connect to microscope")
 
+mcListAvailableLightSources :: IO [LightSourceDescription]
+mcListAvailableLightSources =
+    mcListLightSources >>= \lsNames ->
+    forM lsNames (\lsName ->
+        mcListChannels lsName >>= \(channels, canControlPower, channelsAreExclusive) ->
+        pure (LightSourceDescription lsName canControlPower channelsAreExclusive channels))
+    where
+        mcListLightSources :: IO [LSName]
+        mcListLightSources = map LSName <$> (mcGetNames c_MCListAvailableLightSources)
+        mcListChannels :: LSName -> IO ([LSChannelName], Bool, Bool)
+        mcListChannels lsName =
+            B.useAsCString (T.encodeUtf8 (fromLSName lsName)) $ \cLSName ->
+            alloca $ \canControlPowerPtr ->
+            alloca $ \channelsAreExclusivePtr ->
+            mcGetNames (withLastTwoArgs (c_MCListAvailableChannels cLSName) canControlPowerPtr channelsAreExclusivePtr) >>= \chNames ->
+            peek canControlPowerPtr >>= \canControlPower ->
+            peek channelsAreExclusivePtr >>= \channelsAreExclusive ->
+            pure (map LSChannelName chNames, (canControlPower /= 0), (channelsAreExclusive /= 0))
+        withLastTwoArgs :: (a -> b -> c -> d -> e -> f -> g) -> e -> f -> (a -> b -> c -> d -> g)
+        withLastTwoArgs f p1 p2 = \a1 a2 a3 a4 -> f a1 a2 a3 a4 p1 p2
+
 mcFilterWheelsAndFilters :: IO [FilterWheelDescription]
 mcFilterWheelsAndFilters =
     mcListFilterWheels >>= \fwNames ->
     forM fwNames (\fw ->
         (,) fw <$> mcListFilters fw) >>= \fwsAndFilters ->
     pure (map (\(fw, fs) -> FilterWheelDescription fw fs) fwsAndFilters)
-
-mcListFilterWheels :: IO [FWName]
-mcListFilterWheels = map FWName <$> (mcGetNames c_MCListAvailableFilterWheels)
-
-mcListFilters :: FWName -> IO [FName]
-mcListFilters (FWName fwName) =
-    B.useAsCString (T.encodeUtf8 fwName) (\cFWName ->
-        map FName <$> mcGetNames (c_MCListAvailableFilters cFWName))
+    where
+        mcListFilterWheels :: IO [FWName]
+        mcListFilterWheels = map FWName <$> (mcGetNames c_MCListAvailableFilterWheels)
+        mcListFilters :: FWName -> IO [FName]
+        mcListFilters (FWName fwName) =
+            B.useAsCString (T.encodeUtf8 fwName) (\cFWName ->
+                map FName <$> mcGetNames (c_MCListAvailableFilters cFWName))
 
 mcGetNames :: (Ptr CString -> CInt -> CInt -> Ptr CInt -> IO CInt) -> IO [Text]
 mcGetNames f =
@@ -130,6 +155,15 @@ foreign import ccall unsafe "MicroscopeControlDLL.h MCConnectToMicroscope"
     c_MCConnectToMicroscope :: IO CInt
 foreign import ccall unsafe "MicroscopeControlDLL.h MCCloseConnection"
     c_MCCloseConnection :: IO ()
+
+foreign import ccall unsafe "MicroscopeControlDLL.h MCListAvailableLightSources"
+    c_MCListAvailableLightSources :: Ptr CString -> CInt -> CInt -> Ptr CInt -> IO CInt
+foreign import ccall unsafe "MicroscopeControlDLL.h MCListAvailableChannels"
+    c_MCListAvailableChannels :: CString -> Ptr CString -> CInt -> CInt -> Ptr CInt -> Ptr CInt -> Ptr CInt -> IO CInt
+foreign import ccall unsafe "MicroscopeControlDLL.h MCActivateLightSource"
+    c_MCActivateLightSource :: CString -> Ptr CString -> Ptr CDouble -> CInt -> IO CInt
+foreign import ccall unsafe "MicroscopeControlDLL.h MCDeactivateLightSource"
+    c_MCDeactivateLightSource :: CString -> IO CInt
 
 foreign import ccall unsafe "MicroscopeControlDLL.h MCListAvailableFilterWheels"
     c_MCListAvailableFilterWheels :: Ptr CString -> CInt -> CInt -> Ptr CInt -> IO CInt
