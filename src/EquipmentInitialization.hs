@@ -93,7 +93,7 @@ initializeDevice d@(PriorDesc _ _) = initializePriorStage d
 initializeDevice d@(MarzhauserStageDesc _ _) = initializeMarzhauserStage d
 initializeDevice d@(DummyStageDesc _) = initializeDummyStage d
 initializeDevice d@(RobottorDesc _ _ _) = initializeRobottor d
-initializeDevice _ = error "unknown type of device description"
+initializeDevice d = error ("unknown type of device description: " ++ show d)
 
 deviceDescName :: EquipmentDescription -> String
 deviceDescName (CoherentLightSourceDesc _ _) = "Coherent laser"
@@ -101,6 +101,7 @@ deviceDescName (LumencorLightSourceDesc _ _) = "Lumencor"
 deviceDescName (MarcelLumencorLightSourceDesc _ _ _) = "MarcelLumencor"
 deviceDescName (AsahiLightSourceDesc _ _ _) = "Asahi lamp"
 deviceDescName (ArduinoLightSourceDesc _ _ _) = "Arduino-controlled light source"
+deviceDescName (BlueBoxNijiDesc _ _) = "BlueBox Niji"
 deviceDescName (DummyLightSourceDesc _) = "Dummy light source"
 deviceDescName (MicroscopeControllerDesc _) = "Microscope"
 deviceDescName (ThorlabsFW103HDesc _ _ _) = "Thorlabs FW130H filter wheel"
@@ -113,7 +114,7 @@ deviceDescName (PriorDesc _ _) = "Prior motorized stage"
 deviceDescName (MarzhauserStageDesc _ _) = "Marzhauser motorized stage"
 deviceDescName (DummyStageDesc name) = "Dummy motorized stage"
 deviceDescName (RobottorDesc name ip port) = "Robottor"
-deviceDescName _ = error "unknown type of device description"
+deviceDescName d = error ("unknown type of device description " ++ show d)
 
 verifyEquipmentThrows :: [EquipmentW] -> IO [EquipmentW]
 verifyEquipmentThrows eqs = when (not (nodups (map equipmentName eqs)))

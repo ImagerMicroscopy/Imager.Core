@@ -53,7 +53,7 @@ instance Equipment BlueBoxNiji where
                                    in  sendBlueBoxNijiMessage port (LT.toStrict cmdStr))
     deactivateLightSource (BlueBoxNiji _ port) =
         forM_ [1 .. 7 :: Int] (\i ->
-            let cmdStr = LT.format "D,{},1" (LT.Only i)
+            let cmdStr = LT.format "D,{},0" (LT.Only i)
             in  sendBlueBoxNijiMessage port (LT.toStrict cmdStr))
 
 blueBoxChannelsNamesAndTypes :: [(Text, BlueBoxNijiChannelNames)]
