@@ -42,37 +42,23 @@ instance Detector SCCamDetector where
     acquireStreamingData :: SCCamDetector -> ExposureTime -> Gain -> NMeasurementsToAverage ->
                             NMeasurementsToPerform -> Chan AsyncData -> IO ()
     acquireStreamingData (SCCamDetector camName) expTime gain nAvg nMeasurements chan =
-        SC.getImageDimensions camName >>= \(nRows, nCols) ->
         SC.setExposureTime camName expTime >>
         SC.setEMGain camName gain >>
-        MV.new (nRows * nCols * nImagesInBuffer * 2) >>= \buffer ->
-        MV.unsafeWith buffer (\bufPtr ->
-        (performAcq bufPtr nRows nCols >> SC.abortAsyncAcquisition camName) `onException` (SC.abortAsyncAcquisition camName >>
-                                                                                           writeChan chan AsyncError))
+        (performAcq >> SC.abortAsyncAcquisition camName) `onException` (SC.abortAsyncAcquisition camName >>
+                                                                                    writeChan chan AsyncError)
         where
-            performAcq bufPtr nRows nCols = SC.startAsyncAcquisition camName nAvg (bufPtr, nRows * nCols * nImagesInBuffer) >>
-                                            fetchImages nMeasurements (bufPtr, nRows, nCols) chan >>
-                                            writeChan chan AsyncFinished
-            fetchImages :: Int -> (Ptr Word16, Int, Int) -> Chan AsyncData -> IO ()
-            fetchImages nImagesRemaining (bufPtr, nRows, nCols) chan
+            performAcq = SC.startAsyncAcquisition camName nAvg >>
+                         fetchImages nMeasurements chan >>
+                         writeChan chan AsyncFinished
+            fetchImages :: Int -> Chan AsyncData -> IO ()
+            fetchImages nImagesRemaining chan
                 | nImagesRemaining == 0 = return ()
                 | otherwise =
-                    SC.getIndexOfLastImageAsyncAcquired camName >>= \idx ->
-                    case idx of
-                        (-1) -> threadDelay (floor 50e3) >> fetchImages nImagesRemaining (bufPtr, nRows, nCols) chan
-                        i    -> getTime Monotonic >>= \timeStamp ->
-                                getImageAtIndexInBuffer bufPtr (nRows, nCols) i >>= \imageData ->
-                                let acqData = AcquiredData nRows nCols timeStamp (byteStringFromVector imageData) UINT16
-                                in  acqData `deepseq` writeChan chan (AsyncData acqData) >>
-                                    fetchImages (nImagesRemaining - 1) (bufPtr, nRows, nCols) chan
-            nImagesInBuffer = 50
-            getImageAtIndexInBuffer :: Ptr Word16 -> (Int, Int) -> Int -> IO (V.Vector Word16)
-            getImageAtIndexInBuffer bufPtr (nRows, nCols) index =
-                let nBytesInImage = nRows * nCols * 2
-                    offsetPtr = bufPtr `plusPtr` (index * nBytesInImage)
-                in  MV.new (nRows * nCols) >>= \image ->
-                    MV.unsafeWith image (\imPtr -> copyBytes imPtr offsetPtr nBytesInImage) >>
-                    V.freeze image
+                    SC.getNextAcquiredImage camName >>= \(SC.MeasuredImages nRows nCols imageData) ->
+                    getTime Monotonic >>= \timeStamp ->
+                    let acqData = AcquiredData nRows nCols timeStamp (byteStringFromVector imageData) UINT16
+                    in  acqData `deepseq` writeChan chan (AsyncData acqData) >>
+                        fetchImages (nImagesRemaining - 1) chan
 
     setImageOrientation :: SCCamDetector -> [ImageOrientationOperation] -> IO ()
     setImageOrientation (SCCamDetector camName) ops =
