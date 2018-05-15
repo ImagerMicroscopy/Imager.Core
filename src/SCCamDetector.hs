@@ -33,7 +33,7 @@ instance Detector SCCamDetector where
     acquireData (SCCamDetector camName) expTime emGain nAvg =
         SC.setExposureTime camName expTime >>
         SC.setEMGain camName emGain >>
-        SC.acquireImages camName 1 nAvg >>= \(SC.MeasuredImages nRows nCols vec) ->
+        SC.acquireImages camName 1 nAvg >>= \(SC.MeasuredImages nRows nCols _ vec) ->
         getTime Monotonic >>= \timeStamp ->
         let bytes = byteStringFromVector vec
             numType = UINT16
@@ -47,18 +47,19 @@ instance Detector SCCamDetector where
         (performAcq >> SC.abortAsyncAcquisition camName) `onException` (SC.abortAsyncAcquisition camName >>
                                                                                     writeChan chan AsyncError)
         where
-            performAcq = SC.startAsyncAcquisition camName nAvg >>
-                         fetchImages nMeasurements chan >>
+            performAcq = getTime Monotonic >>= \acqStart ->
+                         SC.startAsyncAcquisition camName nAvg >>
+                         fetchImages nMeasurements acqStart chan >>
                          writeChan chan AsyncFinished
-            fetchImages :: Int -> Chan AsyncData -> IO ()
-            fetchImages nImagesRemaining chan
+            fetchImages :: Int -> TimeSpec -> Chan AsyncData -> IO ()
+            fetchImages nImagesRemaining acqStart chan
                 | nImagesRemaining == 0 = return ()
                 | otherwise =
-                    SC.getNextAcquiredImage camName >>= \(SC.MeasuredImages nRows nCols imageData) ->
-                    getTime Monotonic >>= \timeStamp ->
-                    let acqData = AcquiredData nRows nCols timeStamp (byteStringFromVector imageData) UINT16
+                    SC.getNextAcquiredImage camName >>= \(SC.MeasuredImages nRows nCols timeStamp imageData) ->
+                    let shiftedTimeStamp = fromNanoSecs (toNanoSecs acqStart + round (timeStamp * 1.0e9))
+                        acqData = AcquiredData nRows nCols shiftedTimeStamp (byteStringFromVector imageData) UINT16
                     in  acqData `deepseq` writeChan chan (AsyncData acqData) >>
-                        fetchImages (nImagesRemaining - 1) chan
+                        fetchImages (nImagesRemaining - 1) acqStart chan
 
     setImageOrientation :: SCCamDetector -> [ImageOrientationOperation] -> IO ()
     setImageOrientation (SCCamDetector camName) ops =

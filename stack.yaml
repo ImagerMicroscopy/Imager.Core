@@ -16,7 +16,7 @@ packages:
   extra-dep: true
 - location:
     git: https://pdedecker@bitbucket.org/pdedecker/hssccamera.git
-    commit: 86ba1eccbe29eaac358a37b1b04f0c86d35ddc76
+    commit: 704086af168cd6f4357233ec163ea8f8a2ccaf66
   extra-dep: true
 - location:
     git: https://pdedecker@bitbucket.org/pdedecker/serialport.git
