@@ -140,11 +140,12 @@ executeMeasurementElement env (MEStageLoop sn poss es) =
 
 executeMeasurementElement env (MERelativeStageLoop sn (RelativeStageLoopParams dx dy dz (bx, ax) (by, ay) (bz, az)) es) =
     withStatusMessage env "relative stage loop" (
-        getStagePosition stageEq >>= \currPos ->
-        let poss = (allPositions currPos)
-        in  forM_ (zip [1..] (allPositions currPos)) (\(index :: Int, pos) ->
+        getStagePosition stageEq >>= \initialPos ->
+        let poss = (allPositions initialPos)
+        in  forM_ (zip [1..] poss) (\(index :: Int, pos) ->
                 updateStatusMessage env (T.format "relative stage position {} of {}" (index, length poss)) >>
-                setStagePosition stageEq pos >> executeMeasurementElements env es))
+                setStagePosition stageEq pos >> executeMeasurementElements env es) >>
+            setStagePosition stageEq initialPos)
     where
         [stageEq] = filter (\e -> hasMotorizedStage e && motorizedStageName e == sn) (peEquipment env)
         planesx = map ((*) dx . fromIntegral) [negate bx .. ax] :: [Double]
