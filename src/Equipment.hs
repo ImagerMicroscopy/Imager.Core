@@ -34,7 +34,24 @@ newtype RobotProgramName = RobotProgramName {
                                fromRobotProgramName :: Text
                            } deriving (Show, Eq, Ord, ToJSON, FromJSON)
 
-type StagePosition = (Double, Double, Double)
+data StagePosition = StagePosition {
+                         spX :: !Double
+                       , spY :: !Double
+                       , spZ :: !Double
+                       , spUsingHardwareAutoFocus :: !Bool
+                       , spHardwareAFOffset :: !Int
+                     } deriving (Show)
+
+instance ToJSON StagePosition where
+    toJSON p = object ["x" .= spX p, "y" .= spY p, "z" .= spZ p,
+                       "usinghardwareautofocus" .= spUsingHardwareAutoFocus p,
+                       "hardwareautofocusoffset" .= spHardwareAFOffset p]
+
+instance FromJSON StagePosition where
+    parseJSON (Object v) = StagePosition <$> v .: "x" <*> v .: "y" <*> v .: "z"
+                                         <*> v .: "usinghardwareautofocus"
+                                         <*> v .: "hardwareautofocusoffset"
+    parseJSON _ = fail "expected a JSON object"
 
 data LightSourceDescription = LightSourceDescription {
                                   lsdName :: !LSName

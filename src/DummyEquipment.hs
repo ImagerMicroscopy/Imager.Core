@@ -25,7 +25,7 @@ initializeDummyFilterWheel (DummyFilterWheelDesc name chs) =
 initializeDummyStage :: EquipmentDescription -> IO EquipmentW
 initializeDummyStage (DummyStageDesc name) =
     putStrLn ("dummy stage " ++ (T.unpack name) ++ " open") >>
-    EquipmentW <$> (DummyStage (StageName name) <$> newIORef (0,0,0))
+    EquipmentW <$> (DummyStage (StageName name) <$> newIORef (StagePosition 0 0 0 True 1))
 
 instance Equipment DummyLightSource where
     equipmentName (DummyLightSource n) = n

@@ -137,18 +137,22 @@ mcSupportedStageAxes =
     in  pure (concat [x, y, z])
 
 mcGetStagePosition :: IO StagePosition
-mcGetStagePosition = alloca (\xPtr ->
-                     alloca (\yPtr ->
-                     alloca (\zPtr ->
-                         c_MCGetStagePosition xPtr yPtr zPtr >>= \result ->
-                         when (result /= 0) (throwIO $ userError "unable to read MC stage position") >>
-                         (,,) <$> (fromCDouble <$> peek xPtr)
-                              <*> (fromCDouble <$> peek yPtr)
-                              <*> (fromCDouble <$> peek zPtr))))
+mcGetStagePosition = alloca $ \xPtr ->
+                     alloca $ \yPtr ->
+                     alloca $ \zPtr ->
+                     alloca $ \usingAFPtr ->
+                     alloca $ \afOffsetPtr ->
+                     c_MCGetStagePosition xPtr yPtr zPtr usingAFPtr afOffsetPtr >>= \result ->
+                     when (result /= 0) (throwIO $ userError "unable to read MC stage position") >>
+                     StagePosition <$> (fromCDouble <$> peek xPtr)
+                                   <*> (fromCDouble <$> peek yPtr)
+                                   <*> (fromCDouble <$> peek zPtr)
+                                   <*> ((0 /= ) . fromIntegral <$> peek usingAFPtr)
+                                   <*> (fromIntegral <$> peek afOffsetPtr)
 
 mcSetStagePosition :: StagePosition -> IO ()
-mcSetStagePosition (x, y, z) =
-    c_MCSetStagePosition (CDouble x) (CDouble y) (CDouble z) >>= \result ->
+mcSetStagePosition (StagePosition x y z usingAF afOffset) =
+    c_MCSetStagePosition (CDouble x) (CDouble y) (CDouble z) (if usingAF then 1 else 0) (fromIntegral afOffset) >>= \result ->
     when (result /= 0) (throwIO $ userError "unable to set MC stage position")
 
 foreign import ccall unsafe "MicroscopeControlDLL.h MCConnectToMicroscope"
@@ -177,6 +181,6 @@ foreign import ccall unsafe "MicroscopeControlDLL.h MCHasMotorizedStage"
 foreign import ccall unsafe "MicroscopeControlDLL.h MCSupportedStageAxes"
     c_MCSupportedStageAxes :: Ptr CInt -> IO CInt
 foreign import ccall unsafe "MicroscopeControlDLL.h MCGetStagePosition"
-    c_MCGetStagePosition :: Ptr CDouble -> Ptr CDouble -> Ptr CDouble -> IO CInt
+    c_MCGetStagePosition :: Ptr CDouble -> Ptr CDouble -> Ptr CDouble -> Ptr CInt -> Ptr CInt -> IO CInt
 foreign import ccall unsafe "MicroscopeControlDLL.h MCSetStagePosition"
-    c_MCSetStagePosition :: CDouble -> CDouble -> CDouble -> IO CInt
+    c_MCSetStagePosition :: CDouble -> CDouble -> CDouble -> CInt -> CInt -> IO CInt

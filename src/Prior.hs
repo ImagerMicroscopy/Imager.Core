@@ -53,14 +53,16 @@ instance Equipment PriorStage where
     hasMotorizedStage _ = True
     motorizedStageName _ = StageName "stage"
     supportedStageAxes = psAxes
-    getStagePosition (PriorStage _ port _) = (,,) <$> readNumberP port "PX"
-                                                  <*> readNumberP port "PY"
-                                                  <*> ((/10) <$> readNumberP port "PZ")
+    getStagePosition (PriorStage _ port _) =
+        StagePosition <$> readNumberP port "PX"
+                      <*> readNumberP port "PY"
+                      <*> ((/10) <$> readNumberP port "PZ")
+                      <*> pure False <*> pure 0
         where
           readNumberP :: SerialPort -> ByteString -> IO Double
           readNumberP port query = handlePriorMessage port query >>=
                                    return . read . T.unpack . T.decodeUtf8
-    setStagePosition (PriorStage _ port _) (x, y, z) =
+    setStagePosition (PriorStage _ port _) (StagePosition x y z _ _) =
         doMove `onException` abortMovement
         where
           doMove = sendPriorCommand port posMsg >> waitUntilMovementStops

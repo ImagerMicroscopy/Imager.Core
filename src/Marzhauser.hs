@@ -35,8 +35,8 @@ instance Equipment MarzhauserStage where
     supportedStageAxes _ = [XAxis, YAxis, ZAxis]
     getStagePosition (MarzhauserStage _ port) =
         map read . words . T.unpack . T.decodeUtf8 <$> handleMarzhauserMessage port "?pos" >>= \[x, y, z] ->
-        pure (x, y, z)
-    setStagePosition (MarzhauserStage _ port) (x, y, z) =
+        pure (StagePosition x y z False 0)
+    setStagePosition (MarzhauserStage _ port) (StagePosition x y z _ _) =
         doMove `onException` abortMovement
         where
             doMove = sendMarzhauserMessageNoResponse port (T.encodeUtf8 msg) >>

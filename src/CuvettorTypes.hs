@@ -46,7 +46,7 @@ data RequestMessage = AcquireData !DetectionParams
                     | ListWavelengths
                     | ListAvailableEquipment
                     | GetMotorizedStagePosition !StageName
-                    | SetMotorizedStagePosition !StageName !(Double, Double, Double)
+                    | SetMotorizedStagePosition !StageName !StagePosition
                     | ListRobotPrograms !RobotName
                     | GetDetectorLimits !(Int, Int) Int
                     | GetDetectorParameters
@@ -135,7 +135,7 @@ data ResponseMessage = StatusOK
                      | AcquiredDataResponse !(Word64, AcquiredData)
                      | Wavelengths !AcquiredData
                      | AvailableEquipment ![EquipmentW]
-                     | MotorizedStagePosition !(Double, Double, Double)
+                     | MotorizedStagePosition !StagePosition
                      | RobotProgramsResponse ![RobotProgramName]
                      | DetectorLimitsResponse !DetectorLimits
                      | DetectorParametersResponse !DetectorParameters

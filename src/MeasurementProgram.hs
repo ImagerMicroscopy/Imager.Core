@@ -151,7 +151,7 @@ executeMeasurementElement env (MERelativeStageLoop sn (RelativeStageLoopParams d
         planesy = map ((*) dy . fromIntegral) [negate by .. ay]
         planesz = map ((*) dz . fromIntegral) [negate bz .. az]
         allPositions :: StagePosition -> [StagePosition]
-        allPositions (x, y, z) = [(x + x', y + y', z + z') | x' <- planesx, y' <- planesy, z' <- planesz]
+        allPositions (StagePosition x y z _ _) = [StagePosition (x + x') (y + y') (z + z') False 0 | x' <- planesx, y' <- planesy, z' <- planesz]
 
 insertFastAcquisitionLoops :: MeasurementElement -> MeasurementElement
 insertFastAcquisitionLoops (MEDoTimes n [MEDetection [d]]) = MEFastAcquisitionLoop n d

@@ -33,14 +33,16 @@ instance Equipment AggregateMotorizedStage where
     getStagePosition (AggregateMotorizedStage as) =
         let (axes, stages) = unzip as
         in  mapM getStagePosition stages >>= \allPositions ->
-            pure (foldr f (-1.0, -1.0, -1.0) (zip axes allPositions))
+            pure (foldr f (StagePosition (-1.0) (-1.0) (-1.0) False 0) (zip axes allPositions))
         where
             f :: ([StageAxis], StagePosition) -> StagePosition -> StagePosition
-            f (as, (x, y, z)) (accumX, accumY, accumZ) =
-                let x' = if (XAxis `elem` as) then x else accumX
-                    y' = if (YAxis `elem` as) then y else accumY
-                    z' = if (ZAxis `elem` as) then z else accumZ
-                in (x', y', z')
+            f (as, (StagePosition x y z usingAF afOffset)) (StagePosition accumX accumY accumZ accumUsingAF accumAFOffset) =
+                let x' =        if (XAxis `elem` as) then x else accumX
+                    y' =        if (YAxis `elem` as) then y else accumY
+                    z' =        if (ZAxis `elem` as) then z else accumZ
+                    usingAF' =  if (ZAxis `elem` as) then usingAF else accumUsingAF
+                    afOffset' = if (ZAxis `elem` as) then afOffset else accumAFOffset
+                in StagePosition x' y' z' usingAF' afOffset'
     setStagePosition (AggregateMotorizedStage as) pos =
         forConcurrently_ (map snd as) (\eq -> setStagePosition eq pos)
 
