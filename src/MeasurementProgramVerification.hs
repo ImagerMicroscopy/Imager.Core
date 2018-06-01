@@ -8,6 +8,7 @@ module MeasurementProgramVerification (
 import Control.Exception
 import Data.Either
 import Data.List
+import qualified Data.Map.Strict as M
 import Data.Maybe
 import Control.Monad
 import Data.Text (Text)
@@ -21,41 +22,44 @@ import MiscUtils
 
 type RobotInfo = (Text, [Text]) -- robot name, robot programs
 
-validateMeasurementElementThrows :: [EquipmentW] -> MeasurementElement -> IO ()
-validateMeasurementElementThrows eqs me =
+validateMeasurementElementThrows :: [EquipmentW] -> MeasurementElement -> DefinedDetections -> IO ()
+validateMeasurementElementThrows eqs me ddets =
     verifyRobotElements eqs me >>= \robotsResult ->
     when (not $ null robotsResult) (
         throwIO (userError $ head robotsResult)) >>
-    case (foldMeasurementElement (validateMeasurementElement eqs) me) of
+    case (foldMeasurementElement (validateMeasurementElement eqs ddets) me) of
                                                           (e : xs) -> throwIO (userError e)
                                                           []       -> return ()
 
 -- should not inspect contained MeasurementElements
 -- empty list for no error
-validateMeasurementElement :: [EquipmentW] -> MeasurementElement -> [String]
-validateMeasurementElement eqs (MEDetection dets)
-    | null dets = ["no detection specified"]
+validateMeasurementElement :: [EquipmentW] -> DefinedDetections -> MeasurementElement -> [String]
+validateMeasurementElement eqs ddets (MEDetection detNames)
+    | null detNames = ["no detection specified"]
+    | any (\dn -> not (M.member dn ddets)) detNames = ["one or more detection names are undefined"]
     | otherwise = concat $ (map (validateDetection eqs) dets)
-validateMeasurementElement eqs (MEIrradiation dur ips)
+    where
+        dets = map (\dn -> fromJust $ M.lookup dn ddets) detNames
+validateMeasurementElement eqs _ (MEIrradiation dur ips)
     | (dur < 0.0) || (dur > 3600) = ["invalid irradiation duration: " ++ show dur]
     | otherwise = concat $ (map (validateIrradiation eqs) ips)
-validateMeasurementElement eqs (MEWait dur)
+validateMeasurementElement eqs _ (MEWait dur)
     | (dur < 0.0) || (dur > 3600) = ["invalid wait duration: " ++ show dur]
     | otherwise = []
-validateMeasurementElement eqs (MEExecuteRobotProgram rName pName _) = []
-validateMeasurementElement eqs (MEDoTimes n es)
+validateMeasurementElement eqs _ (MEExecuteRobotProgram rName pName _) = []
+validateMeasurementElement eqs _ (MEDoTimes n es)
     | (n < 0) || (n > (floor 10e6)) = ["invalid number of times to repeat: " ++ show n]
     | null es = ["do times loop but no actions"]
     | otherwise = []
-validateMeasurementElement eqs (MEFastAcquisitionLoop n det)
+validateMeasurementElement eqs _ (MEFastAcquisitionLoop n det)
     | (n < 0) || (n > (floor 10e6)) = ["invalid number of times to repeat: " ++ show n]
     | otherwise = validateDetection eqs det
-validateMeasurementElement eqs (METimeLapse n dur es)
+validateMeasurementElement eqs _ (METimeLapse n dur es)
     | (n < 0) || (n > (floor 10e6)) = ["invalid number of times to repeat: " ++ show n]
     | (dur < 0.0) || (dur > 3600 * 2) = ["invalid time lapse duration: " ++ show dur]
     | null es = ["timelapse loop but no elements"]
     | otherwise = []
-validateMeasurementElement eqs (MEStageLoop stageName pos es)
+validateMeasurementElement eqs _ (MEStageLoop stageName pos es)
     | null pos = ["no positions in stage loop"]
     | T.null (fromStageName stageName) = ["no stage name"]
     | stageName `notElem` stageNames = ["can't find stage named " ++ T.unpack (fromStageName stageName)]
@@ -63,7 +67,7 @@ validateMeasurementElement eqs (MEStageLoop stageName pos es)
     | otherwise = []
     where
         stageNames = map motorizedStageName (filter hasMotorizedStage eqs)
-validateMeasurementElement eqs (MERelativeStageLoop stageName (RelativeStageLoopParams dx dy dz (bx, ax) (by, ay) (bz, az)) es)
+validateMeasurementElement eqs _ (MERelativeStageLoop stageName (RelativeStageLoopParams dx dy dz (bx, ax) (by, ay) (bz, az)) es)
     | T.null (fromStageName stageName) = ["no stage name"]
     | stageName `notElem` stageNames = ["can't find stage named " ++ T.unpack (fromStageName stageName)]
     | null es = ["relative stage loop but no elements"]

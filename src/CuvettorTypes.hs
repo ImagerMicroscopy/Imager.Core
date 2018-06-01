@@ -63,7 +63,8 @@ data RequestMessage = AcquireData !DetectionParams
                     | TurnOffLightSource !EqName
                     | Ping
                     | ExecuteMeasurementProgram {
-                        execMeasurementProgram :: !MeasurementElement
+                          execMeasurementProgram :: !MeasurementElement
+                        , execMeasurementDetections :: !DefinedDetections
                       }
                     | FetchAsyncData
                     | AcknowledgeDataReceipt !Word64
@@ -90,7 +91,7 @@ instance ToJSON RequestMessage where
     toEncoding (DeactivateLightSource name) = pairs ("action" .= ("deactivatelightsource" :: Text) <> "name" .= name)
     toEncoding (TurnOffLightSource name) = pairs ("action" .= ("turnofflightsource" :: Text) <> "name" .= name)
     toEncoding Ping = pairs ("action" .= ("ping" :: Text))
-    toEncoding (ExecuteMeasurementProgram prog) = pairs ("action" .= ("executemeasurementprogram" :: Text) <> "program" .= prog)
+    toEncoding (ExecuteMeasurementProgram prog dets) = pairs ("action" .= ("executemeasurementprogram" :: Text) <> "program" .= prog <> "defineddetections" .= dets)
     toEncoding FetchAsyncData = pairs ("action" .= ("fetchasyncspectra" :: Text))
     toEncoding (AcknowledgeDataReceipt upToIdx) = pairs ("action" .= ("acknowledgedatareceipt" :: Text) <> "uptoandincluding" .= upToIdx)
     toEncoding FetchAsyncStatusMessages = pairs ("action" .= ("fetchasyncstatusmessages" :: Text))
@@ -119,7 +120,7 @@ instance FromJSON RequestMessage where
             "deactivatelightsource" -> DeactivateLightSource <$> v .: "name"
             "turnofflightsource" -> TurnOffLightSource <$> v .: "name"
             "ping"      -> return Ping
-            "executemeasurementprogram" -> ExecuteMeasurementProgram <$> v .: "program"
+            "executemeasurementprogram" -> ExecuteMeasurementProgram <$> v .: "program" <*> v .: "defineddetections"
             "fetchasyncspectra" -> return FetchAsyncData
             "acknowledgedatareceipt" -> AcknowledgeDataReceipt <$> v .: "uptoandincluding"
             "fetchasyncstatusmessages" -> return FetchAsyncStatusMessages

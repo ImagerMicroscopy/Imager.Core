@@ -19,6 +19,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.ByteString.Base64 as B64
+import qualified Data.Map.Strict as M
 import Data.Maybe
 import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
@@ -85,10 +86,12 @@ messageHandler msg env =
 
 performAction :: Detector a => Environment a -> RequestMessage -> IO (ResponseMessage, Environment a)
 performAction env (AcquireData params) =
-    startAsyncAcquisition env (MEDetection [params]) >>= \(asyncWorker, spectraMVar, statusMVar) ->
-    wait asyncWorker >>
-    takeMVar spectraMVar >>= \[acquiredData] ->
-    return (AcquiredDataResponse acquiredData, env)
+    let detElem = MEDetection ["Default"]
+        ddets = M.fromList [("Default", params)]
+    in  startAsyncAcquisition env ddets detElem >>= \(asyncWorker, spectraMVar, statusMVar) ->
+        wait asyncWorker >>
+        takeMVar spectraMVar >>= \[acquiredData] ->
+        return (AcquiredDataResponse acquiredData, env)
 
 performAction env ListWavelengths =
     getTime Monotonic >>= \timeStamp ->
@@ -169,8 +172,8 @@ performAction env (TurnOffLightSource name) =
 
 performAction env Ping = return (Pong, env)
 
-performAction env (ExecuteMeasurementProgram me) =
-    startAsyncAcquisition env me >>= \(asyncWorker, spectraMVar, statusMVar) ->
+performAction env (ExecuteMeasurementProgram me ddets) =
+    startAsyncAcquisition env ddets me >>= \(asyncWorker, spectraMVar, statusMVar) ->
     let newEnv = env {envAsyncDataMVar = spectraMVar, envAsyncStatusMessagesMVar = statusMVar, envAsyncProgramWorker = asyncWorker}
     in  return (StatusOK, newEnv)
 
@@ -217,15 +220,15 @@ performAction env IsAsyncAcquisitionRunning =
     asyncAcquisitionRunning env >>= \asyncIsRunning ->
     return (AsyncAcquisitionIsRunning asyncIsRunning, env)
 
-startAsyncAcquisition :: Detector a => Environment a -> MeasurementElement -> IO (Async (), MVar [(AcquisitionMetaData, AcquiredData)], MVar [Text])
-startAsyncAcquisition env me =
+startAsyncAcquisition :: Detector a => Environment a -> DefinedDetections -> MeasurementElement -> IO (Async (), MVar [(AcquisitionMetaData, AcquiredData)], MVar [Text])
+startAsyncAcquisition env ddets me =
     ensureAsyncAcquisitionNotRunning env >>
-    validateMeasurementElementThrows (envEquipment env) me >>
+    validateMeasurementElementThrows (envEquipment env) me ddets >>
     newMVar [] >>= \spectraMVar ->
     newMVar [] >>= \statusMVar ->
     newIORef 0 >>= \dataCounter ->
     getTime Monotonic >>= \startTime ->
-    async (executeMeasurement (ProgramEnvironment detector startTime (envEquipment env) dataCounter spectraMVar statusMVar) me >>
+    async (executeMeasurement (ProgramEnvironment detector startTime (envEquipment env) dataCounter spectraMVar statusMVar) me ddets >>
            return ()) >>= \asyncWorker ->
     return (asyncWorker, spectraMVar, statusMVar)
     where

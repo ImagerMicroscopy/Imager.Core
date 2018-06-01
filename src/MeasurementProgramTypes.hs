@@ -5,6 +5,7 @@ import Control.Concurrent
 import Data.Aeson
 import Data.Either
 import Data.IORef
+import Data.Map.Strict (Map)
 import Data.Monoid
 import Data.Text (Text)
 import Data.Word
@@ -15,7 +16,7 @@ import Detector
 import Equipment
 import EquipmentTypes
 
-data MeasurementElement = MEDetection ![DetectionParams]
+data MeasurementElement = MEDetection ![Text]
                         | MEIrradiation !Double ![IrradiationParams]
                         | MEWait !Double
                         | MEExecuteRobotProgram !RobotName !RobotProgramName !Bool
@@ -25,6 +26,8 @@ data MeasurementElement = MEDetection ![DetectionParams]
                         | MEStageLoop !StageName ![PositionNameAndCoords] ![MeasurementElement]
                         | MERelativeStageLoop !StageName !RelativeStageLoopParams ![MeasurementElement]
                         deriving (Show)
+
+type DefinedDetections = Map Text DetectionParams
 
 data ProgramEnvironment a = ProgramEnvironment {
                                 peDetector :: !a
@@ -77,7 +80,7 @@ instance FromJSON MeasurementElement where
     parseJSON (Object v) =
         v .: "elementtype" >>= \(typ :: Text) ->
         case typ of
-          "detection"   -> MEDetection <$> v .: "detection"
+          "detection"   -> MEDetection <$> v .: "detectionnames"
           "irradiation" -> MEIrradiation <$> v .: "duration" <*> v .: "irradiation"
           "wait"        -> MEWait <$> v .: "duration"
           "executerobotprogram" -> MEExecuteRobotProgram <$> v .: "robotname" <*> v .: "programname" <*> v .: "waitforcompletion"
@@ -89,7 +92,7 @@ instance FromJSON MeasurementElement where
           _             -> fail "can't decode measurement element type"
     parseJSON _ = fail "can't decode measurement element"
 instance ToJSON MeasurementElement where
-  toEncoding (MEDetection dets) = pairs ("elementtype" .= ("detection" :: Text) <> "detection" .= dets)
+  toEncoding (MEDetection dets) = pairs ("elementtype" .= ("detection" :: Text) <> "detectionnames" .= dets)
   toEncoding (MEIrradiation dur ip) = pairs ("elementtype" .= ("irradiation" :: Text) <> "duration" .= dur <> "irradiation" .= ip)
   toEncoding (MEWait d) = pairs ("elementtype" .= ("wait" :: Text) <> "duration" .= d)
   toEncoding (MEExecuteRobotProgram n p w) = pairs ("elementtype" .= ("executerobotprogram" :: Text) <> "robotname" .= n <> "programname" .= p <> "waitforcompletion" .= w)
