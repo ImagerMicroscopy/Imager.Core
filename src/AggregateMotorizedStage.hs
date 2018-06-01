@@ -7,6 +7,7 @@ import Control.Monad
 import Data.List
 
 import Equipment
+import EquipmentTypes
 import MiscUtils
 
 {-

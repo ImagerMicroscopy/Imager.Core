@@ -27,6 +27,7 @@ import System.Clock
 import System.Environment
 import System.FilePath
 
+import AcquiredDataTypes
 import CuvettorTypes
 import Detector
 import AvailableDetector
@@ -187,7 +188,7 @@ performAction env FetchAsyncData =
             | otherwise                = if (null newData) then StatusNoNewAsyncDataComing else (AsyncAcquiredData newData)
 
 performAction env (AcknowledgeDataReceipt upToIdx) =
-    modifyMVar_ dataMVar (\ds -> pure (filter (\d -> fst d > upToIdx) ds)) >>
+    modifyMVar_ dataMVar (\ds -> pure (filter (\d -> (amdSequence . fst) d > upToIdx) ds)) >>
     return (StatusOK, env)
     where
         dataMVar = envAsyncDataMVar env
@@ -216,7 +217,7 @@ performAction env IsAsyncAcquisitionRunning =
     asyncAcquisitionRunning env >>= \asyncIsRunning ->
     return (AsyncAcquisitionIsRunning asyncIsRunning, env)
 
-startAsyncAcquisition :: Detector a => Environment a -> MeasurementElement -> IO (Async (), MVar [(Word64, AcquiredData)], MVar [Text])
+startAsyncAcquisition :: Detector a => Environment a -> MeasurementElement -> IO (Async (), MVar [(AcquisitionMetaData, AcquiredData)], MVar [Text])
 startAsyncAcquisition env me =
     ensureAsyncAcquisitionNotRunning env >>
     validateMeasurementElementThrows (envEquipment env) me >>

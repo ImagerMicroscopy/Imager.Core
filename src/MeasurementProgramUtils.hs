@@ -7,6 +7,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 
 import Equipment
+import EquipmentTypes
 
 lookupMaybeLightSource :: [EquipmentW] -> (EqName, LSName) -> Maybe EquipmentW
 lookupMaybeLightSource eqs (eqName, lsName) =

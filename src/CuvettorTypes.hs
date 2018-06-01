@@ -23,6 +23,7 @@ import Foreign
 import System.Clock
 import System.IO.Unsafe
 
+import AcquiredDataTypes
 import MiscUtils
 import Detector
 import Equipment
@@ -35,7 +36,7 @@ data Environment a = Environment {
                       envEquipment :: ![EquipmentW]
                     , envDetector :: !a
                     , envEncodedSpectrometerWavelengths :: !SB.ByteString
-                    , envAsyncDataMVar :: !(MVar [(Word64, AcquiredData)])
+                    , envAsyncDataMVar :: !(MVar [(AcquisitionMetaData, AcquiredData)])
                     , envAsyncStatusMessagesMVar :: !(MVar [Text])
                     , envAsyncProgramWorker :: !(Async ())
 }
@@ -132,7 +133,7 @@ data ResponseMessage = StatusOK
                      | StatusError !String
                      | StatusNoNewAsyncData
                      | StatusNoNewAsyncDataComing
-                     | AcquiredDataResponse !(Word64, AcquiredData)
+                     | AcquiredDataResponse !(AcquisitionMetaData, AcquiredData)
                      | Wavelengths !AcquiredData
                      | AvailableEquipment ![EquipmentW]
                      | MotorizedStagePosition !StagePosition
@@ -141,7 +142,7 @@ data ResponseMessage = StatusOK
                      | DetectorParametersResponse !DetectorParameters
                      | DetectorTemperatureResponse !Double
                      | Pong
-                     | AsyncAcquiredData ![(Word64, AcquiredData)]
+                     | AsyncAcquiredData ![(AcquisitionMetaData, AcquiredData)]
                      | AsyncStatusMessages ![Text]
                      | AsyncAcquisitionIsRunning !Bool
                      deriving (Generic)
@@ -169,12 +170,6 @@ instance ToJSON ResponseMessage where
     toEncoding (AsyncStatusMessages ms) =
         pairs ("responsetype" .= ("asyncstatusmessages" :: Text) <> "messages" .= ms)
     toEncoding (AsyncAcquisitionIsRunning b) = pairs ("responsetype" .= ("asyncacquisitionstatus" :: Text) <> "running" .= b)
-
-instance ToJSON AcquiredData where
-  toJSON (AcquiredData nRows nCols timeStamp bytes numType) =
-      object ["nrows" .= nRows, "ncols" .= nCols, "data" .= bytes, "timestamp" .= (timeSpecAsDouble timeStamp), "numtype" .= (show numType)]
-  toEncoding (AcquiredData nRows nCols timeStamp bytes numType) =
-      pairs ("nrows" .= nRows <> "ncols" .= nCols <> "timestamp" .= (timeSpecAsDouble timeStamp) <> "data" .= bytes <> "numtype" .= (show numType))
 
 instance ToJSON DetectorParameters where
     toJSON (DetectorParameters dataSize allowedCrop allowedBinning currentBin limits tempSetPoint) =

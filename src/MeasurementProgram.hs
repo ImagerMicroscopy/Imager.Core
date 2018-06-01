@@ -30,6 +30,7 @@ import System.Mem
 import System.Clock
 import qualified System.Timeout as ST
 
+import AcquiredDataTypes
 import Detector
 import Equipment
 import EquipmentTypes
@@ -58,10 +59,11 @@ executeMeasurementElements env es = mapM_ (executeMeasurementElement env) es
 
 executeMeasurementElement :: Detector a => ProgramEnvironment a -> MeasurementElement -> IO ()
 executeMeasurementElement env (MEDetection detParams) =
+    getStagePositionSafe eqs >>= \stagePos ->
     forM_ detParams (\p -> executeDetection detector eqs p >>= \r ->
                            readIORef counter >>= \idx ->
                            writeIORef counter (idx + 1) >>
-                           r `deepseq` addDataToMVar mvar startTime idx r)
+                           r `deepseq` addDataToMVar mvar startTime idx stagePos r)
     where
       eqs = peEquipment env
       detector = peDetector env
@@ -171,8 +173,9 @@ executeDetection det eqs DetectionParams{..} =
     disableLightSources eqs dpIrradiation >>
     return acquiredData
 
-executeFastDetectionLoop :: Detector a => a -> [EquipmentW] -> DetectionParams -> Int -> TimeSpec -> IORef Word64 -> MVar [(Word64, AcquiredData)] -> IO ()
+executeFastDetectionLoop :: Detector a => a -> [EquipmentW] -> DetectionParams -> Int -> TimeSpec -> IORef Word64 -> MVar [(AcquisitionMetaData, AcquiredData)] -> IO ()
 executeFastDetectionLoop detector eqs detParams nTimesToPerform startTime dataCounter dataMVar =
+    getStagePositionSafe eqs >>= \stagePos ->
     setBinningFactor detector (dpBinningFactor detParams) >>
     setCropSize detector (dpCropSize detParams) >>
     switchToFilters eqs (dpFilterParams detParams) >>
@@ -180,19 +183,19 @@ executeFastDetectionLoop detector eqs detParams nTimesToPerform startTime dataCo
     newChan >>= \chan ->
     withAsync (acquireStreamingData detector (dpExposureTime detParams) (dpGain detParams)
                     (dpNSpectraToAverage detParams) nTimesToPerform chan) (\as ->
-        fetchData 0 as chan) >>
+        fetchData stagePos 0 as chan) >>
     disableLightSources eqs (dpIrradiation detParams)
     where
-        fetchData :: Int -> Async () -> Chan AsyncData -> IO ()
-        fetchData nFetched as chan = readChan chan >>= \val ->
-                                     case val of
-                                         AsyncFinished -> performMajorGC >> wait as
-                                         AsyncError    -> performMajorGC >> wait as
-                                         AsyncData r   -> when (nFetched `mod` 50 == 49) (performMajorGC) >>
-                                                          readIORef dataCounter >>= \idx ->
-                                                          writeIORef dataCounter (idx + 1) >>
-                                                          r `deepseq` addDataToMVar dataMVar startTime idx r >>
-                                                          fetchData (nFetched + 1) as chan
+        fetchData :: StagePosition -> Int -> Async () -> Chan AsyncData -> IO ()
+        fetchData pos nFetched as chan = readChan chan >>= \val ->
+                                         case val of
+                                             AsyncFinished -> performMajorGC >> wait as
+                                             AsyncError    -> performMajorGC >> wait as
+                                             AsyncData r   -> when (nFetched `mod` 50 == 49) (performMajorGC) >>
+                                                              readIORef dataCounter >>= \idx ->
+                                                              writeIORef dataCounter (idx + 1) >>
+                                                              r `deepseq` addDataToMVar dataMVar startTime idx pos r >>
+                                                              fetchData pos (nFetched + 1) as chan
 
 executeIrradiation :: [EquipmentW] -> [IrradiationParams] -> Double -> IO ()
 executeIrradiation eqs ips dur =
@@ -271,13 +274,21 @@ updateStatusMessage env newMsg =
     where
         statusMVar = peStatusMVar env
 
-addDataToMVar :: MVar [(Word64, AcquiredData)] -> TimeSpec -> Word64 -> AcquiredData -> IO ()
-addDataToMVar dataMVar startTime idx d = modifyMVar_ dataMVar (\previousData ->
-                                         when (length previousData > 250) (throwIO (userError "too many async data stored")) >>
-                                         if (null previousData)
-                                         then pure [(idx, adjustTime d)]
-                                         else pure ((idx, adjustTime d) : previousData))
+addDataToMVar :: MVar [(AcquisitionMetaData, AcquiredData)] -> TimeSpec -> Word64 -> StagePosition -> AcquiredData -> IO ()
+addDataToMVar dataMVar startTime idx stagePosition d =
+    modifyMVar_ dataMVar (\previousData ->
+        when (length previousData > 250) (throwIO (userError "too many async data stored")) >>
+        if (null previousData)
+        then pure [(metaData, adjustTime d)]
+        else pure ((metaData, adjustTime d) : previousData))
     where
+       metaData = AcquisitionMetaData idx stagePosition
        adjustTime :: AcquiredData -> AcquiredData
        adjustTime acqDat = let t = acqTimeStamp acqDat
                            in acqDat {acqTimeStamp = diffTimeSpec t startTime}
+
+getStagePositionSafe :: [EquipmentW] -> IO StagePosition
+getStagePositionSafe eqs =
+    case (filter hasMotorizedStage eqs) of
+        []    -> pure (StagePosition (-1.0) (-1.0) (-1.0) False 0)
+        x : _ -> getStagePosition x

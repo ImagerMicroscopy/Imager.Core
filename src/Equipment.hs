@@ -1,71 +1,11 @@
-{-# LANGUAGE ExistentialQuantification, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE ExistentialQuantification #-}
 module Equipment where
 
-import Data.Aeson
 import Data.Text (Text)
 
+import EquipmentTypes
+
 data EquipmentW = forall e. (Equipment e) => EquipmentW e
-
-newtype EqName = EqName {
-                     fromEqName :: Text
-                 } deriving (Show, Eq, Ord, Monoid, ToJSON, FromJSON)
-newtype LSName = LSName {
-                     fromLSName :: Text
-                 } deriving (Show, Eq, Ord, Monoid, ToJSON, FromJSON)
-newtype LSChannelName = LSChannelName {
-                            fromLSChannelName :: Text
-                        } deriving (Show, Eq, Ord, Monoid, ToJSON, FromJSON)
-newtype LSIlluminationPower = LSIlluminationPower {
-                                  fromLSIlluminationPower :: Double
-                              } deriving (Show, Eq, Ord, ToJSON, FromJSON)
-newtype FWName = FWName {
-                     fromFWName :: Text
-                 } deriving (Show, Eq, Ord, ToJSON, FromJSON)
-newtype FName = FName {
-                   fromFName :: Text
-                } deriving (Show, Eq, Ord, ToJSON, FromJSON)
-newtype StageName = StageName {
-                        fromStageName :: Text
-                    } deriving (Show, Eq, Ord, ToJSON, FromJSON)
-newtype RobotName = RobotName {
-                        fromRobotName :: Text
-                    } deriving (Show, Eq, Ord, ToJSON, FromJSON)
-newtype RobotProgramName = RobotProgramName {
-                               fromRobotProgramName :: Text
-                           } deriving (Show, Eq, Ord, ToJSON, FromJSON)
-
-data StagePosition = StagePosition {
-                         spX :: !Double
-                       , spY :: !Double
-                       , spZ :: !Double
-                       , spUsingHardwareAutoFocus :: !Bool
-                       , spHardwareAFOffset :: !Int
-                     } deriving (Show)
-
-instance ToJSON StagePosition where
-    toJSON p = object ["x" .= spX p, "y" .= spY p, "z" .= spZ p,
-                       "usinghardwareautofocus" .= spUsingHardwareAutoFocus p,
-                       "hardwareautofocusoffset" .= spHardwareAFOffset p]
-
-instance FromJSON StagePosition where
-    parseJSON (Object v) = StagePosition <$> v .: "x" <*> v .: "y" <*> v .: "z"
-                                         <*> v .: "usinghardwareautofocus"
-                                         <*> v .: "hardwareautofocusoffset"
-    parseJSON _ = fail "expected a JSON object"
-
-data LightSourceDescription = LightSourceDescription {
-                                  lsdName :: !LSName
-                                , lsdCanControlPower :: !Bool
-                                , lsdAllowsMultipleChannels :: !Bool
-                                , lsdChannels :: ![LSChannelName]
-                              }
-data FilterWheelDescription = FilterWheelDescription {
-                                  fwdName :: !FWName
-                                , fwdFilters :: ![FName]
-                              }
-
-data StageAxis = XAxis | YAxis | ZAxis
-               deriving (Eq, Show)
 
 class Equipment e where
     equipmentName :: e -> EqName

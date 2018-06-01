@@ -10,6 +10,7 @@ import Data.Text (Text)
 import Data.Word
 import System.Clock
 
+import AcquiredDataTypes
 import Detector
 import Equipment
 import EquipmentTypes
@@ -30,7 +31,7 @@ data ProgramEnvironment a = ProgramEnvironment {
                               , peStartTime :: !TimeSpec
                               , peEquipment :: ![EquipmentW]
                               , peDataCounter :: !(IORef Word64)
-                              , peDataMVar :: !(MVar [(Word64, AcquiredData)])
+                              , peDataMVar :: !(MVar [(AcquisitionMetaData, AcquiredData)])
                               , peStatusMVar :: !(MVar [Text])
                             }
 

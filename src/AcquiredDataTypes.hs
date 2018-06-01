@@ -3,9 +3,15 @@ module AcquiredDataTypes
 where
 
 import Control.DeepSeq
+import Data.Aeson
 import Data.ByteString (ByteString)
+import Data.Monoid
+import Data.Word
 import GHC.Generics (Generic)
 import System.Clock
+
+import EquipmentTypes
+import MiscUtils
 
 data NumberType = UINT8
                 | UINT16
@@ -19,6 +25,20 @@ data AcquiredData = AcquiredData {
                       , acqData :: !ByteString
                       , acqNumType :: !NumberType
                   } deriving (Show, Generic, NFData)
+
+instance ToJSON AcquiredData where
+    toJSON (AcquiredData nRows nCols timeStamp bytes numType) =
+        object ["nrows" .= nRows, "ncols" .= nCols, "data" .= (show bytes), "timestamp" .= (timeSpecAsDouble timeStamp), "numtype" .= (show numType)]
+    toEncoding (AcquiredData nRows nCols timeStamp bytes numType) =
+        pairs ("nrows" .= nRows <> "ncols" .= nCols <> "timestamp" .= (timeSpecAsDouble timeStamp) <> "data" .= (show bytes) <> "numtype" .= (show numType))
+
+data AcquisitionMetaData = AcquisitionMetaData {
+                               amdSequence :: !Word64
+                             , amdStagePosition :: !StagePosition
+                           } deriving (Show, Generic, NFData)
+
+instance ToJSON AcquisitionMetaData
+instance FromJSON AcquisitionMetaData
 
 instance NFData NumberType where
   rnf t = t `seq` ()
