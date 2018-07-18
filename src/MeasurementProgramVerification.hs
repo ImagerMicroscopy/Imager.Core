@@ -51,9 +51,9 @@ validateMeasurementElement eqs _ (MEDoTimes n es)
     | (n < 0) || (n > (floor 10e6)) = ["invalid number of times to repeat: " ++ show n]
     | null es = ["do times loop but no actions"]
     | otherwise = []
-validateMeasurementElement eqs _ (MEFastAcquisitionLoop n det)
+validateMeasurementElement eqs _ (MEFastAcquisitionLoop n (detName, detParams))
     | (n < 0) || (n > (floor 10e6)) = ["invalid number of times to repeat: " ++ show n]
-    | otherwise = validateDetection eqs det
+    | otherwise = validateDetection eqs detParams
 validateMeasurementElement eqs _ (METimeLapse n dur es)
     | (n < 0) || (n > (floor 10e6)) = ["invalid number of times to repeat: " ++ show n]
     | (dur < 0.0) || (dur > 3600 * 2) = ["invalid time lapse duration: " ++ show dur]
@@ -115,8 +115,7 @@ foldMeasurementElement f me = foldMeasurementElement' f mempty me
 -- empty list as value means no error
 validateDetection :: [EquipmentW] -> DetectionParams -> [String]
 validateDetection eqs DetectionParams{..} =
-    if ((within dpExposureTime 1e-6 10) && (within dpNSpectraToAverage 1 1000)
-       && (null . concat . map (validateIrradiation eqs) $ dpIrradiation)
+    if ((null . concat . map (validateIrradiation eqs) $ dpIrradiation)
        && filtersAreValid)
     then []
     else ["invalid detection params"]

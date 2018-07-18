@@ -6,6 +6,7 @@ import Control.DeepSeq
 import Data.Aeson
 import Data.ByteString (ByteString)
 import Data.Monoid
+import Data.Text (Text)
 import Data.Word
 import GHC.Generics (Generic)
 import System.Clock
@@ -35,6 +36,7 @@ instance ToJSON AcquiredData where
 data AcquisitionMetaData = AcquisitionMetaData {
                                amdSequence :: !Word64
                              , amdStagePosition :: !StagePosition
+                             , amdAcquisitionTypename :: !Text
                            } deriving (Show, Generic, NFData)
 
 instance ToJSON AcquisitionMetaData

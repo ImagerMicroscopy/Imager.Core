@@ -31,6 +31,7 @@ import EquipmentEncoding
 import EquipmentTypes
 import MeasurementProgram
 import MeasurementProgramTypes
+import SCCameraTypes
 
 data Environment a = Environment {
                       envEquipment :: ![EquipmentW]
@@ -49,10 +50,8 @@ data RequestMessage = AcquireData !DetectionParams
                     | GetMotorizedStagePosition !StageName
                     | SetMotorizedStagePosition !StageName !StagePosition
                     | ListRobotPrograms !RobotName
-                    | GetDetectorLimits !(Int, Int) Int
-                    | GetDetectorParameters
-                    | SetDetectorTemperature !Double
-                    | GetDetectorTemperature
+                    | GetDetectorProperties
+                    | SetDetectorProperty !CameraProperty
                     | ActivateLightSource {
                         alsEquipmentName :: !EqName
                       , alsName :: !LSName
@@ -80,11 +79,8 @@ instance ToJSON RequestMessage where
     toEncoding (GetMotorizedStagePosition name) = pairs ("action" .= ("getmotorizedstageposition" :: Text) <> "name" .= name)
     toEncoding (SetMotorizedStagePosition name ds) = pairs ("action" .= ("setmotorizedstageposition" :: Text) <> "name" .= name <> "position" .= ds)
     toEncoding (ListRobotPrograms name) = pairs ("action" .= ("listrobotprograms" :: Text) <> "name" .= name)
-    toEncoding (GetDetectorLimits cropSize binFactor) = pairs ("action" .= ("getdetectorlimits" :: Text) <> "binfactor" .= binFactor <>
-                                                               "nrows" .= fst cropSize <> "ncols" .= snd cropSize)
-    toEncoding GetDetectorParameters = pairs ("action" .= ("getdetectorparameters" :: Text))
-    toEncoding (SetDetectorTemperature t) = pairs ("action" .= ("setdetectortemperature" :: Text) <> "temperature" .= t)
-    toEncoding GetDetectorTemperature = pairs ("action" .= ("getdetectortemperature" :: Text))
+    toEncoding GetDetectorProperties = pairs ("action" .= ("getdetectorproperties" :: Text))
+    toEncoding (SetDetectorProperty prop) = pairs ("action" .= ("setdetectorproperty" :: Text) <> "property" .= prop)
     toEncoding (ActivateLightSource eqName name channel power) =
         pairs ("action" .= ("activatelightsource" :: Text) <> "equipmentname" .= eqName <>
                "name" .= name <> "channel" .= channel <> "power" .= power)
@@ -108,11 +104,8 @@ instance FromJSON RequestMessage where
             "getmotorizedstageposition" -> GetMotorizedStagePosition <$> v .: "name"
             "setmotorizedstageposition" -> SetMotorizedStagePosition <$> v .: "name" <*> v .: "position"
             "listrobotprograms" -> ListRobotPrograms <$> v .: "name"
-            "getdetectorlimits" -> v .: "nrows" >>= \nRows -> v .: "ncols" >>= \nCols ->
-                                   GetDetectorLimits (nRows, nCols) <$> v .: "binfactor"
-            "getdetectorparameters" -> return GetDetectorParameters
-            "setdetectortemperature" -> SetDetectorTemperature <$> v .: "temperature"
-            "getdetectortemperature" -> return GetDetectorTemperature
+            "getdetectorproperties" -> return GetDetectorProperties
+            "setdetectorproperty" -> SetDetectorProperty <$> v .: "property"
             "activatelightsource" -> ActivateLightSource <$> v .: "equipmentname"
                                                          <*> v .: "name"
                                                          <*> v .: "channel"
@@ -139,9 +132,7 @@ data ResponseMessage = StatusOK
                      | AvailableEquipment ![EquipmentW]
                      | MotorizedStagePosition !StagePosition
                      | RobotProgramsResponse ![RobotProgramName]
-                     | DetectorLimitsResponse !DetectorLimits
-                     | DetectorParametersResponse !DetectorParameters
-                     | DetectorTemperatureResponse !Double
+                     | DetectorPropertiesResponse ![CameraProperty]
                      | Pong
                      | AsyncAcquiredData ![(AcquisitionMetaData, AcquiredData)]
                      | AsyncStatusMessages ![Text]
@@ -162,25 +153,10 @@ instance ToJSON ResponseMessage where
     toEncoding (AvailableEquipment es) = pairs ("responsetype" .= ("availableequipment" :: Text) <> "equipment" .= es)
     toEncoding (MotorizedStagePosition ds) = pairs ("responsetype" .= ("motorizedstageposition" :: Text) <> "position" .= ds)
     toEncoding (RobotProgramsResponse ps) = pairs ("responsetype" .= ("robotprograms" :: Text) <> "programs" .= ps)
-    toEncoding (DetectorLimitsResponse dl) = pairs ("responsetype" .= ("detectorlimits" :: Text) <> "detectorlimits" .= dl)
-    toEncoding (DetectorParametersResponse d) = pairs ("responsetype" .= ("detectorparameters" :: Text) <> "parameters" .= d)
-    toEncoding (DetectorTemperatureResponse t) = pairs ("responsetype" .= ("detectortemperature" :: Text) <> "detectortemperature" .= t)
+    toEncoding (DetectorPropertiesResponse d) = pairs ("responsetype" .= ("detectorproperties" :: Text) <> "properties" .= d)
     toEncoding (Pong) = pairs ("responsetype" .= ("pong" :: Text))
     toEncoding (AsyncAcquiredData ds) =
         pairs ("responsetype" .= ("asyncdata" :: Text) <> "data" .= ds)
     toEncoding (AsyncStatusMessages ms) =
         pairs ("responsetype" .= ("asyncstatusmessages" :: Text) <> "messages" .= ms)
     toEncoding (AsyncAcquisitionIsRunning b) = pairs ("responsetype" .= ("asyncacquisitionstatus" :: Text) <> "running" .= b)
-
-instance ToJSON DetectorParameters where
-    toJSON (DetectorParameters dataSize allowedCrop allowedBinning currentBin limits tempSetPoint) =
-        object [("datadimensions", object ["nrows" .= fst dataSize, "ncols" .= snd dataSize]),
-                ("allowedcropsizes", toJSON (map (\(r,c) -> object ["nrows" .= r, "ncols" .= c]) allowedCrop)),
-                "allowedbinfactors" .= allowedBinning, "currentbinfactor" .= currentBin,
-                "limits" .= limits, "temperaturesetpoint" .= tempSetPoint]
-
-instance ToJSON DetectorLimits where
-    toJSON (DetectorLimits minExpTime maxExpTime minGain maxGain minAveraging maxAveraging) =
-        object ["minexposuretime" .= minExpTime, "maxexposuretime" .= maxExpTime,
-                "mingain" .= minGain, "maxgain" .= maxGain,
-                "minaveraging" .= minAveraging, "maxaveraging" .= maxAveraging]

@@ -15,13 +15,14 @@ import AcquiredDataTypes
 import Detector
 import Equipment
 import EquipmentTypes
+import SCCameraTypes
 
 data MeasurementElement = MEDetection ![Text]
                         | MEIrradiation !Double ![IrradiationParams]
                         | MEWait !Double
                         | MEExecuteRobotProgram !RobotName !RobotProgramName !Bool
                         | MEDoTimes !Int ![MeasurementElement]
-                        | MEFastAcquisitionLoop !Int !DetectionParams
+                        | MEFastAcquisitionLoop !Int !(Text, DetectionParams)
                         | METimeLapse !Int !Double ![MeasurementElement]
                         | MEStageLoop !StageName ![PositionNameAndCoords] ![MeasurementElement]
                         | MERelativeStageLoop !StageName !RelativeStageLoopParams ![MeasurementElement]
@@ -39,15 +40,11 @@ data ProgramEnvironment a = ProgramEnvironment {
                             }
 
 data DetectionParams = DetectionParams {
-                           dpExposureTime :: !Double
-                         , dpGain :: !Double
-                         , dpNSpectraToAverage :: !Int
-                         , dpBinningFactor :: !Int
-                         , dpCropSize :: !(Int, Int)
+                           dpCameraOptions :: ![CameraProperty]
                          , dpIrradiation :: ![IrradiationParams]
                          , dpFilterParams :: ![FilterParams]
                        }
-                       deriving (Show, Eq)
+                       deriving (Show)
 
 data IrradiationParams = IrradiationParams {
                             ipEquipmentName :: !EqName
@@ -105,20 +102,13 @@ instance ToJSON MeasurementElement where
 
 instance FromJSON DetectionParams where
     parseJSON (Object v) =
-        v .: "cropsize" >>= \(Object c) -> (,) <$> c .: "nrows" <*> c .: "ncols" >>= \cropping ->
-        DetectionParams <$> v .: "exposuretime"
-                        <*> v .: "gain"
-                        <*> v .: "nspectra"
-                        <*> v .: "binfactor"
-                        <*> pure cropping
+        DetectionParams <$> v .: "cameraoptions"
                         <*> v .: "irradiation"
                         <*> v .: "filters"
     parseJSON _ = fail "can't decode detection params"
 instance ToJSON DetectionParams where
-    toJSON (DetectionParams expTime gain nSpectra binFactor (nRows, nCols) irr filters) =
-        object ["exposuretime" .= expTime, "gain" .= gain, "nspectra" .= nSpectra,
-               "binfactor" .= binFactor, "cropsize" .= object ["nrows" .= nRows, "ncols" .= nCols],
-               "irradiation" .= irr, "filters" .= filters]
+    toJSON (DetectionParams cameraOptions irr filters) =
+        object ["cameraoptions" .= cameraOptions, "irradiation" .= irr, "filters" .= filters]
 
 instance FromJSON IrradiationParams where
     parseJSON (Object v) =

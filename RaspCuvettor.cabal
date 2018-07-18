@@ -12,19 +12,6 @@ category:            Web
 build-type:          Simple
 cabal-version:       >=1.10
 
-Flag withoceanoptics {
-    Description:     Enable Ocean Optics support
-    Default:         False
-}
-Flag withsccamera {
-    Description:     Enable SCCamera support
-    Default:         False
-}
-Flag withdummydetector {
-    Description:     Enable dummy detector
-    Default:         False
-}
-
 executable RaspCuvettor
   hs-source-dirs:      src
   main-is:             Main.hs
@@ -80,22 +67,15 @@ executable RaspCuvettor
                      , Prior
                      , Robottor
                      , Sutter
+                     , SCCamera
+                     , SCCameraTypes
+                     , SCCamDetector
                      , Thorlabs
-  default-extensions:  CPP, BangPatterns, OverloadedStrings
+  default-extensions:  CPP, BangPatterns, OverloadedStrings, ScopedTypeVariables
   extra-lib-dirs:      C:\hslibs
   extra-libraries:     MicroscopeControl
+                     , SCCamera
   ghc-options:         -O2 -threaded -rtsopts -funbox-strict-fields
-
-  if (flag(withoceanoptics))
-      build-depends:   hsOceanOptics
-      cpp-options:     -DWITH_OCEANOPTICS
-      other-modules:   OODetector
-  if (flag(withsccamera))
-      build-depends:   hsSCCamera
-      cpp-options:     -DWITH_SCCAMERA
-      other-modules:   SCCamDetector
-  if (flag(withdummydetector))
-      cpp-options:     -DWITH_DUMMYDETECTOR
-      other-modules:   DummyDetector
+ 
   if (os(windows))
       cpp-options:     -DWINDOWS

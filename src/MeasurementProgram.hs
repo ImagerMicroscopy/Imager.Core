@@ -62,10 +62,11 @@ executeMeasurementElements env ddets es = mapM_ (executeMeasurementElement env d
 executeMeasurementElement :: Detector a => ProgramEnvironment a -> DefinedDetections -> MeasurementElement -> IO ()
 executeMeasurementElement env ddets (MEDetection detNames) =
     getStagePositionSafe eqs >>= \stagePos ->
-    forM_ detParams (\p -> executeDetection detector eqs p >>= \r ->
-                           readIORef counter >>= \idx ->
-                           writeIORef counter (idx + 1) >>
-                           r `deepseq` addDataToMVar mvar startTime idx stagePos r)
+    forM_ (zip detNames detParams) (\(dName, p) ->
+        executeDetection detector eqs p >>= \r ->
+        readIORef counter >>= \idx ->
+        writeIORef counter (idx + 1) >>
+        r `deepseq` addDataToMVar mvar startTime idx stagePos dName r)
     where
       eqs = peEquipment env
       detector = peDetector env
@@ -92,9 +93,9 @@ executeMeasurementElement env ddets (MEDoTimes n es) =
             updateStatusMessage env (T.format "do times {} of {}" (index, n)) >>
             executeMeasurementElements env ddets ses
         ))
-executeMeasurementElement env ddets (MEFastAcquisitionLoop n detParams) =
+executeMeasurementElement env ddets (MEFastAcquisitionLoop n (detName, detParams)) =
     withStatusMessage env (T.format "fast acquisition ({} images)" (T.Only n)) (
-        executeFastDetectionLoop detector eqs detParams n startTime counter mvar)
+        executeFastDetectionLoop detector eqs (detName, detParams) n startTime counter mvar)
     where
       eqs = peEquipment env
       mvar = peDataMVar env
@@ -160,7 +161,7 @@ executeMeasurementElement env ddets (MERelativeStageLoop sn (RelativeStageLoopPa
         allPositions (StagePosition x y z _ _) = [StagePosition (x + x') (y + y') (z + z') False 0 | x' <- planesx, y' <- planesy, z' <- planesz]
 
 insertFastAcquisitionLoops :: DefinedDetections -> MeasurementElement -> MeasurementElement
-insertFastAcquisitionLoops ddets (MEDoTimes n [MEDetection [dName]]) = MEFastAcquisitionLoop n (fromJust $ M.lookup dName ddets)
+insertFastAcquisitionLoops ddets (MEDoTimes n [MEDetection [dName]]) = MEFastAcquisitionLoop n (dName, fromJust $ M.lookup dName ddets)
 insertFastAcquisitionLoops ddets (MEDoTimes n es) = MEDoTimes n (map (insertFastAcquisitionLoops ddets) es)
 insertFastAcquisitionLoops ddets (METimeLapse n dur es) = METimeLapse n dur (map (insertFastAcquisitionLoops ddets) es)
 insertFastAcquisitionLoops ddets (MEStageLoop n pos es) = MEStageLoop n pos (map (insertFastAcquisitionLoops ddets) es)
@@ -169,24 +170,21 @@ insertFastAcquisitionLoops d m = m
 
 executeDetection :: Detector a => a -> [EquipmentW] -> DetectionParams -> IO AcquiredData
 executeDetection det eqs DetectionParams{..} =
-    setBinningFactor det dpBinningFactor >>
-    setCropSize det dpCropSize >>
+    mapM_ (setDetectorOption det) dpCameraOptions >>
     switchToFilters eqs dpFilterParams >>
     enableLightSourcesGated eqs dpIrradiation >>
-    acquireData det dpExposureTime dpGain dpNSpectraToAverage >>= \acquiredData ->
+    acquireData det >>= \acquiredData ->
     disableLightSources eqs dpIrradiation >>
     return acquiredData
 
-executeFastDetectionLoop :: Detector a => a -> [EquipmentW] -> DetectionParams -> Int -> TimeSpec -> IORef Word64 -> MVar [(AcquisitionMetaData, AcquiredData)] -> IO ()
-executeFastDetectionLoop detector eqs detParams nTimesToPerform startTime dataCounter dataMVar =
+executeFastDetectionLoop :: Detector a => a -> [EquipmentW] -> (Text, DetectionParams) -> Int -> TimeSpec -> IORef Word64 -> MVar [(AcquisitionMetaData, AcquiredData)] -> IO ()
+executeFastDetectionLoop detector eqs (detName, detParams) nTimesToPerform startTime dataCounter dataMVar =
     getStagePositionSafe eqs >>= \stagePos ->
-    setBinningFactor detector (dpBinningFactor detParams) >>
-    setCropSize detector (dpCropSize detParams) >>
+    mapM_ (setDetectorOption detector) (dpCameraOptions detParams) >>
     switchToFilters eqs (dpFilterParams detParams) >>
     enableLightSources eqs (dpIrradiation detParams) >>
     newChan >>= \chan ->
-    withAsync (acquireStreamingData detector (dpExposureTime detParams) (dpGain detParams)
-                    (dpNSpectraToAverage detParams) nTimesToPerform chan) (\as ->
+    withAsync (acquireStreamingData detector nTimesToPerform chan) (\as ->
         fetchData stagePos 0 as chan) >>
     disableLightSources eqs (dpIrradiation detParams)
     where
@@ -198,7 +196,7 @@ executeFastDetectionLoop detector eqs detParams nTimesToPerform startTime dataCo
                                              AsyncData r   -> when (nFetched `mod` 50 == 49) (performMajorGC) >>
                                                               readIORef dataCounter >>= \idx ->
                                                               writeIORef dataCounter (idx + 1) >>
-                                                              r `deepseq` addDataToMVar dataMVar startTime idx pos r >>
+                                                              r `deepseq` addDataToMVar dataMVar startTime idx pos detName r >>
                                                               fetchData pos (nFetched + 1) as chan
 
 executeIrradiation :: [EquipmentW] -> [IrradiationParams] -> Double -> IO ()
@@ -242,7 +240,7 @@ eqNamesUsedAsLightSourceIn ddets me = S.toList (eqNamesUsedAsLightSourceIn' S.em
             in  s <> (S.fromList . concat $ map (map ipEquipmentName . dpIrradiation) dps)
         eqNamesUsedAsLightSourceIn' s (MEIrradiation _ ips) = s <> ((S.fromList . map ipEquipmentName) ips)
         eqNamesUsedAsLightSourceIn' s (MEDoTimes _ mes) = s <> mconcat (map (eqNamesUsedAsLightSourceIn' S.empty) mes)
-        eqNamesUsedAsLightSourceIn' s (MEFastAcquisitionLoop _ dp) = s <> S.fromList (map ipEquipmentName . dpIrradiation $ dp)
+        eqNamesUsedAsLightSourceIn' s (MEFastAcquisitionLoop _ (_, dp)) = s <> S.fromList (map ipEquipmentName . dpIrradiation $ dp)
         eqNamesUsedAsLightSourceIn' s (METimeLapse _ _ mes) = s <> mconcat (map (eqNamesUsedAsLightSourceIn' S.empty) mes)
         eqNamesUsedAsLightSourceIn' s (MEStageLoop _ _ mes) = s <> mconcat (map (eqNamesUsedAsLightSourceIn' S.empty) mes)
         eqNamesUsedAsLightSourceIn' s (MERelativeStageLoop _ _ mes) = s <> mconcat (map (eqNamesUsedAsLightSourceIn' S.empty) mes)
@@ -281,15 +279,15 @@ updateStatusMessage env newMsg =
     where
         statusMVar = peStatusMVar env
 
-addDataToMVar :: MVar [(AcquisitionMetaData, AcquiredData)] -> TimeSpec -> Word64 -> StagePosition -> AcquiredData -> IO ()
-addDataToMVar dataMVar startTime idx stagePosition d =
+addDataToMVar :: MVar [(AcquisitionMetaData, AcquiredData)] -> TimeSpec -> Word64 -> StagePosition -> Text -> AcquiredData -> IO ()
+addDataToMVar dataMVar startTime idx stagePosition acqType d =
     modifyMVar_ dataMVar (\previousData ->
         when (length previousData > 250) (throwIO (userError "too many async data stored")) >>
         if (null previousData)
         then pure [(metaData, adjustTime d)]
         else pure ((metaData, adjustTime d) : previousData))
     where
-       metaData = AcquisitionMetaData idx stagePosition
+       metaData = AcquisitionMetaData idx stagePosition acqType
        adjustTime :: AcquiredData -> AcquiredData
        adjustTime acqDat = let t = acqTimeStamp acqDat
                            in acqDat {acqTimeStamp = diffTimeSpec t startTime}

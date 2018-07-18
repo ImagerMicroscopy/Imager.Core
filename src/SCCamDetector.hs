@@ -22,6 +22,7 @@ import qualified Data.Vector.Storable.Mutable as MV
 
 import Detector
 import qualified SCCamera as SC
+import qualified SCCameraTypes as SC
 import MiscUtils
 
 data SCCamDetector = SCCamDetector {
@@ -29,26 +30,21 @@ data SCCamDetector = SCCamDetector {
                      }
 
 instance Detector SCCamDetector where
-    acquireData :: SCCamDetector -> ExposureTime -> Gain -> NMeasurementsToAverage -> IO AcquiredData
-    acquireData (SCCamDetector camName) expTime emGain nAvg =
-        SC.setExposureTime camName expTime >>
-        SC.setEMGain camName emGain >>
-        SC.acquireImages camName 1 nAvg >>= \(SC.MeasuredImages nRows nCols _ vec) ->
+    acquireData :: SCCamDetector -> IO AcquiredData
+    acquireData (SCCamDetector camName)=
+        SC.acquireImages camName 1 >>= \(SC.MeasuredImages nRows nCols _ vec) ->
         getTime Monotonic >>= \timeStamp ->
         let bytes = byteStringFromVector vec
             numType = UINT16
         in return (AcquiredData nRows nCols timeStamp bytes numType)
 
-    acquireStreamingData :: SCCamDetector -> ExposureTime -> Gain -> NMeasurementsToAverage ->
-                            NMeasurementsToPerform -> Chan AsyncData -> IO ()
-    acquireStreamingData (SCCamDetector camName) expTime gain nAvg nMeasurements chan =
-        SC.setExposureTime camName expTime >>
-        SC.setEMGain camName gain >>
+    acquireStreamingData :: SCCamDetector -> NMeasurementsToPerform -> Chan AsyncData -> IO ()
+    acquireStreamingData (SCCamDetector camName) nMeasurements chan =
         (performAcq >> SC.abortAsyncAcquisition camName) `onException` (SC.abortAsyncAcquisition camName >>
                                                                                     writeChan chan AsyncError)
         where
             performAcq = getTime Monotonic >>= \acqStart ->
-                         SC.startAsyncAcquisition camName nAvg >>
+                         SC.startAsyncAcquisition camName >>
                          fetchImages nMeasurements acqStart chan >>
                          writeChan chan AsyncFinished
             fetchImages :: Int -> TimeSpec -> Chan AsyncData -> IO ()
@@ -61,6 +57,11 @@ instance Detector SCCamDetector where
                     in  acqData `deepseq` writeChan chan (AsyncData acqData) >>
                         fetchImages (nImagesRemaining - 1) acqStart chan
 
+    getDetectorOptions :: SCCamDetector -> IO [CameraProperty]
+    getDetectorOptions (SCCamDetector camName) = SC.getCameraOptions camName
+    setDetectorOption :: SCCamDetector -> CameraProperty -> IO ()
+    setDetectorOption (SCCamDetector camName) opt = SC.setCameraOption camName opt
+
     setImageOrientation :: SCCamDetector -> [ImageOrientationOperation] -> IO ()
     setImageOrientation (SCCamDetector camName) ops =
         SC.setCameraOrientation camName (map toSC ops)
@@ -70,24 +71,3 @@ instance Detector SCCamDetector where
             toSC IPORotateCCW = SC.RotateCCWOp
             toSC IPOFlipHorizontal = SC.FlipHorizontalOp
             toSC IPOFlipVertical = SC.FlipVerticalOp
-
-    getDataDimensions :: SCCamDetector -> IO (Int, Int)
-    getDataDimensions (SCCamDetector camName) = SC.getImageDimensions camName
-    getAllowedCropSizes (SCCamDetector camName) = SC.getAllowedCropSizes camName
-    setCropSize (SCCamDetector camName) size = SC.setCropSize camName size
-    getAllowedBinningFactors (SCCamDetector camName) = SC.getAllowedBinningFactors camName
-    setBinningFactor (SCCamDetector camName) factor = SC.setBinningFactor camName factor
-    getBinningFactor (SCCamDetector camName) = SC.getBinningFactor camName
-
-    setDetectorTemperature :: SCCamDetector -> Temperature -> IO ()
-    setDetectorTemperature (SCCamDetector camName) t = SC.setTemperature camName t
-    getDetectorTemperature :: SCCamDetector -> IO Temperature
-    getDetectorTemperature (SCCamDetector camName) = SC.readTemperature camName
-    getDetectorTemperatureSetpoint :: SCCamDetector -> IO Temperature
-    getDetectorTemperatureSetpoint (SCCamDetector camName) = SC.readTemperatureSetpoint camName
-
-    getGainRange :: SCCamDetector -> IO (Gain, Gain)
-    getGainRange (SCCamDetector camName) = SC.readEMGainRange camName
-
-    getExposureTimeRange :: SCCamDetector -> IO (ExposureTime, ExposureTime)
-    getExposureTimeRange (SCCamDetector camName) = SC.readExposureTimeRange camName
