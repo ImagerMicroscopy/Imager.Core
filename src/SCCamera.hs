@@ -167,48 +167,6 @@ foreign import ccall unsafe "SCCameraDLL.h SetImageOrientation"
 foreign import ccall unsafe "SCCameraDLL.h GetImageDimensions"
     cGetImageDimensions :: CString -> Ptr CInt -> Ptr CInt -> IO CInt
 
-foreign import ccall unsafe "SCCameraDLL.h GetAllowedCropSizes"
-    cGetAllowedCropSizes :: CString -> Ptr CInt -> Ptr CInt -> CInt -> Ptr CInt -> IO CInt
-
-foreign import ccall unsafe "SCCameraDLL.h SetCropSize"
-    cSetCropSize :: CString -> CInt -> CInt -> IO CInt
-
-foreign import ccall unsafe "SCCameraDLL.h GetAllowedBinningFactors"
-    cGetAllowedBinningFactors :: CString -> Ptr CInt -> CInt -> Ptr CInt -> IO CInt
-
-foreign import ccall unsafe "SCCameraDLL.h SetBinningFactor"
-    cSetBinningFactor :: CString -> CInt -> IO CInt
-
-foreign import ccall unsafe "SCCameraDLL.h GetBinningFactor"
-    cGetBinningFactor :: CString -> Ptr CInt -> IO CInt
-
-foreign import ccall unsafe "SCCameraDLL.h SetEMGain"
-    cSetEMGain :: CString -> CDouble -> IO CInt
-
-foreign import ccall unsafe "SCCameraDLL.h ReadEMGain"
-    cReadEMGain :: CString -> Ptr CDouble -> IO CInt
-
-foreign import ccall unsafe "SCCameraDLL.h ReadEMGainRange"
-    cReadEMGainRange :: CString -> Ptr CDouble -> Ptr CDouble -> IO CInt
-
-foreign import ccall unsafe "SCCameraDLL.h SetIntegrationTime"
-    cSetIntegrationTime :: CString -> CDouble -> IO CInt
-
-foreign import ccall unsafe "SCCameraDLL.h ReadIntegrationTime"
-    cReadIntegrationTime :: CString -> Ptr CDouble -> IO CInt
-
-foreign import ccall unsafe "SCCameraDLL.h ReadIntegrationTimeRange"
-    cReadIntegrationTimeRange :: CString -> Ptr CDouble -> Ptr CDouble -> IO CInt
-
-foreign import ccall unsafe "SCCameraDLL.h SetTemperatureSetpoint"
-    cSetTemperatureSetpoint :: CString -> CDouble -> IO CInt
-
-foreign import ccall unsafe "SCCameraDLL.h ReadCurrentTemperature"
-    cReadCurrentTemperature :: CString -> Ptr CDouble -> IO CInt
-
-foreign import ccall unsafe "SCCameraDLL.h ReadTemperatureSetpoint"
-    cReadTemperatureSetpoint :: CString -> Ptr CDouble -> IO CInt
-
 foreign import ccall "SCCameraDLL.h AcquireImages"
     cAcquireImages :: CString -> CInt -> Ptr Word16 -> Word64 -> IO CInt
 
