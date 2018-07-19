@@ -55,6 +55,7 @@ class Detector a where
 
     getDetectorOptions :: a -> IO [CameraProperty]
     setDetectorOption :: a -> CameraProperty -> IO ()
+    getDetectorFrameRate :: a -> IO Double
     getDetectorWavelengths :: a -> IO (Vector Double)
     getDetectorWavelengths _ = return V.empty
     setImageOrientation :: a -> [ImageOrientationOperation] -> IO ()

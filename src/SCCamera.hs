@@ -61,10 +61,18 @@ getCameraOptions camName =
 
 setCameraOption :: Text -> CameraProperty -> IO ()
 setCameraOption camName option =
+    withCString (T.unpack camName) $ \nameStr ->
+    B.useAsCString (LB.toStrict $ encode option) $ \optStr ->
+    cSetCameraOption nameStr optStr >>= \result ->
+    when (result /= 0) (throwIO $ userError ("cSetCameraOption returned error code " ++ show result))
+
+getFrameRate :: Text -> IO Double
+getFrameRate camName =
   withCString (T.unpack camName) $ \nameStr ->
-  B.useAsCString (LB.toStrict $ encode option) $ \optStr ->
-  cSetCameraOption nameStr optStr >>= \result ->
-  when (result /= 0) (throwIO $ userError ("cSetCameraOption returned error code " ++ show result))
+  alloca $ \frPtr ->
+  cGetFrameRate nameStr frPtr >>= \result ->
+  when (result /= 0) (throwIO $ userError ("cGetFrameRate returned error code " ++ show result)) >>
+  fromCDouble <$> peek frPtr
 
 setCameraOrientation :: Text -> [OrientationOp] -> IO ()
 setCameraOrientation camName ops =
@@ -80,30 +88,20 @@ setCameraOrientation camName ops =
         encodedOp FlipHorizontalOp = 2
         encodedOp FlipVerticalOp = 3
 
-getImageDimensions :: Text -> IO (Int, Int)
-getImageDimensions camName =
-    withCString (T.unpack camName) $ \nameStr ->
-    alloca $ \nRowsPtr -> alloca $ \nColsPtr ->
-    cGetImageDimensions nameStr nRowsPtr nColsPtr >>= \errorCode ->
-    case errorCode of
-        0 -> let nRows = fromIntegral <$> peek nRowsPtr
-                 nCols = fromIntegral <$> peek nColsPtr
-             in  (,) <$> nRows <*> nCols
-        e -> throwIO (userError ("getImageDimensions returned error code " ++ show e))
-
 acquireImages :: Text -> Int -> IO MeasuredImages
 acquireImages camName nImages =
     withCString (T.unpack camName) $ \nameStr ->
-    getImageDimensions camName >>= \(nRows, nCols) ->
-    let nPixels = nRows * nCols * nImages
-        nIms = fromIntegral nImages
-        nBytesBuffer = fromIntegral (nPixels * 2)
-    in  mallocForeignPtrArray nPixels >>= \bufferPtr ->
-        withForeignPtr bufferPtr $ \rawPtr ->
-        cAcquireImages nameStr nIms rawPtr nBytesBuffer >>= \result ->
-        case result of
-           0 -> return (MeasuredImages nRows nCols 0.0 (V.unsafeFromForeignPtr0 bufferPtr nPixels))
-           e -> throwIO (userError ("acquireImages returned error code " ++ show e))
+    alloca $ \nRowsPtr ->
+    alloca $ \nColsPtr ->
+    alloca $ \imagePtrPtr ->
+    poke imagePtrPtr nullPtr >>
+    let nIms = fromIntegral nImages
+    in  cAcquireImages nameStr nIms imagePtrPtr nRowsPtr nColsPtr >>= \result ->
+        when (result /= 0) (throwIO (userError ("AcquireImages returned error code " ++ show result))) >>
+        peek imagePtrPtr >>= newForeignPtr cReleaseImageData >>= \fPtr ->
+        fromIntegral <$> peek nRowsPtr >>= \nRows ->
+        fromIntegral <$> peek nColsPtr >>= \nCols ->
+        pure (MeasuredImages nRows nCols 0.0 (V.unsafeFromForeignPtr0 fPtr (nRows * nCols)))
 
 startAsyncAcquisition :: Text -> IO ()
 startAsyncAcquisition camName =
@@ -120,8 +118,9 @@ getNextAcquiredImage camName =
     alloca $ \nRowsPtr ->
     alloca $ \nColsPtr ->
     alloca $ \timeStampPtr ->
+    poke imagePtrPtr nullPtr >>
     cGetOldestImageAsyncAcquired nameStr imagePtrPtr nRowsPtr nColsPtr timeStampPtr >>= \result ->
-    when (result /= 0) (throwIO (userError ("getLastImageAsyncAcquired returned error code " ++ show result))) >>
+    when (result /= 0) (throwIO (userError ("GetLastImageAsyncAcquired returned error code " ++ show result))) >>
     peek imagePtrPtr >>= newForeignPtr cReleaseImageData >>= \fPtr ->
     fromIntegral <$> peek nRowsPtr >>= \nRows ->
     fromIntegral <$> peek nColsPtr >>= \nCols ->
@@ -158,17 +157,17 @@ foreign import ccall unsafe "SCCameraDLL.h GetCameraOptions"
 foreign import ccall unsafe "SCCameraDLL.h &ReleaseOptionsData"
     cReleaseOptionsData :: FunPtr (CString -> IO ())
 
-foreign import ccall unsafe "SCCameraDLL.h SetCameraOption"
+foreign import ccall "SCCameraDLL.h SetCameraOption"
     cSetCameraOption :: CString -> CString -> IO CInt
+
+foreign import ccall unsafe "SCCameraDLL.h GetFrameRate"
+    cGetFrameRate :: CString -> Ptr CDouble -> IO CInt
 
 foreign import ccall unsafe "SCCameraDLL.h SetImageOrientation"
     cSetImageOrientation :: CString -> Ptr CInt -> CInt -> IO CInt
 
-foreign import ccall unsafe "SCCameraDLL.h GetImageDimensions"
-    cGetImageDimensions :: CString -> Ptr CInt -> Ptr CInt -> IO CInt
-
 foreign import ccall "SCCameraDLL.h AcquireImages"
-    cAcquireImages :: CString -> CInt -> Ptr Word16 -> Word64 -> IO CInt
+    cAcquireImages :: CString -> CInt -> Ptr (Ptr Word16) -> Ptr CInt -> Ptr CInt -> IO CInt
 
 foreign import ccall "SCCameraDLL.h StartAsyncAcquisition"
     cStartAsyncAcquisition :: CString -> IO CInt

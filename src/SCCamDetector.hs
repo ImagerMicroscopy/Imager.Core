@@ -61,6 +61,8 @@ instance Detector SCCamDetector where
     getDetectorOptions (SCCamDetector camName) = SC.getCameraOptions camName
     setDetectorOption :: SCCamDetector -> CameraProperty -> IO ()
     setDetectorOption (SCCamDetector camName) opt = SC.setCameraOption camName opt
+    getDetectorFrameRate :: SCCamDetector -> IO Double
+    getDetectorFrameRate (SCCamDetector camName) = SC.getFrameRate camName
 
     setImageOrientation :: SCCamDetector -> [ImageOrientationOperation] -> IO ()
     setImageOrientation (SCCamDetector camName) ops =

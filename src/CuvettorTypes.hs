@@ -132,7 +132,7 @@ data ResponseMessage = StatusOK
                      | AvailableEquipment ![EquipmentW]
                      | MotorizedStagePosition !StagePosition
                      | RobotProgramsResponse ![RobotProgramName]
-                     | DetectorPropertiesResponse ![CameraProperty]
+                     | DetectorPropertiesResponse ![CameraProperty] Double
                      | Pong
                      | AsyncAcquiredData ![(AcquisitionMetaData, AcquiredData)]
                      | AsyncStatusMessages ![Text]
@@ -153,7 +153,8 @@ instance ToJSON ResponseMessage where
     toEncoding (AvailableEquipment es) = pairs ("responsetype" .= ("availableequipment" :: Text) <> "equipment" .= es)
     toEncoding (MotorizedStagePosition ds) = pairs ("responsetype" .= ("motorizedstageposition" :: Text) <> "position" .= ds)
     toEncoding (RobotProgramsResponse ps) = pairs ("responsetype" .= ("robotprograms" :: Text) <> "programs" .= ps)
-    toEncoding (DetectorPropertiesResponse d) = pairs ("responsetype" .= ("detectorproperties" :: Text) <> "properties" .= d)
+    toEncoding (DetectorPropertiesResponse d fr) = pairs ("responsetype" .= ("detectorproperties" :: Text) <> "properties" .= d <>
+                                                          "framerate" .= fr)
     toEncoding (Pong) = pairs ("responsetype" .= ("pong" :: Text))
     toEncoding (AsyncAcquiredData ds) =
         pairs ("responsetype" .= ("asyncdata" :: Text) <> "data" .= ds)

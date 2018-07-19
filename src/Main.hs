@@ -126,7 +126,8 @@ performAction env (ListRobotPrograms name) =
 performAction env GetDetectorProperties =
     ensureAsyncAcquisitionNotRunning env >>
     getDetectorOptions det >>= \params ->
-    return (DetectorPropertiesResponse params, env)
+    getDetectorFrameRate det >>= \fr ->
+    return (DetectorPropertiesResponse params fr, env)
     where
         det = envDetector env
 
