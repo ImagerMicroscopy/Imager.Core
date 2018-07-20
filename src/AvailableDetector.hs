@@ -4,7 +4,7 @@ module AvailableDetector where
 import Control.Exception
 import Control.Monad
 import Control.Monad.Trans.Except
-import Data.Either
+import Data.Either hiding(fromLeft)
 import qualified Data.Text as T
 import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
