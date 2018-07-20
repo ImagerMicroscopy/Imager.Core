@@ -20,6 +20,11 @@ data CameraProperty = NumericProperty {
                         , dpAvailableOptions :: ![Text]
                       } deriving (Show)
 
+instance Eq CameraProperty where
+    (NumericProperty id1 _ v1) == (NumericProperty id2 _ v2) = (id1 == id2) && (v1 == v2)
+    (DiscreteProperty id1 _ v1 _) == (DiscreteProperty id2 _ v2 _) = (id1 == id2) && (v1 == v2)
+    _ == _ = False
+
 data CameraPropertyList = CameraPropertyList {fromCPList :: ![CameraProperty]}
                           deriving (Show)
 

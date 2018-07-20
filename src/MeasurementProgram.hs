@@ -43,18 +43,27 @@ import MiscUtils
 executeMeasurement :: Detector a => ProgramEnvironment a -> MeasurementElement -> DefinedDetections -> IO ()
 executeMeasurement env me ddets =
     withAsync (forever $ resetSystemSleepTimer >> threadDelay (round 60.0e6)) (\_ ->
+        print commonDetectorProperties >> print ddetsWithoutCommon >>
         forM_ eqs (flushSerialPorts) >>
-        executeMeasurementElement env ddets (insertFastAcquisitionLoops ddets me)
+        mapM_ (setDetectorOption detector) commonDetectorProperties >>
+        executeMeasurementElement env ddetsWithoutCommon (insertFastAcquisitionLoops ddetsWithoutCommon me)
         `catch` (\e -> deactiveUsedLightSources >>
                        mapM_ abortRobotProgramExecution usedRobots >>
                        putStrLn (displayException e) >>
                        throwIO (e :: SomeException)))
     where
+        detector = peDetector env
         eqs = peEquipment env
         eqsUsedAsLightSource = eqNamesUsedAsLightSourceIn ddets me
         deactiveUsedLightSources = mapM_ deactivateLightSource (filter (\e -> equipmentName e `elem` eqsUsedAsLightSource) eqs)
         usedRobots = let usedRobotEqNames = robotNamesUsedIn me
                      in  filter (\e -> (robotName e) `elem` usedRobotEqNames) eqs
+        (commonDetectorProperties, ddetsWithoutCommon) =  -- extract all properties shared betweem acq's and set these once at the beginning.
+            let usedProperties = map dpCameraOptions (M.elems ddets)
+                uniqueProperties = nub (mconcat usedProperties)
+                commonProperties = filter (\prop -> all (prop `elem`) usedProperties) uniqueProperties
+                ddetsWithoutCommon = fmap (\dp -> dp {dpCameraOptions = filter (`notElem` commonProperties) (dpCameraOptions dp)}) ddets
+            in  (commonProperties, ddetsWithoutCommon)
 
 executeMeasurementElements :: Detector a => ProgramEnvironment a -> DefinedDetections -> [MeasurementElement] -> IO ()
 executeMeasurementElements env ddets es = mapM_ (executeMeasurementElement env ddets) es
