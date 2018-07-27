@@ -28,7 +28,7 @@ data OxxiusLaserType = LBX | LCX
 
 initializeOxxiusLC :: EquipmentDescription -> IO EquipmentW
 initializeOxxiusLC (OxxiusLCDesc name portName) =
-    let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS19200}) (TimeoutMillis 1000) SerialPortDebugText
+    let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS19200}) (TimeoutMillis 1000) SerialPortNoDebug
     in  openSerialPort portName serialSettings >>= \port ->
         handleOxxiusCombinerOKCommand port "SH1=1" >> -- open shutter 1
         getLaserDetails port >>= \lasers ->

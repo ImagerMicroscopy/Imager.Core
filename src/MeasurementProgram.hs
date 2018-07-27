@@ -58,7 +58,7 @@ executeMeasurement env me ddets =
         deactiveUsedLightSources = mapM_ deactivateLightSource (filter (\e -> equipmentName e `elem` eqsUsedAsLightSource) eqs)
         usedRobots = let usedRobotEqNames = robotNamesUsedIn me
                      in  filter (\e -> (robotName e) `elem` usedRobotEqNames) eqs
-        (commonDetectorProperties, ddetsWithoutCommon) =  -- extract all properties shared betweem acq's and set these once at the beginning.
+        (commonDetectorProperties, ddetsWithoutCommon) =  -- extract all properties shared between acq's and set these once at the beginning.
             let usedProperties = map dpCameraOptions (M.elems ddets)
                 uniqueProperties = nub (mconcat usedProperties)
                 commonProperties = filter (\prop -> all (prop `elem`) usedProperties) uniqueProperties
