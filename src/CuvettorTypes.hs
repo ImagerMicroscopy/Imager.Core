@@ -52,14 +52,6 @@ data RequestMessage = AcquireData !DetectionParams
                     | ListRobotPrograms !RobotName
                     | GetDetectorProperties
                     | SetDetectorProperty !CameraProperty
-                    | ActivateLightSource {
-                        alsEquipmentName :: !EqName
-                      , alsName :: !LSName
-                      , alsChannels :: ![LSChannelName]
-                      , alsPowers :: ![LSIlluminationPower]
-                    }
-                    | DeactivateLightSource !EqName
-                    | TurnOffLightSource !EqName
                     | Ping
                     | ExecuteMeasurementProgram {
                           execMeasurementProgram :: !MeasurementElement
@@ -81,11 +73,6 @@ instance ToJSON RequestMessage where
     toEncoding (ListRobotPrograms name) = pairs ("action" .= ("listrobotprograms" :: Text) <> "name" .= name)
     toEncoding GetDetectorProperties = pairs ("action" .= ("getdetectorproperties" :: Text))
     toEncoding (SetDetectorProperty prop) = pairs ("action" .= ("setdetectorproperty" :: Text) <> "property" .= prop)
-    toEncoding (ActivateLightSource eqName name channel power) =
-        pairs ("action" .= ("activatelightsource" :: Text) <> "equipmentname" .= eqName <>
-               "name" .= name <> "channel" .= channel <> "power" .= power)
-    toEncoding (DeactivateLightSource name) = pairs ("action" .= ("deactivatelightsource" :: Text) <> "name" .= name)
-    toEncoding (TurnOffLightSource name) = pairs ("action" .= ("turnofflightsource" :: Text) <> "name" .= name)
     toEncoding Ping = pairs ("action" .= ("ping" :: Text))
     toEncoding (ExecuteMeasurementProgram prog dets) = pairs ("action" .= ("executemeasurementprogram" :: Text) <> "program" .= prog <> "defineddetections" .= dets)
     toEncoding FetchAsyncData = pairs ("action" .= ("fetchasyncspectra" :: Text))
@@ -106,12 +93,6 @@ instance FromJSON RequestMessage where
             "listrobotprograms" -> ListRobotPrograms <$> v .: "name"
             "getdetectorproperties" -> return GetDetectorProperties
             "setdetectorproperty" -> SetDetectorProperty <$> v .: "property"
-            "activatelightsource" -> ActivateLightSource <$> v .: "equipmentname"
-                                                         <*> v .: "name"
-                                                         <*> v .: "channel"
-                                                         <*> v .: "power"
-            "deactivatelightsource" -> DeactivateLightSource <$> v .: "name"
-            "turnofflightsource" -> TurnOffLightSource <$> v .: "name"
             "ping"      -> return Ping
             "executemeasurementprogram" -> ExecuteMeasurementProgram <$> v .: "program" <*> v .: "defineddetections"
             "fetchasyncspectra" -> return FetchAsyncData

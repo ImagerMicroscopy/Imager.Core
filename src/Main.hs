@@ -138,25 +138,6 @@ performAction env (SetDetectorProperty prop) =
     where
         det = envDetector env
 
-performAction env (ActivateLightSource eqName name channels powers) =
-    ensureAsyncAcquisitionNotRunning env >>
-    return (lookupLightSource eqs (eqName, name)) >>= \eq ->
-    activateLightSource eq name (zip channels powers) >>
-    return (StatusOK, env)
-    where
-        eqs = envEquipment env
-
-performAction env (DeactivateLightSource eqName) =
-    ensureAsyncAcquisitionNotRunning env >>
-    deactivateLightSource eq >>
-    return (StatusOK, env)
-    where
-        [eq]  = filter (\e -> equipmentName e == eqName) (envEquipment env)
-
-performAction env (TurnOffLightSource name) =
-    putStrLn "turning off light sources not supported" >>
-    return (StatusOK, env)
-
 performAction env Ping = return (Pong, env)
 
 performAction env (ExecuteMeasurementProgram me ddets) =
