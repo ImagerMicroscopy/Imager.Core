@@ -45,25 +45,42 @@ executeMeasurement env me ddets =
     withAsync (forever $ resetSystemSleepTimer >> threadDelay (round 60.0e6)) (\_ ->
         print commonDetectorProperties >> print ddetsWithoutCommon >>
         forM_ eqs (flushSerialPorts) >>
-        mapM_ (setDetectorOption detector) commonDetectorProperties >>
+        forM_ (M.toList commonDetectorProperties) (\(detName, opts) ->
+            mapM_ (setDetectorOption (namedDetector detName)) opts) >>
         executeMeasurementElement env ddetsWithoutCommon (insertFastAcquisitionLoops ddetsWithoutCommon me)
-        `catch` (\e -> deactiveUsedLightSources >>
+        `catch` (\e -> deactivateUsedLightSources >>
                        mapM_ abortRobotProgramExecution usedRobots >>
                        putStrLn (displayException e) >>
                        throwIO (e :: SomeException)))
     where
-        detector = peDetector env
+        detectors = peDetectors env
+        namedDetector n = head (filter ((==) n . detectorName) detectors)
         eqs = peEquipment env
         eqsUsedAsLightSource = eqNamesUsedAsLightSourceIn ddets me
-        deactiveUsedLightSources = mapM_ deactivateLightSource (filter (\e -> equipmentName e `elem` eqsUsedAsLightSource) eqs)
+        deactivateUsedLightSources = mapM_ deactivateLightSource (filter (\e -> equipmentName e `elem` eqsUsedAsLightSource) eqs)
         usedRobots = let usedRobotEqNames = robotNamesUsedIn me
                      in  filter (\e -> (robotName e) `elem` usedRobotEqNames) eqs
-        (commonDetectorProperties, ddetsWithoutCommon) =  -- extract all properties shared between acq's and set these once at the beginning.
-            let usedProperties = map dpCameraOptions (M.elems ddets)
-                uniqueProperties = nub (mconcat usedProperties)
-                commonProperties = filter (\prop -> all (prop `elem`) usedProperties) uniqueProperties
-                ddetsWithoutCommon = fmap (\dp -> dp {dpCameraOptions = filter (`notElem` commonProperties) (dpCameraOptions dp)}) ddets
-            in  (commonProperties, ddetsWithoutCommon)
+        (ddetsWithoutCommon, commonDetectorProperties) =  removeCommonDetectorProperties ddets
+
+removeCommonDetectorProperties :: DefinedDetections -> (DefinedDetections, Map Text [CameraProperty])
+removeCommonDetectorProperties ddets = (ddetsWithoutCommon, commonDetectorProperties)
+    where
+        allDetectorParams :: [DetectorParams]
+        allDetectorParams = mconcat (map dpDetectors (M.elems ddets))
+        allDetectorProperties :: Map Text [[CameraProperty]]
+        allDetectorProperties = foldr (\dp accum -> M.insertWith (++) (dtpDetectorName dp) [(dtpDetectorOptions dp)] accum) M.empty allDetectorParams
+        commonDetectorProperties :: Map Text [CameraProperty]
+        commonDetectorProperties = M.map extractCommonDetectorProperties allDetectorProperties
+            where
+              extractCommonDetectorProperties :: [[CameraProperty]] -> [CameraProperty]
+              extractCommonDetectorProperties pss =
+                  let uniqueProperties = nub (mconcat pss)
+                      commonProperties = filter (\prop -> all (prop `elem`) pss) uniqueProperties
+                  in  commonProperties
+        ddetsWithoutCommon = M.map (\detParams -> detParams {dpDetectors = removeCommon commonDetectorProperties (dpDetectors detParams)}) ddets
+        removeCommon :: Map Text [CameraProperty] -> [DetectorParams] -> [DetectorParams]
+        removeCommon commonmap dtorparams =
+            map (\(DetectorParams name opts) -> DetectorParams name (filter (`notElem` (fromJust $ M.lookup name commonmap)) opts)) dtorparams
 
 executeMeasurementElements :: Detector a => ProgramEnvironment a -> DefinedDetections -> [MeasurementElement] -> IO ()
 executeMeasurementElements env ddets es = mapM_ (executeMeasurementElement env ddets) es
@@ -72,13 +89,14 @@ executeMeasurementElement :: Detector a => ProgramEnvironment a -> DefinedDetect
 executeMeasurementElement env ddets (MEDetection detNames) =
     getStagePositionSafe eqs >>= \stagePos ->
     forM_ (zip detNames detParams) (\(dName, p) ->
-        executeDetection detector eqs p >>= \r ->
-        readIORef counter >>= \idx ->
-        writeIORef counter (idx + 1) >>
-        r `deepseq` addDataToMVar mvar startTime idx stagePos dName r)
+        executeDetection detectors eqs p >>= \acqs ->
+        forM_ acqs (\acq ->
+            readIORef counter >>= \idx ->
+            writeIORef counter (idx + 1) >>
+            acq `deepseq` addDataToMVar mvar startTime idx stagePos dName acq))
     where
       eqs = peEquipment env
-      detector = peDetector env
+      detectors = peDetectors env
       mvar = peDataMVar env
       startTime = peStartTime env
       counter = peDataCounter env
@@ -104,12 +122,12 @@ executeMeasurementElement env ddets (MEDoTimes n es) =
         ))
 executeMeasurementElement env ddets (MEFastAcquisitionLoop n (detName, detParams)) =
     withStatusMessage env (T.format "fast acquisition ({} images)" (T.Only n)) (
-        executeFastDetectionLoop detector eqs (detName, detParams) n startTime counter mvar)
+        executeFastDetectionLoop detectors eqs (detName, detParams) n startTime counter mvar)
     where
       eqs = peEquipment env
       mvar = peDataMVar env
       startTime = peStartTime env
-      detector = peDetector env
+      detectors = peDetectors env
       counter = peDataCounter env
 executeMeasurementElement env ddets (METimeLapse n dur es) =
     futureTimes >>= \fts ->
@@ -177,36 +195,52 @@ insertFastAcquisitionLoops ddets (MEStageLoop n pos es) = MEStageLoop n pos (map
 insertFastAcquisitionLoops ddets (MERelativeStageLoop n ps es) = MERelativeStageLoop n ps (map (insertFastAcquisitionLoops ddets) es)
 insertFastAcquisitionLoops d m = m
 
-executeDetection :: Detector a => a -> [EquipmentW] -> DetectionParams -> IO AcquiredData
-executeDetection det eqs DetectionParams{..} =
-    mapM_ (setDetectorOption det) dpCameraOptions >>
-    switchToFilters eqs dpFilterParams >>
-    enableLightSourcesGated eqs dpIrradiation >>
-    acquireData det >>= \acquiredData ->
-    disableLightSources eqs dpIrradiation >>
+executeDetection :: Detector a => [a] -> [EquipmentW] -> DetectionParams -> IO [AcquiredData]
+executeDetection dets eqs dps =
+    setDetectorOptions dets (dpDetectors dps) >>
+    switchToFilters eqs (dpFilterParams dps) >>
+    enableLightSourcesGated eqs (dpIrradiation dps) >>
+    mapConcurrently acquireData requiredDets >>= \acquiredData ->
+    disableLightSources eqs (dpIrradiation dps) >>
     return acquiredData
+    where
+        requiredDetNames = map dtpDetectorName (dpDetectors dps)
+        requiredDets = filter (\d -> (detectorName d) `elem` requiredDetNames) dets
 
-executeFastDetectionLoop :: Detector a => a -> [EquipmentW] -> (Text, DetectionParams) -> Int -> TimeSpec -> IORef Word64 -> MVar [(AcquisitionMetaData, AcquiredData)] -> IO ()
-executeFastDetectionLoop detector eqs (detName, detParams) nTimesToPerform startTime dataCounter dataMVar =
+setDetectorOptions :: Detector a => [a] -> [DetectorParams] -> IO ()
+setDetectorOptions dets dps =
+    forM_ dps (\(DetectorParams detName detOptions) ->
+        let [thisDet] = filter ((==) detName . detectorName) dets
+        in  mapM_ (setDetectorOption thisDet) detOptions)
+
+executeFastDetectionLoop :: Detector a => [a] -> [EquipmentW] -> (Text, DetectionParams) -> Int -> TimeSpec -> IORef Word64 -> MVar [(AcquisitionMetaData, AcquiredData)] -> IO ()
+executeFastDetectionLoop dets eqs (detName, detParams) nTimesToPerform startTime dataCounter dataMVar =
     getStagePositionSafe eqs >>= \stagePos ->
-    mapM_ (setDetectorOption detector) (dpCameraOptions detParams) >>
+    setDetectorOptions dets (dpDetectors detParams) >>
     switchToFilters eqs (dpFilterParams detParams) >>
     enableLightSources eqs (dpIrradiation detParams) >>
     newChan >>= \chan ->
-    withAsync (acquireStreamingData detector nTimesToPerform chan) (\as ->
-        fetchData stagePos 0 as chan) >>
+    withAsync (forConcurrently_ requiredDets (\det -> acquireStreamingData det nTimesToPerform chan)) (\as ->
+        fetchData stagePos 0 0 as chan) >>
     disableLightSources eqs (dpIrradiation detParams)
     where
-        fetchData :: StagePosition -> Int -> Async () -> Chan AsyncData -> IO ()
-        fetchData pos nFetched as chan = readChan chan >>= \val ->
-                                         case val of
-                                             AsyncFinished -> performMajorGC >> wait as
-                                             AsyncError    -> performMajorGC >> wait as
-                                             AsyncData r   -> when (nFetched `mod` 50 == 49) (performMajorGC) >>
-                                                              readIORef dataCounter >>= \idx ->
-                                                              writeIORef dataCounter (idx + 1) >>
-                                                              r `deepseq` addDataToMVar dataMVar startTime idx pos detName r >>
-                                                              fetchData pos (nFetched + 1) as chan
+        requiredDetNames = map dtpDetectorName (dpDetectors detParams)
+        requiredDets = filter (\d -> (detectorName d) `elem` requiredDetNames) dets
+        nRequiredDets = length requiredDets
+        fetchData :: StagePosition -> Int -> Int -> Async () -> Chan AsyncData -> IO ()
+        fetchData pos nFetched nFinished as chan
+            | nFinished == nRequiredDets = wait as
+            | otherwise =
+                  readChan chan >>= \val ->
+                  case val of
+                      AsyncFinished -> performMajorGC >>
+                                       fetchData pos nFetched (nFinished + 1) as chan
+                      AsyncError    -> performMajorGC >> throwIO (userError "error during fast acquisition loop")
+                      AsyncData r   -> when (nFetched `mod` 50 == 49) (performMajorGC) >>
+                                       readIORef dataCounter >>= \idx ->
+                                       writeIORef dataCounter (idx + 1) >>
+                                       r `deepseq` addDataToMVar dataMVar startTime idx pos detName r >>
+                                       fetchData pos (nFetched + 1) nFinished as chan
 
 executeIrradiation :: [EquipmentW] -> [IrradiationParams] -> Double -> IO ()
 executeIrradiation eqs ips dur =

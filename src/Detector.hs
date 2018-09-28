@@ -18,6 +18,7 @@ import Control.Exception
 import Control.Monad
 import Control.Monad.Trans.Except
 import Data.ByteString (ByteString)
+import Data.Text (Text)
 import GHC.Generics (Generic)
 import System.Clock
 import Data.Vector.Storable (Vector)
@@ -44,6 +45,7 @@ data ImageOrientationOperation = IPORotateCW
                                deriving (Read, Show)
 
 class Detector a where
+    detectorName :: a -> Text
     acquireData :: a -> IO AcquiredData
     acquireStreamingData :: a -> NMeasurementsToPerform -> Chan AsyncData -> IO ()
     acquireStreamingData det nMeasurements chan =

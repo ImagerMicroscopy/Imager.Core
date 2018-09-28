@@ -14,6 +14,7 @@ import Control.Monad
 import Data.Text (Text)
 import qualified Data.Text as T
 
+import Detector
 import Equipment
 import EquipmentTypes
 import MeasurementProgramTypes
@@ -22,14 +23,22 @@ import MiscUtils
 
 type RobotInfo = (Text, [Text]) -- robot name, robot programs
 
-validateMeasurementElementThrows :: [EquipmentW] -> MeasurementElement -> DefinedDetections -> IO ()
-validateMeasurementElementThrows eqs me ddets =
-    verifyRobotElements eqs me >>= \robotsResult ->
-    when (not $ null robotsResult) (
-        throwIO (userError $ head robotsResult)) >>
+validateMeasurementElementThrows :: Detector a => [a] -> [EquipmentW] -> MeasurementElement -> DefinedDetections -> IO ()
+validateMeasurementElementThrows dets eqs me ddets =
+    fmap ((++) (validateDefinedDetections dets ddets)) (verifyRobotElements eqs me) >>= \result ->
+    when (not $ null result) (
+        throwIO (userError $ head result)) >>
     case (foldMeasurementElement (validateMeasurementElement eqs ddets) me) of
                                                           (e : xs) -> throwIO (userError e)
                                                           []       -> return ()
+
+validateDefinedDetections :: Detector a => [a] -> DefinedDetections -> [String]
+validateDefinedDetections dets ddets =
+    let availableDetectorNames = map detectorName dets
+        reqDetectorNames = mconcat (map (map dtpDetectorName . dpDetectors) (M.elems ddets))
+    in  if (all (`elem` availableDetectorNames) reqDetectorNames)
+        then []
+        else ["unknown detector"]
 
 -- should not inspect contained MeasurementElements
 -- empty list for no error

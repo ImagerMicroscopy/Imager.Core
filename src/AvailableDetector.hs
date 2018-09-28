@@ -47,17 +47,16 @@ import MiscUtils
 --                 polyCorr x coeffs = sum $ zipWith3 (\x coeff order -> coeff * x^order) (repeat x) coeffs ([0 ..] :: [Int])
 -- #endif
 -- #ifdef WITH_SCCAMERA
-withAvailableDetector :: (SCCamDetector -> IO ()) -> IO ()
-withAvailableDetector f =
+withAvailableDetectors :: ([SCCamDetector] -> IO ()) -> IO ()
+withAvailableDetectors f =
     (bracket initializeCameraDLL (\_ -> shutdownCameraDLL) $ \initStatus ->
     when (isLeft initStatus) (error (fromLeft initStatus)) >>
     listConnectedCameras >>= \camNames ->
     when (null camNames) (
         putStrLn "no cameras found... press return to exit" >>
         getLine >> error "no cameras found") >>
-    putStrLn ("using camera " ++ (T.unpack $ head camNames)) >>
-    let camName = head camNames
-    in f (SCCamDetector camName))
+    forM_ camNames (\cn -> putStrLn ("using camera " ++ (T.unpack cn))) >>
+    f (map SCCamDetector camNames))
 -- #endif
 -- #ifdef WITH_DUMMYDETECTOR
 -- withAvailableDetector :: (DummyDetector -> IO ()) -> IO ()

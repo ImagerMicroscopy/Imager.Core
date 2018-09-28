@@ -30,22 +30,23 @@ data SCCamDetector = SCCamDetector {
                      }
 
 instance Detector SCCamDetector where
+    detectorName = sccCamName
     acquireData :: SCCamDetector -> IO AcquiredData
-    acquireData (SCCamDetector camName)=
+    acquireData (SCCamDetector camName) =
         SC.acquireImages camName 1 >>= \(SC.MeasuredImages nRows nCols _ vec) ->
         getTime Monotonic >>= \timeStamp ->
         let bytes = byteStringFromVector vec
             numType = UINT16
-        in return (AcquiredData nRows nCols timeStamp bytes numType)
+        in return (AcquiredData nRows nCols timeStamp camName bytes numType)
 
     acquireStreamingData :: SCCamDetector -> NMeasurementsToPerform -> Chan AsyncData -> IO ()
     acquireStreamingData (SCCamDetector camName) nMeasurements chan =
-        (performAcq >> SC.abortAsyncAcquisition camName) `onException` (SC.abortAsyncAcquisition camName >>
-                                                                                    writeChan chan AsyncError)
+        performAcq `onException` (SC.abortAsyncAcquisition camName >> writeChan chan AsyncError)
         where
             performAcq = getTime Monotonic >>= \acqStart ->
                          SC.startAsyncAcquisition camName >>
                          fetchImages nMeasurements acqStart chan >>
+                         SC.abortAsyncAcquisition camName >>
                          writeChan chan AsyncFinished
             fetchImages :: Int -> TimeSpec -> Chan AsyncData -> IO ()
             fetchImages nImagesRemaining acqStart chan
@@ -53,7 +54,7 @@ instance Detector SCCamDetector where
                 | otherwise =
                     SC.getNextAcquiredImage camName >>= \(SC.MeasuredImages nRows nCols timeStamp imageData) ->
                     let shiftedTimeStamp = fromNanoSecs (toNanoSecs acqStart + round (timeStamp * 1.0e9))
-                        acqData = AcquiredData nRows nCols shiftedTimeStamp (byteStringFromVector imageData) UINT16
+                        acqData = AcquiredData nRows nCols shiftedTimeStamp camName (byteStringFromVector imageData) UINT16
                     in  acqData `deepseq` writeChan chan (AsyncData acqData) >>
                         fetchImages (nImagesRemaining - 1) acqStart chan
 

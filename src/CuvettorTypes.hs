@@ -35,7 +35,7 @@ import SCCameraTypes
 
 data Environment a = Environment {
                       envEquipment :: ![EquipmentW]
-                    , envDetector :: !a
+                    , envDetectors :: ![a]
                     , envEncodedSpectrometerWavelengths :: !SB.ByteString
                     , envAsyncDataMVar :: !(MVar [(AcquisitionMetaData, AcquiredData)])
                     , envAsyncStatusMessagesMVar :: !(MVar [Text])
@@ -50,8 +50,9 @@ data RequestMessage = AcquireData !DetectionParams
                     | GetMotorizedStagePosition !StageName
                     | SetMotorizedStagePosition !StageName !StagePosition
                     | ListRobotPrograms !RobotName
-                    | GetDetectorProperties
-                    | SetDetectorProperty !CameraProperty
+                    | ListAvailableDetectors
+                    | GetDetectorProperties !Text
+                    | SetDetectorProperty !Text !CameraProperty
                     | Ping
                     | ExecuteMeasurementProgram {
                           execMeasurementProgram :: !MeasurementElement
@@ -71,8 +72,9 @@ instance ToJSON RequestMessage where
     toEncoding (GetMotorizedStagePosition name) = pairs ("action" .= ("getmotorizedstageposition" :: Text) <> "name" .= name)
     toEncoding (SetMotorizedStagePosition name ds) = pairs ("action" .= ("setmotorizedstageposition" :: Text) <> "name" .= name <> "position" .= ds)
     toEncoding (ListRobotPrograms name) = pairs ("action" .= ("listrobotprograms" :: Text) <> "name" .= name)
-    toEncoding GetDetectorProperties = pairs ("action" .= ("getdetectorproperties" :: Text))
-    toEncoding (SetDetectorProperty prop) = pairs ("action" .= ("setdetectorproperty" :: Text) <> "property" .= prop)
+    toEncoding ListAvailableDetectors = pairs ("action" .= ("listavailabledetectors" :: Text))
+    toEncoding (GetDetectorProperties detName) = pairs ("action" .= ("getdetectorproperties" :: Text) <> "detectorname" .= detName)
+    toEncoding (SetDetectorProperty detName prop) = pairs ("action" .= ("setdetectorproperty" :: Text) <> "detectorname" .= detName <> "property" .= prop)
     toEncoding Ping = pairs ("action" .= ("ping" :: Text))
     toEncoding (ExecuteMeasurementProgram prog dets) = pairs ("action" .= ("executemeasurementprogram" :: Text) <> "program" .= prog <> "defineddetections" .= dets)
     toEncoding FetchAsyncData = pairs ("action" .= ("fetchasyncspectra" :: Text))
@@ -91,8 +93,9 @@ instance FromJSON RequestMessage where
             "getmotorizedstageposition" -> GetMotorizedStagePosition <$> v .: "name"
             "setmotorizedstageposition" -> SetMotorizedStagePosition <$> v .: "name" <*> v .: "position"
             "listrobotprograms" -> ListRobotPrograms <$> v .: "name"
-            "getdetectorproperties" -> return GetDetectorProperties
-            "setdetectorproperty" -> SetDetectorProperty <$> v .: "property"
+            "listavailabledetectors" -> return ListAvailableDetectors
+            "getdetectorproperties" -> GetDetectorProperties <$> v .: "detectorname"
+            "setdetectorproperty" -> SetDetectorProperty <$> v .: "detectorname" <*> v .: "property"
             "ping"      -> return Ping
             "executemeasurementprogram" -> ExecuteMeasurementProgram <$> v .: "program" <*> v .: "defineddetections"
             "fetchasyncspectra" -> return FetchAsyncData
@@ -108,11 +111,12 @@ data ResponseMessage = StatusOK
                      | StatusError !String
                      | StatusNoNewAsyncData
                      | StatusNoNewAsyncDataComing
-                     | AcquiredDataResponse !(AcquisitionMetaData, AcquiredData)
+                     | AcquiredDataResponse ![(AcquisitionMetaData, AcquiredData)]
                      | Wavelengths !AcquiredData
                      | AvailableEquipment ![EquipmentW]
                      | MotorizedStagePosition !StagePosition
                      | RobotProgramsResponse ![RobotProgramName]
+                     | AvailableDetectorsResponse ![Text]
                      | DetectorPropertiesResponse ![CameraProperty] Double
                      | Pong
                      | AsyncAcquiredData ![(AcquisitionMetaData, AcquiredData)]
@@ -134,6 +138,7 @@ instance ToJSON ResponseMessage where
     toEncoding (AvailableEquipment es) = pairs ("responsetype" .= ("availableequipment" :: Text) <> "equipment" .= es)
     toEncoding (MotorizedStagePosition ds) = pairs ("responsetype" .= ("motorizedstageposition" :: Text) <> "position" .= ds)
     toEncoding (RobotProgramsResponse ps) = pairs ("responsetype" .= ("robotprograms" :: Text) <> "programs" .= ps)
+    toEncoding (AvailableDetectorsResponse ns) = pairs ("responsetype" .= ("availabledetectors" :: Text) <> "detectornames" .= ns)
     toEncoding (DetectorPropertiesResponse d fr) = pairs ("responsetype" .= ("detectorproperties" :: Text) <> "properties" .= d <>
                                                           "framerate" .= fr)
     toEncoding (Pong) = pairs ("responsetype" .= ("pong" :: Text))

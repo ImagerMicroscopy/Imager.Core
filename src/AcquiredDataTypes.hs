@@ -23,15 +23,16 @@ data AcquiredData = AcquiredData {
                         acqNRows :: !Int
                       , acqNCols :: !Int
                       , acqTimeStamp :: !TimeSpec
+                      , acqDetectorName :: !Text
                       , acqData :: !ByteString
                       , acqNumType :: !NumberType
                   } deriving (Show, Generic, NFData)
 
 instance ToJSON AcquiredData where
-    toJSON (AcquiredData nRows nCols timeStamp bytes numType) =
-        object ["nrows" .= nRows, "ncols" .= nCols, "data" .= (show bytes), "timestamp" .= (timeSpecAsDouble timeStamp), "numtype" .= (show numType)]
-    toEncoding (AcquiredData nRows nCols timeStamp bytes numType) =
-        pairs ("nrows" .= nRows <> "ncols" .= nCols <> "timestamp" .= (timeSpecAsDouble timeStamp) <> "data" .= (show bytes) <> "numtype" .= (show numType))
+    toJSON (AcquiredData nRows nCols timeStamp camName bytes numType) =
+        object ["nrows" .= nRows, "ncols" .= nCols, "timestamp" .= (timeSpecAsDouble timeStamp), "detectorname" .= camName, "data" .= (show bytes), "numtype" .= (show numType)]
+    toEncoding (AcquiredData nRows nCols timeStamp camName bytes numType) =
+        pairs ("nrows" .= nRows <> "ncols" .= nCols <> "timestamp" .= (timeSpecAsDouble timeStamp) <> "detectorname" .= camName <> "data" .= (show bytes) <> "numtype" .= (show numType))
 
 data AcquisitionMetaData = AcquisitionMetaData {
                                amdSequence :: !Word64

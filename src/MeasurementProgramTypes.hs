@@ -31,7 +31,7 @@ data MeasurementElement = MEDetection ![Text]
 type DefinedDetections = Map Text DetectionParams
 
 data ProgramEnvironment a = ProgramEnvironment {
-                                peDetector :: !a
+                                peDetectors :: ![a]
                               , peStartTime :: !TimeSpec
                               , peEquipment :: ![EquipmentW]
                               , peDataCounter :: !(IORef Word64)
@@ -40,11 +40,17 @@ data ProgramEnvironment a = ProgramEnvironment {
                             }
 
 data DetectionParams = DetectionParams {
-                           dpCameraOptions :: ![CameraProperty]
+                           dpDetectors :: ![DetectorParams]
                          , dpIrradiation :: ![IrradiationParams]
                          , dpFilterParams :: ![FilterParams]
                        }
                        deriving (Show)
+
+data DetectorParams = DetectorParams {
+                          dtpDetectorName :: !Text
+                        , dtpDetectorOptions :: ![CameraProperty]
+                      }
+                      deriving (Show)
 
 data IrradiationParams = IrradiationParams {
                             ipEquipmentName :: !EqName
@@ -102,13 +108,22 @@ instance ToJSON MeasurementElement where
 
 instance FromJSON DetectionParams where
     parseJSON (Object v) =
-        DetectionParams <$> v .: "cameraoptions"
+        DetectionParams <$> v .: "detectors"
                         <*> v .: "irradiation"
                         <*> v .: "filters"
     parseJSON _ = fail "can't decode detection params"
 instance ToJSON DetectionParams where
-    toJSON (DetectionParams cameraOptions irr filters) =
-        object ["cameraoptions" .= cameraOptions, "irradiation" .= irr, "filters" .= filters]
+    toJSON (DetectionParams detectors irr filters) =
+        object ["detectors" .= detectors, "irradiation" .= irr, "filters" .= filters]
+
+instance FromJSON DetectorParams where
+    parseJSON (Object v) =
+        DetectorParams <$> v .: "detectorname"
+                       <*> v .: "detectoroptions"
+    parseJSON _ = fail "can't decode detection params"
+instance ToJSON DetectorParams where
+    toJSON (DetectorParams name options) =
+        object ["detectorname" .= name, "detectoroptions" .= options]
 
 instance FromJSON IrradiationParams where
     parseJSON (Object v) =

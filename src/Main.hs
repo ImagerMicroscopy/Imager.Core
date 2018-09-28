@@ -56,22 +56,22 @@ main =
     getExecutablePath >>= \exePath ->
     readAvailableEquipment >>= \descs ->
     withEquipment descs $ \availableEquipment ->
-      read <$> readFile (takeDirectory exePath </> "cameraoptions.txt") >>= \imageOrientationOps ->
+      read <$> readFile (takeDirectory exePath </> "cameraoptions.txt") >>= \imageOrientationOpss ->
 
       newMVar [] >>= \asyncSpectraMVar ->
       newMVar [] >>= \asyncStatusMessagesMVar ->
       async (return ()) >>= \asyncProgramWorker ->
       wait asyncProgramWorker >>
 
-      withAvailableDetector (\det ->
-          setImageOrientation det imageOrientationOps >>
-          getDetectorWavelengths det >>= \wl ->
+      withAvailableDetectors (\dets ->
+          mapM_ (\(det, ioOps) -> setImageOrientation det ioOps) (zip dets imageOrientationOpss) >>
+          getDetectorWavelengths (head dets) >>= \wl ->
           return (byteStringFromVector wl) >>= \encodedWl ->
           putStrLn "ready to measure!" >>
           putStrLn "HOLD CONTROL-C UNTIL YOU SEE \"USER INTERRUPT\" BEFORE CLOSING THIS WINDOW" >>
-          let env = Environment availableEquipment det encodedWl
+          let env = Environment availableEquipment dets encodedWl
                                 asyncSpectraMVar asyncStatusMessagesMVar asyncProgramWorker
-          in wait =<< async (runServer 3200 messageHandler env serverSettings))
+          in  wait =<< async (runServer 3200 messageHandler env serverSettings))
 
 messageHandler :: Detector a => MessageHandler (Environment a)
 messageHandler msg env =
@@ -90,12 +90,12 @@ performAction env (AcquireData params) =
         ddets = M.fromList [("Default", params)]
     in  startAsyncAcquisition env ddets detElem >>= \(asyncWorker, spectraMVar, statusMVar) ->
         wait asyncWorker >>
-        takeMVar spectraMVar >>= \[acquiredData] ->
+        takeMVar spectraMVar >>= \acquiredData ->
         return (AcquiredDataResponse acquiredData, env)
 
 performAction env ListWavelengths =
     getTime Monotonic >>= \timeStamp ->
-    return (Wavelengths (AcquiredData nWavelengths 1 timeStamp wavelengths numType), env)
+    return (Wavelengths (AcquiredData nWavelengths 1 timeStamp "" wavelengths numType), env)
     where
         wavelengths = envEncodedSpectrometerWavelengths env
         nWavelengths = SB.length wavelengths `div` 8
@@ -123,20 +123,35 @@ performAction env (ListRobotPrograms name) =
     where
         eqs = envEquipment env
 
-performAction env GetDetectorProperties =
-    ensureAsyncAcquisitionNotRunning env >>
-    getDetectorOptions det >>= \params ->
-    getDetectorFrameRate det >>= \fr ->
-    return (DetectorPropertiesResponse params fr, env)
+performAction env ListAvailableDetectors =
+    return (AvailableDetectorsResponse (map detectorName dets), env)
     where
-        det = envDetector env
+        dets = envDetectors env
 
-performAction env (SetDetectorProperty prop) =
-    ensureAsyncAcquisitionNotRunning env >>
-    setDetectorOption det prop >>
-    return (StatusOK, env)
+performAction env (GetDetectorProperties detName) =
+    if (not haveDetector)
+    then pure (StatusError "unknown detector", env)
+    else
+        ensureAsyncAcquisitionNotRunning env >>
+        getDetectorOptions det >>= \params ->
+        getDetectorFrameRate det >>= \fr ->
+        return (DetectorPropertiesResponse params fr, env)
     where
-        det = envDetector env
+        haveDetector = detName `elem` (map detectorName dets)
+        [det] = filter ((==) detName . detectorName) dets
+        dets = envDetectors env
+
+performAction env (SetDetectorProperty detName prop) =
+    if (not haveDetector)
+    then pure (StatusError "unknown detector", env)
+    else
+        ensureAsyncAcquisitionNotRunning env >>
+        setDetectorOption det prop >>
+        return (StatusOK, env)
+    where
+        haveDetector = detName `elem` (map detectorName dets)
+        [det] = filter ((==) detName . detectorName) dets
+        dets = envDetectors env
 
 performAction env Ping = return (Pong, env)
 
@@ -191,16 +206,16 @@ performAction env IsAsyncAcquisitionRunning =
 startAsyncAcquisition :: Detector a => Environment a -> DefinedDetections -> MeasurementElement -> IO (Async (), MVar [(AcquisitionMetaData, AcquiredData)], MVar [Text])
 startAsyncAcquisition env ddets me =
     ensureAsyncAcquisitionNotRunning env >>
-    validateMeasurementElementThrows (envEquipment env) me ddets >>
+    validateMeasurementElementThrows (envDetectors env) (envEquipment env) me ddets >>
     newMVar [] >>= \spectraMVar ->
     newMVar [] >>= \statusMVar ->
     newIORef 0 >>= \dataCounter ->
     getTime Monotonic >>= \startTime ->
-    async (executeMeasurement (ProgramEnvironment detector startTime (envEquipment env) dataCounter spectraMVar statusMVar) me ddets >>
+    async (executeMeasurement (ProgramEnvironment detectors startTime (envEquipment env) dataCounter spectraMVar statusMVar) me ddets >>
            return ()) >>= \asyncWorker ->
     return (asyncWorker, spectraMVar, statusMVar)
     where
-        detector = envDetector env
+        detectors = envDetectors env
 
 ensureAsyncAcquisitionNotRunning :: Environment a -> IO ()
 ensureAsyncAcquisitionNotRunning env =
