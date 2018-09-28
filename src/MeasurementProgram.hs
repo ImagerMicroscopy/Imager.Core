@@ -43,7 +43,6 @@ import MiscUtils
 executeMeasurement :: Detector a => ProgramEnvironment a -> MeasurementElement -> DefinedDetections -> IO ()
 executeMeasurement env me ddets =
     withAsync (forever $ resetSystemSleepTimer >> threadDelay (round 60.0e6)) (\_ ->
-        print commonDetectorProperties >> print ddetsWithoutCommon >>
         forM_ eqs (flushSerialPorts) >>
         forM_ (M.toList commonDetectorProperties) (\(detName, opts) ->
             mapM_ (setDetectorOption (namedDetector detName)) opts) >>
