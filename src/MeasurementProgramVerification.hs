@@ -50,7 +50,7 @@ validateMeasurementElement eqs ddets (MEDetection detNames)
     where
         dets = map (\dn -> fromJust $ M.lookup dn ddets) detNames
 validateMeasurementElement eqs _ (MEIrradiation dur ips)
-    | (fromLSIlluminationDuration dur < 0.0) || (fromLSIlluminationDuration dur > 1800) = ["invalid irradiation duration: " ++ show dur]
+    | (fromLSIlluminationDuration dur < 0.0) || (fromLSIlluminationDuration dur > 60) = ["invalid irradiation duration: " ++ show dur]
     | otherwise = concat $ (map (validateIrradiation eqs) ips)
 validateMeasurementElement eqs _ (MEWait dur)
     | (dur < 0.0) || (dur > 3600) = ["invalid wait duration: " ++ show dur]
