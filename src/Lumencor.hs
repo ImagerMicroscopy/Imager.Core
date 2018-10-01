@@ -17,7 +17,9 @@ import Data.Monoid
 import Data.Serialize
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.Lazy as LT
 import qualified Data.Text.Encoding as T
+import qualified Data.Text.Format as T
 import Data.Word
 
 import Equipment
@@ -34,6 +36,8 @@ data MarcelLumencor = MarcelLumencor {
                         , mlcFilterHasInitialization :: !(IORef Bool)
                         , mlcCurrentFilter :: !(IORef LumencorFilter)
                       }
+
+data MLIlluminationMode = MLGated | MLTimed !LSIlluminationDuration
 
 lumencorFromMarcelLumencor :: MarcelLumencor -> Lumencor
 lumencorFromMarcelLumencor e = Lumencor (mlcName e) (mlcLumencorPort e) (mlcFilterHasInitialization e) (mlcCurrentFilter e)
@@ -78,19 +82,27 @@ instance Equipment MarcelLumencor where
     closeDevice (MarcelLumencor _ lcP arP _ _) = closeSerialPort lcP >> closeSerialPort arP
     availableLightSources e = availableLightSources (lumencorFromMarcelLumencor e)
     activateLightSource e = activateLightSource (lumencorFromMarcelLumencor e)
-    activateLightSourceGated ml _ chs =
-        maybeChangeLumencorFilter (lumencorFromMarcelLumencor ml) (map fst withLCChannels) >>
-        setLumencorChannelIntensities (lumencorFromMarcelLumencor ml) withLCChannels >>
-        handleMarcelLumencorMessage ml prepareMsg
-        where
-            withLCChannels = mapFirst channelNameToLCChannel chs
-            channelNameToLCChannel = fromJust . (flip lookup lumencorChannels) . fromLSChannelName
-            prepareMsg = B.intercalate " " (map singleChannelMsg (map fst withLCChannels))
-            singleChannelMsg lch = let chCode = fromJust $ lookup lch marcelLumencorChannelCoding
-                                   in  chCode <> "1"
+    activateLightSourceGated ml _ chs = handleMLIllumination ml chs MLGated
+    activateLightSourceTimed ml _ chs dur = handleMLIllumination ml chs (MLTimed dur)
     deactivateLightSource ml =
         handleMarcelLumencorMessage ml "x" >>
         deactivateLightSource (lumencorFromMarcelLumencor ml)
+
+handleMLIllumination :: MarcelLumencor -> [(LSChannelName, LSIlluminationPower)] -> MLIlluminationMode -> IO ()
+handleMLIllumination ml chs mode =
+    maybeChangeLumencorFilter (lumencorFromMarcelLumencor ml) (map fst withLCChannels) >>
+    setLumencorChannelIntensities (lumencorFromMarcelLumencor ml) withLCChannels >>
+    handleMarcelLumencorMessage ml theMsg
+    where
+        withLCChannels = mapFirst channelNameToLCChannel chs
+        channelNameToLCChannel = fromJust . (flip lookup lumencorChannels) . fromLSChannelName
+        theMsg = case mode of
+                     MLGated     -> prepareMsg
+                     MLTimed dur -> let durationUS = max (10 :: Int) (round (1.0e6 * fromLSIlluminationDuration dur))
+                                    in  T.encodeUtf8 $ LT.toStrict $ T.format "irr:{}:0:i {}" (durationUS, T.decodeUtf8 prepareMsg)
+        prepareMsg = B.intercalate " " (map singleChannelMsg (map fst withLCChannels))
+        singleChannelMsg lch = let chCode = fromJust $ lookup lch marcelLumencorChannelCoding
+                               in  chCode <> "1"
 
 data LumencorChannel = LCViolet | LCBlue | LCCyan |LCTeal
                      | LCGreen | LCYellow | LCRed
