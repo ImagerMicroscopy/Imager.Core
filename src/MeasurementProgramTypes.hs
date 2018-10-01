@@ -18,7 +18,7 @@ import EquipmentTypes
 import SCCameraTypes
 
 data MeasurementElement = MEDetection ![Text]
-                        | MEIrradiation !Double ![IrradiationParams]
+                        | MEIrradiation !LSIlluminationDuration ![IrradiationParams]
                         | MEWait !Double
                         | MEExecuteRobotProgram !RobotName !RobotProgramName !Bool
                         | MEDoTimes !Int ![MeasurementElement]

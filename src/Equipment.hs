@@ -1,6 +1,7 @@
 {-# LANGUAGE ExistentialQuantification #-}
 module Equipment where
 
+import Control.Concurrent
 import Data.Text (Text)
 
 import EquipmentTypes
@@ -15,6 +16,7 @@ class Equipment e where
     availableLightSources :: e -> [LightSourceDescription]
     activateLightSource :: e -> LSName -> [(LSChannelName, LSIlluminationPower)] -> IO ()
     activateLightSourceGated :: e -> LSName -> [(LSChannelName, LSIlluminationPower)] -> IO ()
+    activateLightSourceTimed :: e -> LSName -> [(LSChannelName, LSIlluminationPower)] -> LSIlluminationDuration -> IO ()
     deactivateLightSource :: e -> IO ()
 
     availableFilterWheels  :: e -> [FilterWheelDescription]
@@ -36,6 +38,9 @@ class Equipment e where
     availableLightSources _ = []
     activateLightSource e _ _ = error ("calling activateLightSource on " ++ show (fromEqName (equipmentName e)))
     activateLightSourceGated = activateLightSource
+    activateLightSourceTimed e n chs dur = activateLightSource e n chs >>
+                                           threadDelay (round ((fromLSIlluminationDuration dur) * 1.0e6)) >>
+                                           deactivateLightSource e
     deactivateLightSource e = error ("calling deactivateLightSource on " ++ show (fromEqName (equipmentName e)))
     availableFilterWheels _ = []
     switchToFilter e _ = error ("calling switchToFilter on " ++ show (fromEqName (equipmentName e)))
@@ -58,6 +63,7 @@ instance Equipment EquipmentW where
     availableLightSources (EquipmentW e) = availableLightSources e
     activateLightSource (EquipmentW e) = activateLightSource e
     activateLightSourceGated (EquipmentW e) = activateLightSourceGated e
+    activateLightSourceTimed (EquipmentW e) = activateLightSourceTimed e
     deactivateLightSource (EquipmentW e) = deactivateLightSource e
     availableFilterWheels (EquipmentW e) = availableFilterWheels e
     switchToFilter (EquipmentW e) = switchToFilter e

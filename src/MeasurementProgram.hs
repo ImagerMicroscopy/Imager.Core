@@ -101,7 +101,7 @@ executeMeasurementElement env ddets (MEDetection detNames) =
       counter = peDataCounter env
       detParams = map (\dn -> fromJust $ M.lookup dn ddets) detNames
 executeMeasurementElement env _ (MEIrradiation dur ips) =
-    withStatusMessage env (T.format "irradiating {} s" (T.Only dur)) (
+    withStatusMessage env (T.format "irradiating {} s" (T.Only (fromLSIlluminationDuration dur))) (
         executeIrradiation eqs ips dur)
     where
       eqs = peEquipment env
@@ -241,12 +241,11 @@ executeFastDetectionLoop dets eqs (detName, detParams) nTimesToPerform startTime
                                        r `deepseq` addDataToMVar dataMVar startTime idx pos detName r >>
                                        fetchData pos (nFetched + 1) nFinished as chan
 
-executeIrradiation :: [EquipmentW] -> [IrradiationParams] -> Double -> IO ()
-executeIrradiation eqs ips dur =
-    when (dur > 0.0) (
-        enableLightSources eqs ips >>
-        threadDelay (floor $ dur * 1.0e6) >>
-        disableLightSources eqs ips)
+executeIrradiation :: [EquipmentW] -> [IrradiationParams] -> LSIlluminationDuration -> IO ()
+executeIrradiation eqs params dur =
+    forConcurrently_ params (\(IrradiationParams eqName sourceName channels powers) ->
+        let [eq] = filter (\e -> equipmentName e == eqName) eqs
+        in  activateLightSourceTimed eq sourceName (zip channels powers) dur)
 
 switchToFilters :: [EquipmentW] -> [FilterParams] -> IO ()
 switchToFilters eqs fps =

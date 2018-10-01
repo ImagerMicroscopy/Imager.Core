@@ -12,6 +12,7 @@ import qualified Data.Text as T
 newtype EqName = EqName {
                      fromEqName :: Text
                  } deriving (Show, Eq, Ord, Monoid, ToJSON, FromJSON)
+
 newtype LSName = LSName {
                      fromLSName :: Text
                  } deriving (Show, Eq, Ord, Monoid, ToJSON, FromJSON)
@@ -21,6 +22,10 @@ newtype LSChannelName = LSChannelName {
 newtype LSIlluminationPower = LSIlluminationPower {
                                   fromLSIlluminationPower :: Double
                               } deriving (Show, Eq, Ord, ToJSON, FromJSON)
+newtype LSIlluminationDuration = LSIlluminationDuration {
+                                     fromLSIlluminationDuration :: Double
+                                 } deriving (Show, Eq, Ord, ToJSON, FromJSON)
+
 newtype FWName = FWName {
                      fromFWName :: Text
                  } deriving (Show, Eq, Ord, ToJSON, FromJSON)
