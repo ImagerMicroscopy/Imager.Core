@@ -64,7 +64,7 @@ main =
       wait asyncProgramWorker >>
 
       withAvailableDetectors (\dets ->
-          mapM_ (\(det, ioOps) -> setImageOrientation det ioOps) (zip dets imageOrientationOpss) >>
+          applyCameraOptions dets imageOrientationOpss >>
           getDetectorWavelengths (head dets) >>= \wl ->
           return (byteStringFromVector wl) >>= \encodedWl ->
           putStrLn "ready to measure!" >>
@@ -72,6 +72,13 @@ main =
           let env = Environment availableEquipment dets encodedWl
                                 asyncSpectraMVar asyncStatusMessagesMVar asyncProgramWorker
           in  wait =<< async (runServer 3200 messageHandler env serverSettings))
+    where
+        applyCameraOptions :: Detector a => [a] -> [(Text, [ImageOrientationOperation])] -> IO ()
+        applyCameraOptions dets opts =
+            forM_ dets (\det ->
+                case lookup (detectorName det) opts of
+                    Just operations -> setImageOrientation det operations
+                    Nothing         -> putStrLn ("No image orientation options found for " ++ T.unpack (detectorName det)))
 
 messageHandler :: Detector a => MessageHandler (Environment a)
 messageHandler msg env =
