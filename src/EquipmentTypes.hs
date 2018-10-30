@@ -11,14 +11,14 @@ import qualified Data.Text as T
 
 newtype EqName = EqName {
                      fromEqName :: Text
-                 } deriving (Show, Eq, Ord, Monoid, ToJSON, FromJSON)
+                 } deriving (Show, Eq, Ord, Semigroup, Monoid, ToJSON, FromJSON)
 
 newtype LSName = LSName {
                      fromLSName :: Text
-                 } deriving (Show, Eq, Ord, Monoid, ToJSON, FromJSON)
+                 } deriving (Show, Eq, Ord, Semigroup, Monoid, ToJSON, FromJSON)
 newtype LSChannelName = LSChannelName {
                             fromLSChannelName :: Text
-                        } deriving (Show, Eq, Ord, Monoid, ToJSON, FromJSON)
+                        } deriving (Show, Eq, Ord, Semigroup, Monoid, ToJSON, FromJSON)
 newtype LSIlluminationPower = LSIlluminationPower {
                                   fromLSIlluminationPower :: Double
                               } deriving (Show, Eq, Ord, ToJSON, FromJSON)
