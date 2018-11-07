@@ -57,8 +57,9 @@ initializeOxxiusLC (OxxiusLCDesc name portName) =
               extractMaxPower :: Text -> Double
               extractMaxPower = read . T.unpack . T.reverse . T.takeWhile ((/=) '-') . T.reverse
         oxxiusTypeSpecificInit :: SerialPort -> OxxiusLaserType -> Int -> IO ()
-        --oxxiusTypeSpecificInit port LBX idx =
-            --mapM_ (handleOxxiusLaserCommand port idx) ["CW=1", "APC=1"]
+        oxxiusTypeSpecificInit port LCX idx =
+            let msg = LT.toStrict (T.format "L{} {}\r\n" (idx, ("DL=1" :: Text)))
+            in  handleOxxiusCombinerOKCommand port msg
         oxxiusTypeSpecificInit _ _ _ = pure ()
 
 instance Equipment OxxiusLC where
