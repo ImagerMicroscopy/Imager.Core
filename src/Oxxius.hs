@@ -58,7 +58,7 @@ initializeOxxiusLC (OxxiusLCDesc name portName) =
               extractMaxPower = read . T.unpack . T.reverse . T.takeWhile ((/=) '-') . T.reverse
         oxxiusTypeSpecificInit :: SerialPort -> OxxiusLaserType -> Int -> IO ()
         oxxiusTypeSpecificInit port LCX idx =
-            let msg = LT.toStrict (T.format "L{} {}\r\n" (idx, ("DL=1" :: Text)))
+            let msg = LT.toStrict (T.format "L{} DL=1\r\n" [idx])
             in  handleOxxiusCombinerOKCommand port msg
         oxxiusTypeSpecificInit _ _ _ = pure ()
 
@@ -66,7 +66,12 @@ instance Equipment OxxiusLC where
     equipmentName (OxxiusLC n _ _) = n
     flushSerialPorts (OxxiusLC _ port _) = flushSerialPort port
     closeDevice (OxxiusLC _ port chs) =
-        forM_ (map (oxxIndex . snd) chs) (\idx -> handleOxxiusLaserCommand port idx "L=0") >>
+        forM_ (map snd chs) (\(OxxiusLaserParams lType _ idx) ->
+            case lType of
+                LBX -> handleOxxiusLaserCommand port idx "L=0"
+                LCX -> let msg = LT.toStrict (T.format "L{} DL=0\r\n" [idx])
+                       in  handleOxxiusLaserCommand port idx "L=0" >>
+                           handleOxxiusCombinerOKCommand port msg) >>
         handleOxxiusCombinerOKCommand port "SH1 0" >> -- close shutter 1
         closeSerialPort port
     availableLightSources (OxxiusLC n _ chs) =
