@@ -33,7 +33,7 @@ instance Detector SCCamDetector where
     detectorName = sccCamName
     acquireData :: SCCamDetector -> IO AcquiredData
     acquireData (SCCamDetector camName) =
-        SC.acquireImages camName 1 >>= \(SC.MeasuredImages nRows nCols _ vec) ->
+        SC.acquireSingleImage camName >>= \(SC.MeasuredImages nRows nCols _ vec) ->
         getTime Monotonic >>= \timeStamp ->
         let bytes = byteStringFromVector vec
             numType = UINT16

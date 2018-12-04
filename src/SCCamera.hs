@@ -88,20 +88,19 @@ setCameraOrientation camName ops =
         encodedOp FlipHorizontalOp = 2
         encodedOp FlipVerticalOp = 3
 
-acquireImages :: Text -> Int -> IO MeasuredImages
-acquireImages camName nImages =
+acquireSingleImage :: Text -> IO MeasuredImages
+acquireSingleImage camName =
     withCString (T.unpack camName) $ \nameStr ->
     alloca $ \nRowsPtr ->
     alloca $ \nColsPtr ->
     alloca $ \imagePtrPtr ->
     poke imagePtrPtr nullPtr >>
-    let nIms = fromIntegral nImages
-    in  cAcquireImages nameStr nIms imagePtrPtr nRowsPtr nColsPtr >>= \result ->
-        when (result /= 0) (throwIO (userError ("AcquireImages returned error code " ++ show result))) >>
-        peek imagePtrPtr >>= newForeignPtr cReleaseImageData >>= \fPtr ->
-        fromIntegral <$> peek nRowsPtr >>= \nRows ->
-        fromIntegral <$> peek nColsPtr >>= \nCols ->
-        pure (MeasuredImages nRows nCols 0.0 (V.unsafeFromForeignPtr0 fPtr (nRows * nCols)))
+    cAcquireSingleImage nameStr imagePtrPtr nRowsPtr nColsPtr >>= \result ->
+    when (result /= 0) (throwIO (userError ("AcquireSingleImage returned error code " ++ show result))) >>
+    peek imagePtrPtr >>= newForeignPtr cReleaseImageData >>= \fPtr ->
+    fromIntegral <$> peek nRowsPtr >>= \nRows ->
+    fromIntegral <$> peek nColsPtr >>= \nCols ->
+    pure (MeasuredImages nRows nCols 0.0 (V.unsafeFromForeignPtr0 fPtr (nRows * nCols)))
 
 startAsyncAcquisition :: Text -> IO ()
 startAsyncAcquisition camName =
@@ -166,8 +165,8 @@ foreign import ccall unsafe "SCCameraDLL.h GetFrameRate"
 foreign import ccall unsafe "SCCameraDLL.h SetImageOrientation"
     cSetImageOrientation :: CString -> Ptr CInt -> CInt -> IO CInt
 
-foreign import ccall "SCCameraDLL.h AcquireImages"
-    cAcquireImages :: CString -> CInt -> Ptr (Ptr Word16) -> Ptr CInt -> Ptr CInt -> IO CInt
+foreign import ccall "SCCameraDLL.h AcquireSingleImage"
+    cAcquireSingleImage :: CString -> Ptr (Ptr Word16) -> Ptr CInt -> Ptr CInt -> IO CInt
 
 foreign import ccall "SCCameraDLL.h StartAsyncAcquisition"
     cStartAsyncAcquisition :: CString -> IO CInt
