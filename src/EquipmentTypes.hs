@@ -130,6 +130,11 @@ data EquipmentDescription = CoherentLightSourceDesc {
                                 oxxDescName :: !Text
                               , oxxDescPortName :: !String
                           }
+                          | MarcelOxxiusLCDesc {
+                                moxxDescName :: !Text
+                              , moxxDescPortName :: !String
+                              , moxxDescArduinoPortName :: !String
+                          }
                           | SutterLambda10BDesc {
                                 sl10BDescName :: !Text
                               , sl10BDescPortName :: !String
