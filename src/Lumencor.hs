@@ -81,8 +81,7 @@ instance Equipment MarcelLumencor where
     flushSerialPorts (MarcelLumencor _ lcP arP _ _) = flushSerialPort lcP >> flushSerialPort arP
     closeDevice (MarcelLumencor _ lcP arP _ _) = closeSerialPort lcP >> closeSerialPort arP
     availableLightSources e = availableLightSources (lumencorFromMarcelLumencor e)
-    activateLightSource e = activateLightSource (lumencorFromMarcelLumencor e)
-    activateLightSourceGated ml _ chs = handleMLIllumination ml chs MLGated
+    activateLightSource ml _ chs = handleMLIllumination ml chs MLGated
     activateLightSourceTimed ml _ chs dur = handleMLIllumination ml chs (MLTimed dur)
     deactivateLightSource ml =
         handleMarcelLumencorMessage ml "x" >>

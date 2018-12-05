@@ -198,7 +198,7 @@ executeDetection :: Detector a => [a] -> [EquipmentW] -> DetectionParams -> IO [
 executeDetection dets eqs dps =
     setDetectorOptions dets (dpDetectors dps) >>
     switchToFilters eqs (dpFilterParams dps) >>
-    enableLightSourcesGated eqs (dpIrradiation dps) >>
+    enableLightSources eqs (dpIrradiation dps) >>
     mapConcurrently acquireData requiredDets >>= \acquiredData ->
     disableLightSources eqs (dpIrradiation dps) >>
     return acquiredData
@@ -256,12 +256,6 @@ enableLightSources eqs params =
     forM_ params (\(IrradiationParams eqName sourceName channels powers) ->
         let [eq] = filter (\e -> equipmentName e == eqName) eqs
         in  activateLightSource eq sourceName (zip channels powers))
-
-enableLightSourcesGated :: [EquipmentW] -> [IrradiationParams] -> IO ()
-enableLightSourcesGated eqs params =
-    forM_ params (\(IrradiationParams eqName sourceName channels powers) ->
-        let [eq] = filter (\e -> equipmentName e == eqName) eqs
-        in  activateLightSourceGated eq sourceName (zip channels powers))
 
 disableLightSources :: [EquipmentW] -> [IrradiationParams] -> IO ()
 disableLightSources eqs params =

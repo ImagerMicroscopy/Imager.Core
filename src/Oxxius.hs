@@ -139,8 +139,7 @@ instance Equipment MarcelOxxiusLC where
     flushSerialPorts (MarcelOxxiusLC ox arPort) = flushSerialPorts ox >> flushSerialPort arPort
     closeDevice (MarcelOxxiusLC ox arPort) = closeDevice ox >> closeSerialPort arPort
     availableLightSources (MarcelOxxiusLC ox _) = availableLightSources ox
-    activateLightSource (MarcelOxxiusLC ox ardPort) n chs = activateLightSource ox n chs
-    activateLightSourceGated mox _ chs =
+    activateLightSource mox _ chs =
         let msg = marcelOxxiusIlluminationMessage mox chs MOMGated
         in  handleMarcelOxxiusMessage mox msg
     activateLightSourceTimed  mox _ chs dur =
@@ -176,7 +175,7 @@ marcelOxxiusIlluminationMessage mox chs mode =
                       MOMGated      -> channelMsgs
                       MOMTimed dur  -> let durationUS = max (10 :: Int) (round (1.0e6 * fromLSIlluminationDuration dur))
                                        in  T.encodeUtf8 $ LT.toStrict $ T.format "irr:{}:0:i {}" (durationUS, T.decodeUtf8 channelMsgs)
-        channelMsgs = B.intercalate " " (map (\c -> c <> "1") codes)
+        channelMsgs = B.intercalate " " (map (\c -> c <> "65535") codes)
     in  fullMsg
     where
         marcelOxxiusCodeForLaser :: OxxiusLaserParams -> ByteString

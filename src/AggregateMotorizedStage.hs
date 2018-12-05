@@ -53,7 +53,6 @@ instance Equipment AllButMotorizedStageEquipment where
     closeDevice e = closeDevice (abmsEq e)
     availableLightSources e = availableLightSources (abmsEq e)
     activateLightSource e = activateLightSource (abmsEq e)
-    activateLightSourceGated e = activateLightSourceGated (abmsEq e)
     deactivateLightSource e = deactivateLightSource (abmsEq e)
     availableFilterWheels e = availableFilterWheels (abmsEq e)
     switchToFilter e = switchToFilter (abmsEq e)

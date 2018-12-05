@@ -15,7 +15,6 @@ class Equipment e where
 
     availableLightSources :: e -> [LightSourceDescription]
     activateLightSource :: e -> LSName -> [(LSChannelName, LSIlluminationPower)] -> IO ()
-    activateLightSourceGated :: e -> LSName -> [(LSChannelName, LSIlluminationPower)] -> IO ()
     activateLightSourceTimed :: e -> LSName -> [(LSChannelName, LSIlluminationPower)] -> LSIlluminationDuration -> IO ()
     deactivateLightSource :: e -> IO ()
 
@@ -37,7 +36,6 @@ class Equipment e where
 
     availableLightSources _ = []
     activateLightSource e _ _ = error ("calling activateLightSource on " ++ show (fromEqName (equipmentName e)))
-    activateLightSourceGated = activateLightSource
     activateLightSourceTimed e n chs dur = activateLightSource e n chs >>
                                            threadDelay (round ((fromLSIlluminationDuration dur) * 1.0e6)) >>
                                            deactivateLightSource e
@@ -62,7 +60,6 @@ instance Equipment EquipmentW where
     closeDevice (EquipmentW e) = closeDevice e
     availableLightSources (EquipmentW e) = availableLightSources e
     activateLightSource (EquipmentW e) = activateLightSource e
-    activateLightSourceGated (EquipmentW e) = activateLightSourceGated e
     activateLightSourceTimed (EquipmentW e) = activateLightSourceTimed e
     deactivateLightSource (EquipmentW e) = deactivateLightSource e
     availableFilterWheels (EquipmentW e) = availableFilterWheels e
