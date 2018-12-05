@@ -249,7 +249,7 @@ executeIrradiation eqs params dur =
 
 switchToFilters :: [EquipmentW] -> [FilterParams] -> IO ()
 switchToFilters eqs fps =
-    forM_ fps (\(FilterParams eqName fwName fw) -> switchFilterWheel eqs eqName fwName fw)
+    forConcurrently_ fps (\(FilterParams eqName fwName fw) -> switchFilterWheel eqs eqName fwName fw)
 
 enableLightSources :: [EquipmentW] -> [IrradiationParams] -> IO ()
 enableLightSources eqs params =
