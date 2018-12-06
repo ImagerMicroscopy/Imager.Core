@@ -101,7 +101,10 @@ handleMLIllumination ml chs mode =
                                     in  T.encodeUtf8 $ LT.toStrict $ T.format "irr:{}:0:i {}" (durationUS, T.decodeUtf8 prepareMsg)
         prepareMsg = B.intercalate " " (map singleChannelMsg (map fst withLCChannels))
         singleChannelMsg lch = let chCode = fromJust $ lookup lch marcelLumencorChannelCoding
-                               in  chCode <> "65535"
+                                   nRepeats = case mode of
+                                                  MLGated   -> "65535"
+                                                  MLTimed _ -> "1"
+                               in  chCode <> nRepeats
 
 data LumencorChannel = LCViolet | LCBlue | LCCyan |LCTeal
                      | LCGreen | LCYellow | LCRed
