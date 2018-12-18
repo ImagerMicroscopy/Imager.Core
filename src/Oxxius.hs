@@ -58,7 +58,6 @@ initializeOxxiusLC' (OxxiusLCDesc name portName) =
     let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS19200}) (TimeoutMillis 1000) SerialPortNoDebug
     in  openSerialPort portName serialSettings >>= \port ->
         handleOxxiusCombinerOKCommand port "SH1=1" >> -- open shutter 1
-        handleOxxiusCombinerOKCommand port "CW=1" >> -- disable digital modulation
         getLaserDetails port >>= \lasers ->
         forM_ (map snd lasers) (\(OxxiusLaserParams lType _ _ idx) ->
             handleOxxiusLaserCommand port idx "CDRH=0" >>
@@ -89,14 +88,16 @@ initializeOxxiusLC' (OxxiusLCDesc name portName) =
             let msg = LT.toStrict (T.format "L{} DL=1\r\n" [idx])
             in  handleOxxiusCombinerOKCommand port msg
         oxxiusTypeSpecificInit port LBX idx = handleOxxiusLaserCommand port idx "TTL=0" >> -- disable digital modulation
-                                              handleOxxiusLaserCommand port idx "ACC=0" -- constant power mode
+                                              handleOxxiusLaserCommand port idx "ACC=0" >> -- regulate output power mode
+                                              handleOxxiusLaserCommand port idx "CW=1" -- constant power mode
 
 initializeMarcelOxxiusLC :: EquipmentDescription -> IO EquipmentW
 initializeMarcelOxxiusLC (MarcelOxxiusLCDesc name oxxPortName ardPortName) =
     let arSerialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS19200}) (TimeoutMillis 60000) SerialPortNoDebug
     in  initializeOxxiusLC' (OxxiusLCDesc name oxxPortName) >>= \(ox@(OxxiusLC _ oxPort lasers)) ->
         openSerialPort ardPortName arSerialSettings >>= \arPort -> threadDelay 2000000 >>
-        handleOxxiusCombinerOKCommand oxPort "AM=1" >> -- enable analog modulation
+        handleOxxiusCombinerEchoCommand oxPort "AM=1" >> -- enable analog modulation
+        putStrLn "sent it" >>
         forM_ (map snd lasers) (\(OxxiusLaserParams lType _ _ idx) ->
             enableAnalogMode oxPort lType idx) >>
         pure (EquipmentW (MarcelOxxiusLC ox arPort))
@@ -139,12 +140,12 @@ instance Equipment MarcelOxxiusLC where
     flushSerialPorts (MarcelOxxiusLC ox arPort) = flushSerialPorts ox >> flushSerialPort arPort
     closeDevice (MarcelOxxiusLC ox arPort) = closeDevice ox >> closeSerialPort arPort
     availableLightSources (MarcelOxxiusLC ox _) = availableLightSources ox
-    activateLightSource mox _ chs =
+    activateLightSource mox@(MarcelOxxiusLC ox _) n chs =
         let msg = marcelOxxiusIlluminationMessage mox chs MOMGated
-        in  handleMarcelOxxiusMessage mox msg
-    activateLightSourceTimed  mox _ chs dur =
+        in  activateLightSource ox n chs >> handleMarcelOxxiusMessage mox msg
+    activateLightSourceTimed mox@(MarcelOxxiusLC ox _) n chs dur =
         let msg = marcelOxxiusIlluminationMessage mox chs (MOMTimed dur)
-        in  handleMarcelOxxiusMessage mox msg
+        in  activateLightSource ox n chs >> handleMarcelOxxiusMessage mox msg
     deactivateLightSource mox@(MarcelOxxiusLC ox ardPort) =
       handleMarcelOxxiusMessage mox "x" >> deactivateLightSource ox
 
@@ -172,10 +173,10 @@ marcelOxxiusIlluminationMessage mox chs mode =
         laserParams = map snd . filter (\c -> (fst c) `elem` requestedLaserNames) $ availableLasers
         codes = map marcelOxxiusCodeForLaser laserParams
         fullMsg = case mode of
-                      MOMGated      -> channelMsgs
+                      MOMGated      -> channelMsgs "30000"
                       MOMTimed dur  -> let durationUS = max (10 :: Int) (round (1.0e6 * fromLSIlluminationDuration dur))
-                                       in  T.encodeUtf8 $ LT.toStrict $ T.format "irr:{}:0:i {}" (durationUS, T.decodeUtf8 channelMsgs)
-        channelMsgs = B.intercalate " " (map (\c -> c <> "65535") codes)
+                                       in  T.encodeUtf8 $ LT.toStrict $ T.format "irr:{}:0:i {}" (durationUS, T.decodeUtf8 (channelMsgs "1"))
+        channelMsgs nReps = B.intercalate " " (map (\c -> c <> nReps) codes)
     in  fullMsg
     where
         marcelOxxiusCodeForLaser :: OxxiusLaserParams -> ByteString
