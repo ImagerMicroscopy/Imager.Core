@@ -55,7 +55,7 @@ initializeOxxiusLC desc =
 
 initializeOxxiusLC' :: EquipmentDescription -> IO OxxiusLC
 initializeOxxiusLC' (OxxiusLCDesc name portName) =
-    let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS19200}) (TimeoutMillis 1000) SerialPortNoDebug
+    let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS19200}) (TimeoutMillis 1000) SerialPortDebugText
     in  openSerialPort portName serialSettings >>= \port ->
         handleOxxiusCombinerOKCommand port "SH1=1" >> -- open shutter 1
         getLaserDetails port >>= \lasers ->
@@ -87,7 +87,8 @@ initializeOxxiusLC' (OxxiusLCDesc name portName) =
         oxxiusTypeSpecificInit port LCX idx =
             let msg = LT.toStrict (T.format "L{} DL=1\r\n" [idx])
             in  handleOxxiusCombinerOKCommand port msg
-        oxxiusTypeSpecificInit port LBX idx = handleOxxiusLaserCommand port idx "TTL=0" >> -- disable digital modulation
+        oxxiusTypeSpecificInit port LBX idx = handleOxxiusLaserCommand port idx "L=0" >> -- turn off the laser just to make sure
+                                              handleOxxiusLaserCommand port idx "TTL=0" >> -- disable digital modulation
                                               handleOxxiusLaserCommand port idx "ACC=0" >> -- regulate output power mode
                                               handleOxxiusLaserCommand port idx "CW=1" -- constant power mode
 
