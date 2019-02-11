@@ -72,4 +72,6 @@ instance Equipment EquipmentW where
     hasRobot (EquipmentW e) = hasRobot e
     robotName (EquipmentW e) = robotName e
     listRobotPrograms (EquipmentW e) = listRobotPrograms e
+    robotAcceptsExternalCommands (EquipmentW e) = robotAcceptsExternalCommands e
     executeRobotProgram (EquipmentW e) = executeRobotProgram e
+    abortRobotProgramExecution (EquipmentW e) = abortRobotProgramExecution e
