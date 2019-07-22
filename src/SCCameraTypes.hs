@@ -8,7 +8,7 @@ import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
 import Data.Word
 
-data CameraProperty = NumericProperty {
+data DetectorProperty = NumericProperty {
                           npID :: !Int
                         , npDescription :: !Text
                         , npValue :: !Double
@@ -20,12 +20,12 @@ data CameraProperty = NumericProperty {
                         , dpAvailableOptions :: ![Text]
                       } deriving (Show)
 
-instance Eq CameraProperty where
+instance Eq DetectorProperty where
     (NumericProperty id1 _ v1) == (NumericProperty id2 _ v2) = (id1 == id2) && (v1 == v2)
     (DiscreteProperty id1 _ v1 _) == (DiscreteProperty id2 _ v2 _) = (id1 == id2) && (v1 == v2)
     _ == _ = False
 
-data CameraPropertyList = CameraPropertyList {fromCPList :: ![CameraProperty]}
+data DetectorPropertyList = DetectorPropertyList {fromCPList :: ![DetectorProperty]}
                           deriving (Show)
 
 data MeasuredImages = MeasuredImages {
@@ -40,13 +40,13 @@ data OrientationOp = RotateCWOp
                    | FlipHorizontalOp
                    | FlipVerticalOp
 
-instance ToJSON CameraProperty where
+instance ToJSON DetectorProperty where
     toJSON np@(NumericProperty _ _ _) = object ["propertycode" .= npID np, "descriptor" .= npDescription np,
                                                 "kind" .= ("numeric" :: Text), "value" .= npValue np]
     toJSON dp@(DiscreteProperty _ _ _ _) = object ["propertycode" .= dpID dp, "descriptor" .= dpDescription dp,
                                                    "kind" .= ("discrete" :: Text), "current" .= dpCurrentOption dp,
                                                    "availableoptions" .= dpAvailableOptions dp]
-instance FromJSON CameraProperty where
+instance FromJSON DetectorProperty where
     parseJSON (Object v) =
         v .: "kind" >>= \(kind :: Text) ->
         case kind of
@@ -60,6 +60,6 @@ instance FromJSON CameraProperty where
             _ -> fail "invalid kind of property object"
     parseJSON _ = fail "expected a JSON object"
 
-instance FromJSON CameraPropertyList where
-  parseJSON (Object v) = CameraPropertyList <$> v .: "properties"
+instance FromJSON DetectorPropertyList where
+  parseJSON (Object v) = DetectorPropertyList <$> v .: "properties"
   parseJSON _ = fail "expected a JSON object"

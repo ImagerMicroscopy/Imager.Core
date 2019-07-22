@@ -58,9 +58,9 @@ instance Detector SCCamDetector where
                     in  acqData `deepseq` writeChan chan (AsyncData acqData) >>
                         fetchImages (nImagesRemaining - 1) acqStart chan
 
-    getDetectorOptions :: SCCamDetector -> IO [CameraProperty]
-    getDetectorOptions (SCCamDetector camName) = SC.getCameraOptions camName
-    setDetectorOption :: SCCamDetector -> CameraProperty -> IO ()
+    getDetectorProperties :: SCCamDetector -> IO [DetectorProperty]
+    getDetectorProperties (SCCamDetector camName) = SC.getCameraOptions camName
+    setDetectorOption :: SCCamDetector -> DetectorProperty -> IO ()
     setDetectorOption (SCCamDetector camName) opt = SC.setCameraOption camName opt
     getDetectorFrameRate :: SCCamDetector -> IO Double
     getDetectorFrameRate (SCCamDetector camName) = SC.getFrameRate camName

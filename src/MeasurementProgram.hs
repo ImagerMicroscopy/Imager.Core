@@ -61,23 +61,23 @@ executeMeasurement env me ddets =
                      in  filter (\e -> (robotName e) `elem` usedRobotEqNames) eqs
         (ddetsWithoutCommon, commonDetectorProperties) =  removeCommonDetectorProperties ddets
 
-removeCommonDetectorProperties :: DefinedDetections -> (DefinedDetections, Map Text [CameraProperty])
+removeCommonDetectorProperties :: DefinedDetections -> (DefinedDetections, Map Text [DetectorProperty])
 removeCommonDetectorProperties ddets = (ddetsWithoutCommon, commonDetectorProperties)
     where
         allDetectorParams :: [DetectorParams]
         allDetectorParams = mconcat (map dpDetectors (M.elems ddets))
-        allDetectorProperties :: Map Text [[CameraProperty]]
-        allDetectorProperties = foldr (\dp accum -> M.insertWith (++) (dtpDetectorName dp) [(dtpDetectorOptions dp)] accum) M.empty allDetectorParams
-        commonDetectorProperties :: Map Text [CameraProperty]
+        allDetectorProperties :: Map Text [[DetectorProperty]]
+        allDetectorProperties = foldr (\dp accum -> M.insertWith (++) (dtpDetectorName dp) [(dtpDetectorProperties dp)] accum) M.empty allDetectorParams
+        commonDetectorProperties :: Map Text [DetectorProperty]
         commonDetectorProperties = M.map extractCommonDetectorProperties allDetectorProperties
             where
-              extractCommonDetectorProperties :: [[CameraProperty]] -> [CameraProperty]
+              extractCommonDetectorProperties :: [[DetectorProperty]] -> [DetectorProperty]
               extractCommonDetectorProperties pss =
                   let uniqueProperties = nub (mconcat pss)
                       commonProperties = filter (\prop -> all (prop `elem`) pss) uniqueProperties
                   in  commonProperties
         ddetsWithoutCommon = M.map (\detParams -> detParams {dpDetectors = removeCommon commonDetectorProperties (dpDetectors detParams)}) ddets
-        removeCommon :: Map Text [CameraProperty] -> [DetectorParams] -> [DetectorParams]
+        removeCommon :: Map Text [DetectorProperty] -> [DetectorParams] -> [DetectorParams]
         removeCommon commonmap dtorparams =
             map (\(DetectorParams name opts) -> DetectorParams name (filter (`notElem` (fromJust $ M.lookup name commonmap)) opts)) dtorparams
 
@@ -196,7 +196,7 @@ insertFastAcquisitionLoops d m = m
 
 executeDetection :: Detector a => [a] -> [EquipmentW] -> DetectionParams -> IO [AcquiredData]
 executeDetection dets eqs dps =
-    setDetectorOptions dets (dpDetectors dps) >>
+    setDetectorProperties dets (dpDetectors dps) >>
     switchToFilters eqs (dpFilterParams dps) >>
     enableLightSources eqs (dpIrradiation dps) >>
     mapConcurrently acquireData requiredDets >>= \acquiredData ->
@@ -206,8 +206,8 @@ executeDetection dets eqs dps =
         requiredDetNames = map dtpDetectorName (dpDetectors dps)
         requiredDets = filter (\d -> (detectorName d) `elem` requiredDetNames) dets
 
-setDetectorOptions :: Detector a => [a] -> [DetectorParams] -> IO ()
-setDetectorOptions dets dps =
+setDetectorProperties :: Detector a => [a] -> [DetectorParams] -> IO ()
+setDetectorProperties dets dps =
     forM_ dps (\(DetectorParams detName detOptions) ->
         let [thisDet] = filter ((==) detName . detectorName) dets
         in  mapM_ (setDetectorOption thisDet) detOptions)
@@ -215,7 +215,7 @@ setDetectorOptions dets dps =
 executeFastDetectionLoop :: Detector a => [a] -> [EquipmentW] -> (Text, DetectionParams) -> Int -> TimeSpec -> IORef Word64 -> MVar [(AcquisitionMetaData, AcquiredData)] -> IO ()
 executeFastDetectionLoop dets eqs (detName, detParams) nTimesToPerform startTime dataCounter dataMVar =
     getStagePositionSafe eqs >>= \stagePos ->
-    setDetectorOptions dets (dpDetectors detParams) >>
+    setDetectorProperties dets (dpDetectors detParams) >>
     switchToFilters eqs (dpFilterParams detParams) >>
     enableLightSources eqs (dpIrradiation detParams) >>
     newChan >>= \chan ->

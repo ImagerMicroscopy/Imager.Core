@@ -46,7 +46,7 @@ listConnectedCameras =
         mapM peekCString (take (fromIntegral nCameras) cStringList) >>= \cameraNames ->
         return (map T.pack cameraNames)
 
-getCameraOptions :: Text -> IO [CameraProperty]
+getCameraOptions :: Text -> IO [DetectorProperty]
 getCameraOptions camName =
     withCString (T.unpack camName) $ \nameStr ->
     alloca $ \strPtr ->
@@ -59,7 +59,7 @@ getCameraOptions camName =
         when ((not . isJust) decoded) (print decoded) >>
         (pure . fromCPList . fromJust) decoded)
 
-setCameraOption :: Text -> CameraProperty -> IO ()
+setCameraOption :: Text -> DetectorProperty -> IO ()
 setCameraOption camName option =
     withCString (T.unpack camName) $ \nameStr ->
     B.useAsCString (LB.toStrict $ encode option) $ \optStr ->

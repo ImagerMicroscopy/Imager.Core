@@ -48,7 +48,7 @@ data DetectionParams = DetectionParams {
 
 data DetectorParams = DetectorParams {
                           dtpDetectorName :: !Text
-                        , dtpDetectorOptions :: ![CameraProperty]
+                        , dtpDetectorProperties :: ![DetectorProperty]
                       }
                       deriving (Show)
 
@@ -119,11 +119,11 @@ instance ToJSON DetectionParams where
 instance FromJSON DetectorParams where
     parseJSON (Object v) =
         DetectorParams <$> v .: "detectorname"
-                       <*> v .: "detectoroptions"
+                       <*> v .: "detectorproperties"
     parseJSON _ = fail "can't decode detection params"
 instance ToJSON DetectorParams where
     toJSON (DetectorParams name options) =
-        object ["detectorname" .= name, "detectoroptions" .= options]
+        object ["detectorname" .= name, "detectorproperties" .= options]
 
 instance FromJSON IrradiationParams where
     parseJSON (Object v) =

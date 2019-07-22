@@ -140,7 +140,7 @@ performAction env (GetDetectorProperties detName) =
     then pure (StatusError "unknown detector", env)
     else
         ensureAsyncAcquisitionNotRunning env >>
-        getDetectorOptions det >>= \params ->
+        getDetectorProperties det >>= \params ->
         getDetectorFrameRate det >>= \fr ->
         return (DetectorPropertiesResponse params fr, env)
     where

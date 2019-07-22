@@ -4,7 +4,7 @@ module Detector (
     AcquiredData (..)
   , NumberType (..)
   , Detector (..)
-  , CameraProperty
+  , DetectorProperty
   , AsyncData (..)
   , ImageOrientationOperation (..)
   , NMeasurementsToPerform
@@ -55,8 +55,8 @@ class Detector a where
                                acquireData det >>= \acqData ->
                                writeChan chan (AsyncData acqData))
 
-    getDetectorOptions :: a -> IO [CameraProperty]
-    setDetectorOption :: a -> CameraProperty -> IO ()
+    getDetectorProperties :: a -> IO [DetectorProperty]
+    setDetectorOption :: a -> DetectorProperty -> IO ()
     getDetectorFrameRate :: a -> IO Double
     getDetectorWavelengths :: a -> IO (Vector Double)
     getDetectorWavelengths _ = return V.empty
