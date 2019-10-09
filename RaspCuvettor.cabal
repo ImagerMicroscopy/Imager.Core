@@ -39,43 +39,43 @@ executable RaspCuvettor
   other-modules:       AcquiredDataTypes
                      , AggregateMotorizedStage
                      , CuvettorTypes
-                     , BinaryEncoding
-                     , BlueBoxOptics
-                     , Equipment
-                     , EquipmentTypes
-                     , EquipmentInitialization
-                     , EquipmentEncoding
-                     , FilterUtils
-                     , Marzhauser
-                     , MeasurementProgram
-                     , MeasurementProgramTypes
-                     , MeasurementProgramUtils
-                     , MeasurementProgramVerification
-                     , MicroscopeController
+                     , Encodings.BinaryEncoding
+                     , Equipment.Devices.BlueBoxOptics
+                     , Equipment.Equipment
+                     , Equipment.EquipmentTypes
+                     , Equipment.EquipmentInitialization
+                     , Encodings.EquipmentEncoding
+                     , Utils.FilterUtils
+                     , Equipment.Devices.Marzhauser
+                     , Measurements.MeasurementProgram
+                     , Measurements.MeasurementProgramTypes
+                     , Utils.MeasurementProgramUtils
+                     , Measurements.MeasurementProgramVerification
+                     , Equipment.Devices.MicroscopeController
                      , RCSerialPort
-                     , Detector
-                     , AvailableDetector
-                     , MiscUtils
-                     , Arduino
-                     , Asahi
-                     , Coherent
-                     , DummyEquipment
-                     , Lumencor
-                     , Marzhauser
-                     , Olympus
-                     , Oxxius
-                     , Prior
-                     , Robottor
-                     , Sutter
-                     , SCCamera
-                     , SCCameraTypes
-                     , SCCamDetector
-                     , Thorlabs
+                     , Detectors.Detector
+                     , Detectors.AvailableDetector
+                     , Utils.MiscUtils
+                     , Equipment.Devices.Arduino
+                     , Equipment.Devices.Asahi
+                     , Equipment.Devices.Coherent
+                     , Dummy.DummyEquipment
+                     , Equipment.Devices.Lumencor
+                     , Equipment.Devices.Olympus
+                     , Equipment.Devices.Oxxius
+                     , Equipment.Devices.Prior
+                     , Equipment.Devices.Robottor
+                     , Equipment.Devices.Sutter
+                     , Equipment.Devices.RemoteStage
+                     , Camera.SCCamera
+                     , Camera.SCCameraTypes
+                     , Detectors.SCCamDetector
+                     , Equipment.Devices.Thorlabs
   default-extensions:  CPP, BangPatterns, OverloadedStrings, ScopedTypeVariables
   extra-lib-dirs:      C:\hslibs
   extra-libraries:     MicroscopeControl
                      , SCCamera
   ghc-options:         -O2 -threaded -rtsopts -funbox-strict-fields
- 
+
   if (os(windows))
       cpp-options:     -DWINDOWS

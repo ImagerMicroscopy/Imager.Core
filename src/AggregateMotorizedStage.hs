@@ -6,9 +6,9 @@ import Control.Exception
 import Control.Monad
 import Data.List
 
-import Equipment
-import EquipmentTypes
-import MiscUtils
+import Equipment.Equipment
+import Equipment.EquipmentTypes
+import Utils.MiscUtils
 
 {-
     overall idea: extract all equipment that has a motorized stage.
