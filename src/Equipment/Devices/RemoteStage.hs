@@ -34,7 +34,7 @@ instance Equipment RemoteStage where
     motorizedStageName _ = StageName "stage"
     supportedStageAxes _ = [XAxis, YAxis, ZAxis] -- TODO: Priorstage has psAxes
     getStagePosition rs = putStrLn "get stage position" >> handleRemoteStageRequest rs GetStagePosition >>= \(Position ps) -> putStrLn (show ps) >> return ps
-    setStagePosition rs ps = putStrLn "set stage position" >> _handleRemoteStageRequest rs (SetStagePosition ps) -- TODO: wait until moving is done?
+    setStagePosition rs ps = putStrLn "set stage position" >> _handleRemoteStageRequest rs (SetStagePosition ps)
 
 handleRemoteStageRequest :: RemoteStage -> RemoteStageRequest -> IO RemoteStageResponse
 handleRemoteStageRequest (RemoteStage _ ip port) req = putStrLn ("handle remote stage request: " ++ (show req)) >>
@@ -50,19 +50,16 @@ _handleRemoteStageRequest r req = handleRemoteStageRequest r req >> return ()
 
 data RemoteStageRequest = GetStagePosition
                         | SetStagePosition !StagePosition
-                        -- | IsMovingRequest
                         deriving (Show)
 
 data RemoteStageResponse = OKRemoteStageResponse
                          | ErrorRemoteStageResponse !Text
                          | Position !StagePosition
-                         --m| IsMoving !Bool
                          deriving (Show)
 
 instance ToJSON RemoteStageRequest where
   toJSON GetStagePosition = object ["type" .= ("getposition" :: Text)]
   toJSON (SetStagePosition sp) = object ["type" .= ("setposition" :: Text), "position" .= sp]
-  -- toJSON IsMovingRequest = object ["type" .= ("ismoving" :: Text)]
 
 instance FromJSON RemoteStageResponse where
   parseJSON (Object v) =
@@ -74,6 +71,5 @@ instance FromJSON RemoteStageResponse where
                               "error" -> ErrorRemoteStageResponse <$> v .: "error"
                               _       -> fail "unknown status"
         "position" -> Position <$> v .: "stageposition"
-        -- "ismoving" -> IsMoving <$> v .: "status"
         _             -> fail "can't decode remote stage response type"
   parseJSON _ = fail "can't decode remote stage response"
