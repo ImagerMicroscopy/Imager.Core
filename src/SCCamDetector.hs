@@ -10,6 +10,7 @@ import Control.Exception
 import Control.Monad.Trans.Except
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
+import Data.Maybe
 import Data.Text (Text)
 import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
@@ -52,11 +53,15 @@ instance Detector SCCamDetector where
             fetchImages nImagesRemaining acqStart chan
                 | nImagesRemaining == 0 = return ()
                 | otherwise =
-                    SC.getNextAcquiredImage camName >>= \(SC.MeasuredImages nRows nCols timeStamp imageData) ->
+                    fetchNextImage >>= \(SC.MeasuredImages nRows nCols timeStamp imageData) ->
                     let shiftedTimeStamp = fromNanoSecs (toNanoSecs acqStart + round (timeStamp * 1.0e9))
                         acqData = AcquiredData nRows nCols shiftedTimeStamp camName (byteStringFromVector imageData) UINT16
                     in  acqData `deepseq` writeChan chan (AsyncData acqData) >>
                         fetchImages (nImagesRemaining - 1) acqStart chan
+            fetchNextImage = SC.getNextAcquiredImage camName 500 >>= \maybeImg ->
+                             if (isJust maybeImg)
+                                 then return (fromJust maybeImg)
+                                 else fetchNextImage
 
     getDetectorProperties :: SCCamDetector -> IO [DetectorProperty]
     getDetectorProperties (SCCamDetector camName) = SC.getCameraOptions camName
