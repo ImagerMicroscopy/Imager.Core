@@ -1,6 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
 
-module Camera.SCCamera where
+module SCCamera where
 
 import Control.Concurrent
 import Control.Exception
@@ -26,7 +26,7 @@ import Foreign.Marshal
 import Foreign.Ptr
 import Foreign.Storable
 
-import Camera.SCCameraTypes
+import SCCameraTypes
 
 initializeCameraDLL :: IO (Either String ())
 initializeCameraDLL = cInitCameraDLL >>= \result ->
@@ -110,21 +110,25 @@ startAsyncAcquisition camName =
            0 -> return ()
            e -> throwIO (userError ("startAsyncAcquisition returned error code " ++ show e))
 
-getNextAcquiredImage :: Text -> IO MeasuredImages
-getNextAcquiredImage camName =
+getNextAcquiredImage :: Text -> Word -> IO (Maybe MeasuredImages)
+getNextAcquiredImage camName timeoutMillis =
     withCString (T.unpack camName) $ \nameStr ->
     alloca $ \imagePtrPtr ->
     alloca $ \nRowsPtr ->
     alloca $ \nColsPtr ->
     alloca $ \timeStampPtr ->
     poke imagePtrPtr nullPtr >>
-    cGetOldestImageAsyncAcquired nameStr imagePtrPtr nRowsPtr nColsPtr timeStampPtr >>= \result ->
+    cGetOldestImageAsyncAcquired nameStr (fromIntegral timeoutMillis) imagePtrPtr nRowsPtr nColsPtr timeStampPtr >>= \result ->
     when (result /= 0) (throwIO (userError ("GetLastImageAsyncAcquired returned error code " ++ show result))) >>
-    peek imagePtrPtr >>= newForeignPtr cReleaseImageData >>= \fPtr ->
-    fromIntegral <$> peek nRowsPtr >>= \nRows ->
-    fromIntegral <$> peek nColsPtr >>= \nCols ->
-    fromCDouble <$> peek timeStampPtr >>= \timeStamp ->
-    pure (MeasuredImages nRows nCols timeStamp (V.unsafeFromForeignPtr0 fPtr (nRows * nCols)))
+    peek imagePtrPtr >>= \imgPtr ->
+    if (imgPtr == nullPtr)
+        then return Nothing
+        else
+            newForeignPtr cReleaseImageData imgPtr >>= \fPtr ->
+            fromIntegral <$> peek nRowsPtr >>= \nRows ->
+            fromIntegral <$> peek nColsPtr >>= \nCols ->
+            fromCDouble <$> peek timeStampPtr >>= \timeStamp ->
+            pure (Just (MeasuredImages nRows nCols timeStamp (V.unsafeFromForeignPtr0 fPtr (nRows * nCols))))
 
 abortAsyncAcquisition :: Text -> IO ()
 abortAsyncAcquisition camName =
@@ -172,7 +176,7 @@ foreign import ccall "SCCameraDLL.h StartAsyncAcquisition"
     cStartAsyncAcquisition :: CString -> IO CInt
 
 foreign import ccall "SCCameraDLL.h GetOldestImageAsyncAcquired"
-    cGetOldestImageAsyncAcquired :: CString -> Ptr (Ptr Word16) -> Ptr CInt -> Ptr CInt -> Ptr CDouble -> IO CInt
+    cGetOldestImageAsyncAcquired :: CString -> Word32 -> Ptr (Ptr Word16) -> Ptr CInt -> Ptr CInt -> Ptr CDouble -> IO CInt
 
 foreign import ccall unsafe "SCCameraDLL.h &ReleaseImageData"
     cReleaseImageData :: FunPtr (Ptr Word16 -> IO ())
