@@ -81,8 +81,8 @@ removeCommonDetectorProperties ddets = (ddetsWithoutCommon, commonDetectorProper
         removeCommon commonmap dtorparams =
             map (\(DetectorParams name opts) -> DetectorParams name (filter (`notElem` (fromJust $ M.lookup name commonmap)) opts)) dtorparams
 
-executeMeasurementElements :: Detector a => ProgramEnvironment a -> DefinedDetections -> [MeasurementElement] -> IO ()
-executeMeasurementElements env ddets es = mapM_ (executeMeasurementElement env ddets) es
+executeMeasurementElements :: Detector a => ProgramEnvironment a -> DefinedDetections -> Prog -> IO ()
+executeMeasurementElements env ddets es = foldMap (executeMeasurementElement env ddets) es
 
 executeMeasurementElement :: Detector a => ProgramEnvironment a -> DefinedDetections -> MeasurementElement -> IO ()
 executeMeasurementElement env ddets (MEDetection detNames) =

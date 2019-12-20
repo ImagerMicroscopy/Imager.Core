@@ -33,15 +33,21 @@ instance Equipment RemoteStage where
     hasMotorizedStage _ = True
     motorizedStageName _ = StageName "stage"
     supportedStageAxes _ = [XAxis, YAxis, ZAxis] -- TODO: Priorstage has psAxes
-    getStagePosition rs = putStrLn "get stage position" >> handleRemoteStageRequest rs GetStagePosition >>= \(Position ps) -> putStrLn (show ps) >> return ps
-    setStagePosition rs ps = putStrLn "set stage position" >> _handleRemoteStageRequest rs (SetStagePosition ps)
+    getStagePosition rs = putStrLn "get stage position"
+                          >> handleRemoteStageRequest rs GetStagePosition
+                          >>= \(Position ps) -> putStrLn (show ps)
+                          >> return ps
+    setStagePosition rs ps = putStrLn "set stage position"
+                             >> _handleRemoteStageRequest rs (SetStagePosition ps)
 
 handleRemoteStageRequest :: RemoteStage -> RemoteStageRequest -> IO RemoteStageResponse
 handleRemoteStageRequest (RemoteStage _ ip port) req = putStrLn ("handle remote stage request: " ++ (show req)) >>
     let serverParams = QueryServerParams ip port (floor 1e6) isCompleteJSONObject decodeJSONObject
         queryMsg     = (LB.toStrict . encode) req
-    in  putStrLn (show queryMsg) >> queryServer serverParams queryMsg `catch` (\(e :: IOException) -> throw (userError "can't communicate with RemoteStage program")) >>= \response ->
-        putStrLn (show response) >> case response of
+    in  putStrLn (show queryMsg)
+        >> queryServer serverParams queryMsg `catch` (\(e :: IOException) -> throw (userError "can't communicate with RemoteStage program"))
+        >>= \response -> putStrLn (show response)
+        >> case response of
             ErrorRemoteStageResponse err -> throwIO (userError ("error from RemoteStage: " ++ T.unpack err))
             resp                         -> return resp
 

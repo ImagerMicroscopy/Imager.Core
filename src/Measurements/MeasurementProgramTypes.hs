@@ -18,15 +18,17 @@ import Equipment.Equipment
 import Equipment.EquipmentTypes
 import Camera.SCCameraTypes
 
+type Prog = [MeasurementElement]
+
 data MeasurementElement = MEDetection ![Text]
                         | MEIrradiation !LSIlluminationDuration ![IrradiationParams]
                         | MEWait !Double
                         | MEExecuteRobotProgram !RobotName !RobotProgramName !Bool
-                        | MEDoTimes !Int ![MeasurementElement]
+                        | MEDoTimes !Int !Prog
                         | MEFastAcquisitionLoop !Int !(Text, DetectionParams)
-                        | METimeLapse !Int !Double ![MeasurementElement]
-                        | MEStageLoop !StageName ![PositionNameAndCoords] ![MeasurementElement]
-                        | MERelativeStageLoop !StageName !RelativeStageLoopParams ![MeasurementElement]
+                        | METimeLapse !Int !Double !Prog
+                        | MEStageLoop !StageName ![PositionNameAndCoords] !Prog
+                        | MERelativeStageLoop !StageName !RelativeStageLoopParams !Prog
                         deriving (Show)
 
 type DefinedDetections = Map Text DetectionParams
