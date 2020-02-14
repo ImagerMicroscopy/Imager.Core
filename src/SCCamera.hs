@@ -74,6 +74,17 @@ getFrameRate camName =
   when (result /= 0) (throwIO $ userError ("cGetFrameRate returned error code " ++ show result)) >>
   fromCDouble <$> peek frPtr
 
+isConfiguredForHardwareTriggering :: Text -> IO Bool
+isConfiguredForHardwareTriggering camName =
+    withCString (T.unpack camName) $ \nameStr ->
+    alloca $ \isConfPtr ->
+    cIsConfiguredForHardwareTriggering nameStr isConfPtr >>= \result ->
+    when (result /= 0) (throwIO $ userError ("cIsConfiguredForHardwareTriggering returned error code " ++ show result)) >>
+    peek isConfPtr >>= \isConf ->
+    if (isConf == 0)
+        then (pure False)
+        else (pure True)
+
 setCameraOrientation :: Text -> [OrientationOp] -> IO ()
 setCameraOrientation camName ops =
     withCString (T.unpack camName) $ \nameStr ->
@@ -165,6 +176,9 @@ foreign import ccall "SCCameraDLL.h SetCameraOption"
 
 foreign import ccall unsafe "SCCameraDLL.h GetFrameRate"
     cGetFrameRate :: CString -> Ptr CDouble -> IO CInt
+
+foreign import ccall unsafe "SCCameraDLL.h  IsConfiguredForHardwareTriggering"
+    cIsConfiguredForHardwareTriggering :: CString -> Ptr CInt -> IO CInt
 
 foreign import ccall unsafe "SCCameraDLL.h SetImageOrientation"
     cSetImageOrientation :: CString -> Ptr CInt -> CInt -> IO CInt
