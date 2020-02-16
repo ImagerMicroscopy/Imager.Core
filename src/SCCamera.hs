@@ -177,7 +177,7 @@ foreign import ccall "SCCameraDLL.h SetCameraOption"
 foreign import ccall unsafe "SCCameraDLL.h GetFrameRate"
     cGetFrameRate :: CString -> Ptr CDouble -> IO CInt
 
-foreign import ccall unsafe "SCCameraDLL.h  IsConfiguredForHardwareTriggering"
+foreign import ccall unsafe "SCCameraDLL.h IsConfiguredForHardwareTriggering"
     cIsConfiguredForHardwareTriggering :: CString -> Ptr CInt -> IO CInt
 
 foreign import ccall unsafe "SCCameraDLL.h SetImageOrientation"

@@ -177,3 +177,10 @@ concatMaybes ms | Nothing `elem` ms = Nothing
                 | otherwise = Just (map fromJust ms)
 
 fromCDouble (CDouble d) = d
+
+partitionM :: (Monad m) => (a -> m Bool) -> [a] -> m ([a],[a])
+partitionM f [] = return ([], [])
+partitionM f (x:xs) = do
+    res <- f x
+    (as,bs) <- partitionM f xs
+    return ([x | res]++as, [x | not res]++bs)

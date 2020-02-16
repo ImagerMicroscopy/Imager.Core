@@ -39,6 +39,7 @@ import MeasurementProgramTypes
 import MeasurementProgramVerification
 import MeasurementProgramUtils
 import MiscUtils
+import SCCamDetector
 
 executeMeasurement :: Detector a => ProgramEnvironment a -> MeasurementElement -> DefinedDetections -> IO ()
 executeMeasurement env me ddets =
@@ -86,13 +87,8 @@ executeMeasurementElements env ddets es = mapM_ (executeMeasurementElement env d
 
 executeMeasurementElement :: Detector a => ProgramEnvironment a -> DefinedDetections -> MeasurementElement -> IO ()
 executeMeasurementElement env ddets (MEDetection detNames) =
-    getStagePositionSafe eqs >>= \stagePos ->
-    forM_ (zip detNames detParams) (\(dName, p) ->
-        executeDetection detectors eqs p >>= \acqs ->
-        forM_ acqs (\acq ->
-            readIORef counter >>= \idx ->
-            writeIORef counter (idx + 1) >>
-            acq `deepseq` addDataToMVar mvar startTime idx stagePos dName acq))
+    withStatusMessage env "Detection" (
+        executeDetection detectors eqs (detNames, detParams) startTime counter mvar)
     where
       eqs = peEquipment env
       detectors = peDetectors env
@@ -194,17 +190,21 @@ insertFastAcquisitionLoops ddets (MEStageLoop n pos es) = MEStageLoop n pos (map
 insertFastAcquisitionLoops ddets (MERelativeStageLoop n ps es) = MERelativeStageLoop n ps (map (insertFastAcquisitionLoops ddets) es)
 insertFastAcquisitionLoops d m = m
 
-executeDetection :: Detector a => [a] -> [EquipmentW] -> DetectionParams -> IO [AcquiredData]
-executeDetection dets eqs dps =
-    setDetectorProperties dets (dpDetectors dps) >>
-    switchToFilters eqs (dpFilterParams dps) >>
-    enableLightSources eqs (dpIrradiation dps) >>
-    mapConcurrently acquireData requiredDets >>= \acquiredData ->
-    disableLightSources eqs (dpIrradiation dps) >>
-    return acquiredData
-    where
-        requiredDetNames = map dtpDetectorName (dpDetectors dps)
-        requiredDets = filter (\d -> (detectorName d) `elem` requiredDetNames) dets
+executeDetection :: Detector a => [a] -> [EquipmentW] -> ([Text], [DetectionParams]) -> TimeSpec -> IORef Word64 -> MVar [(AcquisitionMetaData, AcquiredData)] -> IO ()
+executeDetection dets eqs (detNames, detParams) startTime dataCounter dataMVar =
+    getStagePositionSafe eqs >>= \stagePos ->
+    forM_ (zip detNames detParams) (\(dName, dps) ->
+        setDetectorProperties dets (dpDetectors dps) >>
+        switchToFilters eqs (dpFilterParams dps) >>
+        enableLightSources eqs (dpIrradiation dps) >>
+        let requiredDetNames = map dtpDetectorName (dpDetectors dps)
+            requiredDets = filter (\d -> (detectorName d) `elem` requiredDetNames) dets
+        in  mapConcurrently acquireData requiredDets >>= \acquiredData ->
+            disableLightSources eqs (dpIrradiation dps) >>
+            forM_ acquiredData (\acq ->
+                readIORef dataCounter >>= \idx ->
+                writeIORef dataCounter (idx + 1) >>
+                acq `deepseq` addDataToMVar dataMVar startTime idx stagePos dName acq))
 
 setDetectorProperties :: Detector a => [a] -> [DetectorParams] -> IO ()
 setDetectorProperties dets dps =
@@ -217,14 +217,19 @@ executeFastDetectionLoop dets eqs (detName, detParams) nTimesToPerform startTime
     getStagePositionSafe eqs >>= \stagePos ->
     setDetectorProperties dets (dpDetectors detParams) >>
     switchToFilters eqs (dpFilterParams detParams) >>
-    enableLightSources eqs (dpIrradiation detParams) >>
-    newChan >>= \chan ->
-    withAsync (forConcurrently_ requiredDets (\det -> acquireStreamingData det nTimesToPerform chan)) (\as ->
-        fetchData stagePos 0 0 as chan) >>
+    fastStreamingAcquisition requiredDets (enableLightSources eqs (dpIrradiation detParams)) detName nTimesToPerform stagePos startTime dataCounter dataMVar >>
     disableLightSources eqs (dpIrradiation detParams)
     where
         requiredDetNames = map dtpDetectorName (dpDetectors detParams)
         requiredDets = filter (\d -> (detectorName d) `elem` requiredDetNames) dets
+        nRequiredDets = length requiredDets
+
+fastStreamingAcquisition :: Detector a => [a] -> IO () -> Text -> Int -> StagePosition -> TimeSpec -> IORef Word64 -> MVar [(AcquisitionMetaData, AcquiredData)] -> IO ()
+fastStreamingAcquisition requiredDets enableLightSourcesAction detName nTimesToPerform stagePos startTime dataCounter dataMVar =
+    newChan >>= \chan ->
+    withAsync (acquireMultipleDetectorStreamingData requiredDets enableLightSourcesAction nTimesToPerform chan) (\as ->
+        fetchData stagePos 0 0 as chan)
+    where
         nRequiredDets = length requiredDets
         fetchData :: StagePosition -> Int -> Int -> Async () -> Chan AsyncData -> IO ()
         fetchData pos nFetched nFinished as chan

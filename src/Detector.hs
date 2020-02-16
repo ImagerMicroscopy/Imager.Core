@@ -8,6 +8,7 @@ module Detector (
   , AsyncData (..)
   , ImageOrientationOperation (..)
   , NMeasurementsToPerform
+  , acquireMultipleDetectorStreamingData
 ) where
 
 import Control.Concurrent
@@ -25,8 +26,9 @@ import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
 
 import AcquiredDataTypes
-import SCCamera
+import SCCamera hiding(isConfiguredForHardwareTriggering)
 import SCCameraTypes
+import MiscUtils
 
 type ExposureTime = Double
 type Gain = Double
@@ -47,9 +49,9 @@ data ImageOrientationOperation = IPORotateCW
 class Detector a where
     detectorName :: a -> Text
     acquireData :: a -> IO AcquiredData
-    acquireStreamingData :: a -> NMeasurementsToPerform -> Chan AsyncData -> IO ()
-    acquireStreamingData det nMeasurements chan =
-        (acquire chan >> writeChan chan AsyncFinished) `onException` (writeChan chan AsyncError)
+    acquireStreamingData :: a -> NMeasurementsToPerform -> MVar () -> Chan AsyncData -> IO ()
+    acquireStreamingData det nMeasurements hasStarted chan =
+        (putMVar hasStarted () >> acquire chan >> writeChan chan AsyncFinished) `onException` (writeChan chan AsyncError)
         where
             acquire chan = forM_ [1 .. nMeasurements] (\_ ->
                                acquireData det >>= \acqData ->
@@ -58,7 +60,20 @@ class Detector a where
     getDetectorProperties :: a -> IO [DetectorProperty]
     setDetectorOption :: a -> DetectorProperty -> IO ()
     getDetectorFrameRate :: a -> IO Double
+    isConfiguredForHardwareTriggering :: a -> IO Bool
     getDetectorWavelengths :: a -> IO (Vector Double)
     getDetectorWavelengths _ = return V.empty
     setImageOrientation :: a -> [ImageOrientationOperation] -> IO ()
     setImageOrientation _ _ = pure ()
+
+acquireMultipleDetectorStreamingData :: (Detector a) => [a] -> IO () -> NMeasurementsToPerform -> Chan AsyncData -> IO ()
+acquireMultipleDetectorStreamingData dets actionBeforeAcquisition nMeasurements chan =
+    partitionM isConfiguredForHardwareTriggering dets >>= \(withTrigs, withoutTrigs) ->
+    replicateM (length withTrigs) newEmptyMVar >>= \trigMVars ->
+    withAsync (forConcurrently_ (zip withTrigs trigMVars) (\(det, hasStarted) ->
+                   acquireStreamingData det nMeasurements hasStarted chan)) (\firstAs ->
+        actionBeforeAcquisition >>
+        mapM_ takeMVar trigMVars >>
+        withAsync (forConcurrently_ withoutTrigs (\det -> newEmptyMVar >>= \hasStarted ->
+                                                          acquireStreamingData det nMeasurements hasStarted chan)) (\secondAs ->
+            wait firstAs >> wait secondAs))
