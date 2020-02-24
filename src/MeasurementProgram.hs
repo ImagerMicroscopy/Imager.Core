@@ -195,16 +195,19 @@ executeDetection dets eqs (detNames, detParams) startTime dataCounter dataMVar =
     getStagePositionSafe eqs >>= \stagePos ->
     forM_ (zip detNames detParams) (\(dName, dps) ->
         setDetectorProperties dets (dpDetectors dps) >>
-        switchToFilters eqs (dpFilterParams dps) >>
-        enableLightSources eqs (dpIrradiation dps) >>
         let requiredDetNames = map dtpDetectorName (dpDetectors dps)
             requiredDets = filter (\d -> (detectorName d) `elem` requiredDetNames) dets
-        in  mapConcurrently acquireData requiredDets >>= \acquiredData ->
-            disableLightSources eqs (dpIrradiation dps) >>
-            forM_ acquiredData (\acq ->
-                readIORef dataCounter >>= \idx ->
-                writeIORef dataCounter (idx + 1) >>
-                acq `deepseq` addDataToMVar dataMVar startTime idx stagePos dName acq))
+        in  mapM isConfiguredForHardwareTriggering requiredDets >>= \hasTriggering ->
+            if (or hasTriggering)
+            then executeFastDetectionLoop dets eqs (dName, dps) 1 startTime dataCounter dataMVar
+            else switchToFilters eqs (dpFilterParams dps) >>
+                 enableLightSources eqs (dpIrradiation dps) >>
+                 mapConcurrently acquireData requiredDets >>= \acquiredData ->
+                 disableLightSources eqs (dpIrradiation dps) >>
+                 forM_ acquiredData (\acq ->
+                     readIORef dataCounter >>= \idx ->
+                     writeIORef dataCounter (idx + 1) >>
+                     acq `deepseq` addDataToMVar dataMVar startTime idx stagePos dName acq))
 
 setDetectorProperties :: Detector a => [a] -> [DetectorParams] -> IO ()
 setDetectorProperties dets dps =
