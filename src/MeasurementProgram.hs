@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards, ScopedTypeVariables, OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards, ScopedTypeVariables, OverloadedStrings, NumDecimals #-}
 module MeasurementProgram (
     executeMeasurement
   , executeDetection
@@ -217,37 +217,46 @@ setDetectorProperties dets dps =
 
 executeFastDetectionLoop :: Detector a => [a] -> [EquipmentW] -> (Text, DetectionParams) -> Int -> TimeSpec -> IORef Word64 -> MVar [(AcquisitionMetaData, AcquiredData)] -> IO ()
 executeFastDetectionLoop dets eqs (detName, detParams) nTimesToPerform startTime dataCounter dataMVar =
-    getStagePositionSafe eqs >>= \stagePos ->
     setDetectorProperties dets (dpDetectors detParams) >>
     switchToFilters eqs (dpFilterParams detParams) >>
-    fastStreamingAcquisition requiredDets (enableLightSources eqs (dpIrradiation detParams)) detName nTimesToPerform stagePos startTime dataCounter dataMVar >>
+    fastStreamingAcquisition requiredDets (enableLightSources eqs (dpIrradiation detParams)) detName nTimesToPerform (getStagePositionSafe eqs) startTime dataCounter dataMVar >>
     disableLightSources eqs (dpIrradiation detParams)
     where
         requiredDetNames = map dtpDetectorName (dpDetectors detParams)
         requiredDets = filter (\d -> (detectorName d) `elem` requiredDetNames) dets
         nRequiredDets = length requiredDets
 
-fastStreamingAcquisition :: Detector a => [a] -> IO () -> Text -> Int -> StagePosition -> TimeSpec -> IORef Word64 -> MVar [(AcquisitionMetaData, AcquiredData)] -> IO ()
-fastStreamingAcquisition requiredDets enableLightSourcesAction detName nTimesToPerform stagePos startTime dataCounter dataMVar =
+fastStreamingAcquisition :: Detector a => [a] -> IO () -> Text -> Int -> IO StagePosition -> TimeSpec -> IORef Word64 -> MVar [(AcquisitionMetaData, AcquiredData)] -> IO ()
+fastStreamingAcquisition requiredDets enableLightSourcesAction detName nTimesToPerform readStagePosFunc startTime dataCounter dataMVar =
     newChan >>= \chan ->
-    withAsync (acquireMultipleDetectorStreamingData requiredDets enableLightSourcesAction nTimesToPerform chan) (\as ->
-        fetchData stagePos 0 0 as chan)
+    readStagePosFunc >>= newIORef >>= \stagePosRef ->
+    withAsync (stagePositionWorker readStagePosFunc stagePosRef) (\stageAs ->
+        withAsync (acquireMultipleDetectorStreamingData requiredDets enableLightSourcesAction nTimesToPerform chan) (\as ->
+            fetchData stagePosRef 0 0 as chan >>
+            cancel stageAs >>
+            wait as))
     where
         nRequiredDets = length requiredDets
-        fetchData :: StagePosition -> Int -> Int -> Async () -> Chan AsyncData -> IO ()
-        fetchData pos nFetched nFinished as chan
+        fetchData :: IORef StagePosition -> Int -> Int -> Async () -> Chan AsyncData -> IO ()
+        fetchData posRef nFetched nFinished as chan
             | nFinished == nRequiredDets = wait as
             | otherwise =
                   readChan chan >>= \val ->
                   case val of
                       AsyncFinished -> performMajorGC >>
-                                       fetchData pos nFetched (nFinished + 1) as chan
+                                       fetchData posRef nFetched (nFinished + 1) as chan
                       AsyncError    -> performMajorGC >> throwIO (userError "error during fast acquisition loop")
                       AsyncData r   -> when (nFetched `mod` 50 == 49) (performMajorGC) >>
+                                       readIORef posRef >>= \pos ->
                                        readIORef dataCounter >>= \idx ->
                                        writeIORef dataCounter (idx + 1) >>
                                        r `deepseq` addDataToMVar dataMVar startTime idx pos detName r >>
-                                       fetchData pos (nFetched + 1) nFinished as chan
+                                       fetchData posRef (nFetched + 1) nFinished as chan
+        stagePositionWorker :: IO StagePosition -> IORef StagePosition -> IO ()
+        stagePositionWorker readStagePosFunc positionRef =
+            mask $ \restore ->
+                forever (readStagePosFunc >>= writeIORef positionRef >>
+                         restore (threadDelay 1e6))
 
 executeIrradiation :: [EquipmentW] -> [IrradiationParams] -> LSIlluminationDuration -> IO ()
 executeIrradiation eqs params dur =
