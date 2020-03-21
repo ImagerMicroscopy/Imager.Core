@@ -168,19 +168,20 @@ executeMeasurementElement env ddets (MEStageLoop sn poss es) =
 
 executeMeasurementElement env ddets (MERelativeStageLoop sn (RelativeStageLoopParams dx dy dz (bx, ax) (by, ay) (bz, az)) es) =
     withStatusMessage env "relative stage loop" (
-        getStagePosition stageEq >>= \initialPos ->
-        let poss = (allPositions initialPos)
-        in  forM_ (zip [1..] poss) (\(index :: Int, pos) ->
-                updateStatusMessage env (T.format "relative stage position {} of {}" (index, length poss)) >>
-                setStagePosition stageEq pos >> executeMeasurementElements env ddets es) >>
-            setStagePosition stageEq initialPos)
+        getStagePosition stageEq >>= \(StagePosition startX startY startZ usingAF afOffset) ->
+        let xCoords = map ((+) startX . (*) dx . fromIntegral) [negate bx .. ax]
+            yCoords = map ((+) startY . (*) dy . fromIntegral) [negate by .. ay]
+        in  forM_ xCoords (\ x->
+                forM_ yCoords (\y ->
+                    setStagePosition stageEq (StagePosition x y startZ usingAF afOffset) >>
+                    getStagePosition stageEq >>= \(StagePosition upX upY upZ _ _) ->
+                    let zCoords = map ((+) upZ . (*) dz . fromIntegral) [negate bz .. az]
+                    in  forM_ zCoords (\z ->
+                            setStagePosition stageEq (StagePosition upX upY z False 0) >>
+                            executeMeasurementElements env ddets es
+                    ))))
     where
         [stageEq] = filter (\e -> hasMotorizedStage e && motorizedStageName e == sn) (peEquipment env)
-        planesx = map ((*) dx . fromIntegral) [negate bx .. ax] :: [Double]
-        planesy = map ((*) dy . fromIntegral) [negate by .. ay]
-        planesz = map ((*) dz . fromIntegral) [negate bz .. az]
-        allPositions :: StagePosition -> [StagePosition]
-        allPositions (StagePosition x y z _ _) = [StagePosition (x + x') (y + y') (z + z') False 0 | x' <- planesx, y' <- planesy, z' <- planesz]
 
 insertFastAcquisitionLoops :: DefinedDetections -> MeasurementElement -> MeasurementElement
 insertFastAcquisitionLoops ddets (MEDoTimes n [MEDetection [dName]]) = MEFastAcquisitionLoop n (dName, fromJust $ M.lookup dName ddets)
