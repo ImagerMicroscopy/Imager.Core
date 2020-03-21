@@ -42,13 +42,13 @@ instance Detector SCCamDetector where
             numType = UINT16
         in return (AcquiredData nRows nCols timeStamp camName bytes numType)
 
-    acquireStreamingData :: SCCamDetector -> NMeasurementsToPerform -> MVar () -> Chan AsyncData -> IO ()
+    acquireStreamingData :: SCCamDetector -> NMeasurementsToPerform -> Signal -> Chan AsyncData -> IO ()
     acquireStreamingData (SCCamDetector camName) nMeasurements hasStarted chan =
         performAcq `onException` (SC.abortAsyncAcquisition camName >> writeChan chan AsyncError)
         where
             performAcq = getTime Monotonic >>= \acqStart ->
                          SC.startAsyncAcquisition camName >>
-                         putMVar hasStarted () >>
+                         raiseSignal hasStarted >>
                          fetchImages nMeasurements acqStart chan >>
                          SC.abortAsyncAcquisition camName >>
                          writeChan chan AsyncFinished

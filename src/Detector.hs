@@ -49,9 +49,9 @@ data ImageOrientationOperation = IPORotateCW
 class Detector a where
     detectorName :: a -> Text
     acquireData :: a -> IO AcquiredData
-    acquireStreamingData :: a -> NMeasurementsToPerform -> MVar () -> Chan AsyncData -> IO ()
+    acquireStreamingData :: a -> NMeasurementsToPerform -> Signal -> Chan AsyncData -> IO ()
     acquireStreamingData det nMeasurements hasStarted chan =
-        (putMVar hasStarted () >> acquire chan >> writeChan chan AsyncFinished) `onException` (writeChan chan AsyncError)
+        (raiseSignal hasStarted >> acquire chan >> writeChan chan AsyncFinished) `onException` (writeChan chan AsyncError)
         where
             acquire chan = forM_ [1 .. nMeasurements] (\_ ->
                                acquireData det >>= \acqData ->
@@ -69,11 +69,11 @@ class Detector a where
 acquireMultipleDetectorStreamingData :: (Detector a) => [a] -> IO () -> NMeasurementsToPerform -> Chan AsyncData -> IO ()
 acquireMultipleDetectorStreamingData dets actionBeforeAcquisition nMeasurements chan =
     partitionM isConfiguredForHardwareTriggering dets >>= \(withTrigs, withoutTrigs) ->
-    replicateM (length withTrigs) newEmptyMVar >>= \trigMVars ->
-    withAsync (forConcurrently_ (zip withTrigs trigMVars) (\(det, hasStarted) ->
+    replicateM (length withTrigs) newSignal >>= \trigSignals ->
+    withAsync (forConcurrently_ (zip withTrigs trigSignals) (\(det, hasStarted) ->
                    acquireStreamingData det nMeasurements hasStarted chan)) (\firstAs ->
         actionBeforeAcquisition >>
-        mapM_ takeMVar trigMVars >>
-        withAsync (forConcurrently_ withoutTrigs (\det -> newEmptyMVar >>= \hasStarted ->
+        mapM_ waitForSignal trigSignals >>
+        withAsync (forConcurrently_ withoutTrigs (\det -> newSignal >>= \hasStarted ->
                                                           acquireStreamingData det nMeasurements hasStarted chan)) (\secondAs ->
             wait firstAs >> wait secondAs))
