@@ -66,14 +66,15 @@ class Detector a where
     setImageOrientation :: a -> [ImageOrientationOperation] -> IO ()
     setImageOrientation _ _ = pure ()
 
-acquireMultipleDetectorStreamingData :: (Detector a) => [a] -> IO () -> NMeasurementsToPerform -> Chan AsyncData -> IO ()
-acquireMultipleDetectorStreamingData dets actionBeforeAcquisition nMeasurements chan =
+acquireMultipleDetectorStreamingData :: (Detector a) => [a] -> IO () -> IO () -> NMeasurementsToPerform -> Chan AsyncData -> IO ()
+acquireMultipleDetectorStreamingData dets actionBeforeAcquisition actionAfterAcquisition nMeasurements chan =
     partitionM isConfiguredForHardwareTriggering dets >>= \(withTrigs, withoutTrigs) ->
     replicateM (length withTrigs) newSignal >>= \trigSignals ->
     withAsync (forConcurrently_ (zip withTrigs trigSignals) (\(det, hasStarted) ->
                    acquireStreamingData det nMeasurements hasStarted chan)) (\firstAs ->
-        actionBeforeAcquisition >>
         mapM_ waitForSignal trigSignals >>
+        actionBeforeAcquisition >>
         withAsync (forConcurrently_ withoutTrigs (\det -> newSignal >>= \hasStarted ->
                                                           acquireStreamingData det nMeasurements hasStarted chan)) (\secondAs ->
-            wait firstAs >> wait secondAs))
+            wait firstAs >> wait secondAs >>
+            actionAfterAcquisition))

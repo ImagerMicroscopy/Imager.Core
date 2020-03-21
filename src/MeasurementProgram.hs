@@ -219,19 +219,20 @@ executeFastDetectionLoop :: Detector a => [a] -> [EquipmentW] -> (Text, Detectio
 executeFastDetectionLoop dets eqs (detName, detParams) nTimesToPerform startTime dataCounter dataMVar =
     setDetectorProperties dets (dpDetectors detParams) >>
     switchToFilters eqs (dpFilterParams detParams) >>
-    fastStreamingAcquisition requiredDets (enableLightSources eqs (dpIrradiation detParams)) detName nTimesToPerform (getStagePositionSafe eqs) startTime dataCounter dataMVar >>
-    disableLightSources eqs (dpIrradiation detParams)
+    fastStreamingAcquisition requiredDets enableLightSourcesAction disableLightSourcesAction detName nTimesToPerform (getStagePositionSafe eqs) startTime dataCounter dataMVar
     where
         requiredDetNames = map dtpDetectorName (dpDetectors detParams)
         requiredDets = filter (\d -> (detectorName d) `elem` requiredDetNames) dets
         nRequiredDets = length requiredDets
+        enableLightSourcesAction = enableLightSources eqs (dpIrradiation detParams)
+        disableLightSourcesAction = disableLightSources eqs (dpIrradiation detParams)
 
-fastStreamingAcquisition :: Detector a => [a] -> IO () -> Text -> Int -> IO StagePosition -> TimeSpec -> IORef Word64 -> MVar [(AcquisitionMetaData, AcquiredData)] -> IO ()
-fastStreamingAcquisition requiredDets enableLightSourcesAction detName nTimesToPerform readStagePosFunc startTime dataCounter dataMVar =
+fastStreamingAcquisition :: Detector a => [a] -> IO () -> IO () -> Text -> Int -> IO StagePosition -> TimeSpec -> IORef Word64 -> MVar [(AcquisitionMetaData, AcquiredData)] -> IO ()
+fastStreamingAcquisition requiredDets enableLightSourcesAction disableLightSourcesAction detName nTimesToPerform readStagePosFunc startTime dataCounter dataMVar =
     newChan >>= \chan ->
     readStagePosFunc >>= newIORef >>= \stagePosRef ->
     withAsync (stagePositionWorker readStagePosFunc stagePosRef) (\stageAs ->
-        withAsync (acquireMultipleDetectorStreamingData requiredDets enableLightSourcesAction nTimesToPerform chan) (\as ->
+        withAsync (acquireMultipleDetectorStreamingData requiredDets enableLightSourcesAction disableLightSourcesAction nTimesToPerform chan) (\as ->
             fetchData stagePosRef 0 0 as chan >>
             cancel stageAs >>
             wait as))
