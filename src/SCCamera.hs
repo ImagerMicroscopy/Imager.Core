@@ -121,6 +121,14 @@ startAsyncAcquisition camName =
            0 -> return ()
            e -> throwIO (userError ("startAsyncAcquisition returned error code " ++ show e))
 
+startBoundedAsyncAcquisition :: Text -> Word64 -> IO ()
+startBoundedAsyncAcquisition camName nImages =
+    withCString (T.unpack camName) $ \nameStr ->
+    cStartBoundedAsyncAcquisition nameStr nImages >>= \result ->
+       case result of
+           0 -> return ()
+           e -> throwIO (userError ("StartBoundedAsyncAcquisition returned error code " ++ show e))
+
 getNextAcquiredImage :: Text -> Word -> IO (Maybe MeasuredImages)
 getNextAcquiredImage camName timeoutMillis =
     withCString (T.unpack camName) $ \nameStr ->
@@ -188,6 +196,9 @@ foreign import ccall "SCCameraDLL.h AcquireSingleImage"
 
 foreign import ccall "SCCameraDLL.h StartAsyncAcquisition"
     cStartAsyncAcquisition :: CString -> IO CInt
+
+foreign import ccall "SCCameraDLL.h StartBoundedAsyncAcquisition"
+    cStartBoundedAsyncAcquisition :: CString -> Word64 -> IO CInt
 
 foreign import ccall "SCCameraDLL.h GetOldestImageAsyncAcquired"
     cGetOldestImageAsyncAcquired :: CString -> Word32 -> Ptr (Ptr Word16) -> Ptr CInt -> Ptr CInt -> Ptr CDouble -> IO CInt

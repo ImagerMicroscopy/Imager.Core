@@ -47,10 +47,9 @@ instance Detector SCCamDetector where
         performAcq `onException` (SC.abortAsyncAcquisition camName >> writeChan chan AsyncError)
         where
             performAcq = getTime Monotonic >>= \acqStart ->
-                         SC.startAsyncAcquisition camName >>
+                         SC.startBoundedAsyncAcquisition camName (fromIntegral nMeasurements) >>
                          raiseSignal hasStarted >>
                          fetchImages nMeasurements acqStart chan >>
-                         SC.abortAsyncAcquisition camName >>
                          writeChan chan AsyncFinished
             fetchImages :: Int -> TimeSpec -> Chan AsyncData -> IO ()
             fetchImages nImagesRemaining acqStart chan
