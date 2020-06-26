@@ -1,6 +1,6 @@
 {-# LANGUAGE BangPatterns, InstanceSigs #-}
 
-module SCCamDetector where
+module Detectors.SCCamDetector where
 
 import Control.Concurrent
 import Control.Concurrent.Async
@@ -21,10 +21,10 @@ import qualified Data.Vector.Storable as V
 import Data.Vector.Storable.Mutable (IOVector)
 import qualified Data.Vector.Storable.Mutable as MV
 
-import Detector
-import qualified SCCamera as SC
-import qualified SCCameraTypes as SC
-import MiscUtils
+import Detectors.Detector
+import qualified Camera.SCCamera as SC
+import qualified Camera.SCCameraTypes as SC
+import Utils.MiscUtils
 
 data SCCamDetector = SCCamDetector {
                          sccCamName :: !Text

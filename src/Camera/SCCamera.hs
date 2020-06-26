@@ -1,6 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
 
-module SCCamera where
+module Camera.SCCamera where
 
 import Control.Concurrent
 import Control.Exception
@@ -26,7 +26,7 @@ import Foreign.Marshal
 import Foreign.Ptr
 import Foreign.Storable
 
-import SCCameraTypes
+import Camera.SCCameraTypes
 
 initializeCameraDLL :: IO (Either String ())
 initializeCameraDLL = cInitCameraDLL >>= \result ->
