@@ -19,6 +19,7 @@ import System.FilePath
 
 import AggregateMotorizedStage
 import Equipment
+import EquipmentPlugins
 import EquipmentTypes
 import MiscUtils
 import RCSerialPort
@@ -49,12 +50,15 @@ readAvailableEquipment =
 withEquipment :: [EquipmentDescription] -> ([EquipmentW] -> IO ()) -> IO ()
 withEquipment descs action =
     bracket (initializeEquipment descs) closeEquipment (\eqs ->
-        installHandlers eqs >> action eqs)
+        bracket (loadPlugins) closeEquipment (\pluginEqs ->
+            let allEquipment = aggregateMotorizedStagesIfNeeded (eqs ++ pluginEqs)
+            in  verifyEquipmentThrows allEquipment >>
+                installHandlers >> action allEquipment))
     where
-        installHandlers eqs =
+        installHandlers =
             myThreadId >>= \mainThreadID ->
-            installHandler (Catch (f eqs mainThreadID))
-        f eqs mainThreadID event =
+            installHandler (Catch (f mainThreadID))
+        f mainThreadID event =
             case event of
                 ControlC -> putStrLn "User Interrupt" >> throwTo mainThreadID UserInterrupt
                 Break    -> putStrLn "User Interrupt" >> throwTo mainThreadID UserInterrupt
@@ -68,8 +72,7 @@ initializeEquipment descs = doInit `catch` (\e -> displayStringThenError (displa
                      putStr ("Initializing " ++ deviceDescName desc ++ "...") >>
                      initializeDevice desc >>= \dev ->
                      putStr " done!\n" >>
-                     pure dev) >>=
-                 verifyEquipmentThrows . aggregateMotorizedStagesIfNeeded
+                     pure dev)
 
 closeEquipment :: [EquipmentW] -> IO ()
 closeEquipment = mapM_ closeDevice

@@ -21,6 +21,7 @@ executable RaspCuvettor
                      , async
                      , cereal
                      , deepseq
+                     , directory
                      , network
                      , text
                      , text-format
@@ -45,6 +46,8 @@ executable RaspCuvettor
                      , EquipmentTypes
                      , EquipmentInitialization
                      , EquipmentEncoding
+                     , EquipmentPlugins
+                     , EquipmentPluginsInternal
                      , FilterUtils
                      , Marzhauser
                      , MeasurementProgram
@@ -76,6 +79,6 @@ executable RaspCuvettor
   extra-libraries:     MicroscopeControl
                      , SCCamera
   ghc-options:         -O2 -threaded -rtsopts -funbox-strict-fields
- 
+
   if (os(windows))
       cpp-options:     -DWINDOWS
