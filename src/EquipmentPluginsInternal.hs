@@ -11,6 +11,7 @@ import qualified Data.ByteString as B
 import Data.Text(Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+import qualified Data.Text.IO as T
 import Data.Int
 import Foreign.Ptr
 import Foreign.C.String
@@ -46,7 +47,7 @@ instance Equipment EquipmentPlugin where
 newtype HMODULE = HMODULE { fromHMODULE :: (Ptr ()) }
 newtype FARPROC = FARPROC {fromFARPROC :: (Ptr ()) }
 
-type InitFunc = IO CInt
+type InitFunc = Ptr () -> IO CInt
 type ShutdownFunc = IO ()
 type IdentifierFunc = CString -> CUInt -> IO CInt
 type SingleIntPtrFunc = Ptr CInt -> IO CInt
@@ -85,7 +86,8 @@ loadPlugin libName =
         suppAxesF = mkSupportedStageAxesFunc suppAxesFA
         getStagePosF = mkGetStagePositionFunc getStagePosFA
         setStagePosF = mkSetStagePositionFunc setStagePosFA
-    in  initF >>= \initResult ->
+    in  castFunPtrToPtr <$> mkCStringCallback (pluginPrinter libName) >>= \printFunc ->
+        initF printFunc >>= \initResult ->
         when (initResult /= 0) (error "couldn't init plugin") >>
         verifyPluginVersion apiVersionF >>
         EqName <$> readIdentifier eqNameF >>= \eqName ->
@@ -165,6 +167,12 @@ loadFunctionAddress modu fName =
 
 castFARPROC :: FARPROC -> FunPtr a
 castFARPROC (FARPROC address) = castPtrToFunPtr address
+
+pluginPrinter :: Text -> CString -> IO ()
+pluginPrinter pluginName str = T.putStr pluginName >> T.putStr ": " >>
+                               B.packCString str >>= B.putStr
+
+foreign import stdcall "wrapper" mkCStringCallback :: (CString -> IO ()) -> IO (FunPtr (CString -> IO ()))
 
 foreign import stdcall "Windows.h SetDllDirectoryA"
     cSetDllDirectoryA :: CString -> IO CInt

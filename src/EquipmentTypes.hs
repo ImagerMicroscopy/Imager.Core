@@ -101,6 +101,10 @@ data EquipmentDescription = CoherentLightSourceDesc {
                               , ardSerialPortName :: !String
                               , ardChannels :: ![(Text, (Int, Double))]
                             }
+                          | PWMArduinoDesc {
+                                pwrName :: !Text
+                              , pwrSerialPortName :: !String
+                            }
                           | BlueBoxNijiDesc {
                                 bbnDescName :: !Text
                               , bbnDescPortName :: !String
@@ -148,6 +152,7 @@ data EquipmentDescription = CoherentLightSourceDesc {
                                 psDescName :: !Text
                               , psDescPortName :: !String
                             }
+
                           | MarzhauserStageDesc {
                                 msDescName :: !Text
                               , msDescPortName :: !String

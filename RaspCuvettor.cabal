@@ -60,6 +60,7 @@ executable RaspCuvettor
                      , AvailableDetector
                      , MiscUtils
                      , Arduino
+                     , PWMArduino
                      , Asahi
                      , Coherent
                      , DummyEquipment
