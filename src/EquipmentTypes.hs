@@ -101,7 +101,7 @@ data EquipmentDescription = CoherentLightSourceDesc {
                               , ardSerialPortName :: !String
                               , ardChannels :: ![(Text, (Int, Double))]
                             }
-                          | PWMArduinoDesc {
+                          | PWMLaserControllerDesc {
                                 pwrName :: !Text
                               , pwrSerialPortName :: !String
                             }
