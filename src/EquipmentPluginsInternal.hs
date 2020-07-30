@@ -144,7 +144,6 @@ loadPlugin libName =
 
 addDirectoryToLoaderPath :: Text -> IO ()
 addDirectoryToLoaderPath dir =
-    putStrLn ("Adding DLL loader path " ++ T.unpack dir) >>
     B.useAsCString (T.encodeUtf8 dir) (\str ->
     cSetDllDirectoryA str >>= \result ->
     when (result == 0) (error "couldn't add dll loader path"))

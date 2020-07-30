@@ -37,9 +37,9 @@ instance Equipment PWMLaserController where
     flushSerialPorts (PWMLaserController _ p) = flushSerialPort p
     closeDevice (PWMLaserController _ port) = closeSerialPort port
     availableLightSources _ =
-        [LightSourceDescription (LSName "ls") True False [LSChannelName "ch"]]
+        [LightSourceDescription (LSName "ls") True True [LSChannelName "ch"]]
     activateLightSource (PWMLaserController _ port) _ [(_, power)] =
-        let bytePower = floor (fromLSIlluminationPower power * 255.0)
+        let bytePower = floor (fromLSIlluminationPower power / 100.0 * 255.0)
         in  setPWROutputLevel port bytePower
     deactivateLightSource (PWMLaserController _ port) =
         setPWROutputLevel port 0
