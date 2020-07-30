@@ -30,6 +30,7 @@ initializePWMLaserControllerLightSource :: EquipmentDescription -> IO EquipmentW
 initializePWMLaserControllerLightSource (PWMLaserControllerDesc name portName) =
     let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS9600}) (TimeoutMillis 10000) SerialPortNoDebug
     in  openSerialPort portName serialSettings >>= \port -> threadDelay (floor 2e6) >> -- delay needed, otherwise the arduino won't receive the messages.
+        setPWROutputLevel port 255 >>
         return (EquipmentW (PWMLaserController (EqName name) port))
 
 instance Equipment PWMLaserController where
@@ -39,10 +40,10 @@ instance Equipment PWMLaserController where
     availableLightSources _ =
         [LightSourceDescription (LSName "ls") True True [LSChannelName "ch"]]
     activateLightSource (PWMLaserController _ port) _ [(_, power)] =
-        let bytePower = floor (fromLSIlluminationPower power / 100.0 * 255.0)
+        let bytePower = floor ((100.0 - fromLSIlluminationPower power) / 100.0 * 255.0)
         in  setPWROutputLevel port bytePower
     deactivateLightSource (PWMLaserController _ port) =
-        setPWROutputLevel port 0
+        setPWROutputLevel port 255
 
 setPWROutputLevel :: SerialPort -> Word8 -> IO ()
 setPWROutputLevel port level =
