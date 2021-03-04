@@ -105,6 +105,10 @@ data EquipmentDescription = CoherentLightSourceDesc {
                                 pwrName :: !Text
                               , pwrSerialPortName :: !String
                             }
+                          | MultiModeLasersDesc {
+                                mmlName :: !Text
+                              , mmlSerialPortName :: !String
+                            }
                           | BlueBoxNijiDesc {
                                 bbnDescName :: !Text
                               , bbnDescPortName :: !String

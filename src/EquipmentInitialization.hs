@@ -26,6 +26,7 @@ import RCSerialPort
 
 import Arduino
 import PWMLaserController
+import MultiModeLasers
 import Asahi
 import BlueBoxOptics
 import Coherent
@@ -85,6 +86,7 @@ initializeDevice d@(MarcelLumencorLightSourceDesc _ _ _) = initializeMarcelLumen
 initializeDevice d@(AsahiLightSourceDesc _ _ _) = initializeAsahiLightSource d
 initializeDevice d@(ArduinoLightSourceDesc _ _ _) = initializeArduinoLightSource d
 initializeDevice d@(PWMLaserControllerDesc _ _) = initializePWMLaserControllerLightSource d
+initializeDevice d@(MultiModeLasersDesc _ _) = initializeMultiModeLasersLightSource d
 initializeDevice d@(BlueBoxNijiDesc _ _) = initializeBlueBoxNiji d
 initializeDevice d@(DummyLightSourceDesc _) = initializeDummyLightSource d
 initializeDevice d@(MicroscopeControllerDesc _) = initializeMicroscopeController d

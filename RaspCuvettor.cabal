@@ -55,6 +55,7 @@ executable RaspCuvettor
                      , MeasurementProgramUtils
                      , MeasurementProgramVerification
                      , MicroscopeController
+                     , MultiModeLasers
                      , RCSerialPort
                      , Detector
                      , AvailableDetector
