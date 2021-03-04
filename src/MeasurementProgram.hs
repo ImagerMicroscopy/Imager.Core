@@ -174,10 +174,10 @@ executeMeasurementElement env ddets (MERelativeStageLoop sn (RelativeStageLoopPa
         in  forM_ xCoords (\ x->
                 forM_ yCoords (\y ->
                     setStagePosition stageEq (StagePosition x y startZ usingAF afOffset) >>
-                    getStagePosition stageEq >>= \(StagePosition upX upY upZ _ _) ->
+                    getStagePosition stageEq >>= \(StagePosition upX upY upZ upAF upOffset) -> -- (StagePosition upX upY upZ _ _)
                     let zCoords = map ((+) upZ . (*) dz . fromIntegral) [negate bz .. az]
                     in  forM_ zCoords (\z ->
-                            setStagePosition stageEq (StagePosition upX upY z False 0) >>
+                            setStagePosition stageEq (StagePosition upX upY upZ upAF upOffset) >> -- (StagePosition upX upY upZ False 0
                             executeMeasurementElements env ddets es
                     ))))
     where
