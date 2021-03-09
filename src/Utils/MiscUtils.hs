@@ -2,6 +2,7 @@
 
 module Utils.MiscUtils where
 
+import Control.Concurrent.MVar
 import Control.Exception
 import Control.Monad
 import Data.Aeson
@@ -32,6 +33,17 @@ import System.IO.Unsafe
 import System.Clock
 import System.Hardware.Serialport hiding (timeout)
 import System.Timeout
+
+data Signal = Signal (MVar ())
+
+newSignal :: IO Signal
+newSignal = Signal <$> newEmptyMVar
+
+raiseSignal :: Signal -> IO ()
+raiseSignal (Signal mvar) = putMVar mvar ()
+
+waitForSignal :: Signal -> IO ()
+waitForSignal (Signal mvar) = takeMVar mvar
 
 sequenceExcept :: [IO (Either String ())] -> IO (Either String ())
 sequenceExcept [] = return (Right ())
@@ -177,3 +189,10 @@ concatMaybes ms | Nothing `elem` ms = Nothing
                 | otherwise = Just (map fromJust ms)
 
 fromCDouble (CDouble d) = d
+
+partitionM :: (Monad m) => (a -> m Bool) -> [a] -> m ([a],[a])
+partitionM f [] = return ([], [])
+partitionM f (x:xs) = do
+    res <- f x
+    (as,bs) <- partitionM f xs
+    return ([x | res]++as, [x | not res]++bs)

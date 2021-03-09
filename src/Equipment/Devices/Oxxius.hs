@@ -55,8 +55,9 @@ initializeOxxiusLC desc =
 
 initializeOxxiusLC' :: EquipmentDescription -> IO OxxiusLC
 initializeOxxiusLC' (OxxiusLCDesc name portName) =
-    let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS19200}) (TimeoutMillis 1000) SerialPortDebugText
+    let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS19200}) (TimeoutMillis 1000) SerialPortNoDebug
     in  openSerialPort portName serialSettings >>= \port ->
+        handleOxxiusCombinerEchoCommand port "AM=0" >> -- disable analog modulation
         handleOxxiusCombinerOKCommand port "SH1=1" >> -- open shutter 1
         getLaserDetails port >>= \lasers ->
         forM_ (map snd lasers) (\(OxxiusLaserParams lType _ _ idx) ->
@@ -98,7 +99,6 @@ initializeMarcelOxxiusLC (MarcelOxxiusLCDesc name oxxPortName ardPortName) =
     in  initializeOxxiusLC' (OxxiusLCDesc name oxxPortName) >>= \(ox@(OxxiusLC _ oxPort lasers)) ->
         openSerialPort ardPortName arSerialSettings >>= \arPort -> threadDelay 2000000 >>
         handleOxxiusCombinerEchoCommand oxPort "AM=1" >> -- enable analog modulation
-        putStrLn "sent it" >>
         forM_ (map snd lasers) (\(OxxiusLaserParams lType _ _ idx) ->
             enableAnalogMode oxPort lType idx) >>
         pure (EquipmentW (MarcelOxxiusLC ox arPort))

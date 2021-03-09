@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards, ScopedTypeVariables, OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards, ScopedTypeVariables, OverloadedStrings, NumDecimals #-}
 module Measurements.MeasurementProgram (
     executeMeasurement
   , executeDetection
@@ -39,6 +39,7 @@ import Measurements.MeasurementProgramTypes
 import Measurements.MeasurementProgramVerification
 import Utils.MeasurementProgramUtils
 import Utils.MiscUtils
+import Detectors.SCCamDetector
 
 executeMeasurement :: Detector a => ProgramEnvironment a -> MeasurementElement -> DefinedDetections -> IO ()
 executeMeasurement env me ddets =
@@ -81,18 +82,13 @@ removeCommonDetectorProperties ddets = (ddetsWithoutCommon, commonDetectorProper
         removeCommon commonmap dtorparams =
             map (\(DetectorParams name opts) -> DetectorParams name (filter (`notElem` (fromJust $ M.lookup name commonmap)) opts)) dtorparams
 
-executeMeasurementElements :: Detector a => ProgramEnvironment a -> DefinedDetections -> Prog -> IO ()
-executeMeasurementElements env ddets es = foldMap (executeMeasurementElement env ddets) es
+executeMeasurementElements :: Detector a => ProgramEnvironment a -> DefinedDetections -> [MeasurementElement] -> IO ()
+executeMeasurementElements env ddets es = mapM_ (executeMeasurementElement env ddets) es
 
 executeMeasurementElement :: Detector a => ProgramEnvironment a -> DefinedDetections -> MeasurementElement -> IO ()
 executeMeasurementElement env ddets (MEDetection detNames) =
-    getStagePositionSafe eqs >>= \stagePos ->
-    forM_ (zip detNames detParams) (\(dName, p) ->
-        executeDetection detectors eqs p >>= \acqs ->
-        forM_ acqs (\acq ->
-            readIORef counter >>= \idx ->
-            writeIORef counter (idx + 1) >>
-            acq `deepseq` addDataToMVar mvar startTime idx stagePos dName acq))
+    withStatusMessage env "Detection" (
+        executeDetection detectors eqs (detNames, detParams) startTime counter mvar)
     where
       eqs = peEquipment env
       detectors = peDetectors env
@@ -172,19 +168,20 @@ executeMeasurementElement env ddets (MEStageLoop sn poss es) =
 
 executeMeasurementElement env ddets (MERelativeStageLoop sn (RelativeStageLoopParams dx dy dz (bx, ax) (by, ay) (bz, az)) es) =
     withStatusMessage env "relative stage loop" (
-        getStagePosition stageEq >>= \initialPos ->
-        let poss = (allPositions initialPos)
-        in  forM_ (zip [1..] poss) (\(index :: Int, pos) ->
-                updateStatusMessage env (T.format "relative stage position {} of {}" (index, length poss)) >>
-                setStagePosition stageEq pos >> executeMeasurementElements env ddets es) >>
-            setStagePosition stageEq initialPos)
+        getStagePosition stageEq >>= \(StagePosition startX startY startZ usingAF afOffset) ->
+        let xCoords = map ((+) startX . (*) dx . fromIntegral) [negate bx .. ax]
+            yCoords = map ((+) startY . (*) dy . fromIntegral) [negate by .. ay]
+        in  forM_ xCoords (\ x->
+                forM_ yCoords (\y ->
+                    setStagePosition stageEq (StagePosition x y startZ usingAF afOffset) >>
+                    getStagePosition stageEq >>= \(StagePosition upX upY upZ upAF upOffset) ->
+                    let zCoords = map ((+) upZ . (*) dz . fromIntegral) [negate bz .. az]
+                    in  forM_ zCoords (\z ->
+                            setStagePosition stageEq (StagePosition upX upY z upAF upOffset) >> -- predetermined pfs
+                            executeMeasurementElements env ddets es
+                    ))))
     where
         [stageEq] = filter (\e -> hasMotorizedStage e && motorizedStageName e == sn) (peEquipment env)
-        planesx = map ((*) dx . fromIntegral) [negate bx .. ax] :: [Double]
-        planesy = map ((*) dy . fromIntegral) [negate by .. ay]
-        planesz = map ((*) dz . fromIntegral) [negate bz .. az]
-        allPositions :: StagePosition -> [StagePosition]
-        allPositions (StagePosition x y z _ _) = [StagePosition (x + x') (y + y') (z + z') False 0 | x' <- planesx, y' <- planesy, z' <- planesz]
 
 insertFastAcquisitionLoops :: DefinedDetections -> MeasurementElement -> MeasurementElement
 insertFastAcquisitionLoops ddets (MEDoTimes n [MEDetection [dName]]) = MEFastAcquisitionLoop n (dName, fromJust $ M.lookup dName ddets)
@@ -194,17 +191,24 @@ insertFastAcquisitionLoops ddets (MEStageLoop n pos es) = MEStageLoop n pos (map
 insertFastAcquisitionLoops ddets (MERelativeStageLoop n ps es) = MERelativeStageLoop n ps (map (insertFastAcquisitionLoops ddets) es)
 insertFastAcquisitionLoops d m = m
 
-executeDetection :: Detector a => [a] -> [EquipmentW] -> DetectionParams -> IO [AcquiredData]
-executeDetection dets eqs dps =
-    setDetectorProperties dets (dpDetectors dps) >>
-    switchToFilters eqs (dpFilterParams dps) >>
-    enableLightSources eqs (dpIrradiation dps) >>
-    mapConcurrently acquireData requiredDets >>= \acquiredData ->
-    disableLightSources eqs (dpIrradiation dps) >>
-    return acquiredData
-    where
-        requiredDetNames = map dtpDetectorName (dpDetectors dps)
-        requiredDets = filter (\d -> (detectorName d) `elem` requiredDetNames) dets
+executeDetection :: Detector a => [a] -> [EquipmentW] -> ([Text], [DetectionParams]) -> TimeSpec -> IORef Word64 -> MVar [(AcquisitionMetaData, AcquiredData)] -> IO ()
+executeDetection dets eqs (detNames, detParams) startTime dataCounter dataMVar =
+    getStagePositionSafe eqs >>= \stagePos ->
+    forM_ (zip detNames detParams) (\(dName, dps) ->
+        setDetectorProperties dets (dpDetectors dps) >>
+        let requiredDetNames = map dtpDetectorName (dpDetectors dps)
+            requiredDets = filter (\d -> (detectorName d) `elem` requiredDetNames) dets
+        in  mapM isConfiguredForHardwareTriggering requiredDets >>= \hasTriggering ->
+            if (or hasTriggering)
+            then executeFastDetectionLoop dets eqs (dName, dps) 1 startTime dataCounter dataMVar
+            else switchToFilters eqs (dpFilterParams dps) >>
+                 enableLightSources eqs (dpIrradiation dps) >>
+                 mapConcurrently acquireData requiredDets >>= \acquiredData ->
+                 disableLightSources eqs (dpIrradiation dps) >>
+                 forM_ acquiredData (\acq ->
+                     readIORef dataCounter >>= \idx ->
+                     writeIORef dataCounter (idx + 1) >>
+                     acq `deepseq` addDataToMVar dataMVar startTime idx stagePos dName acq))
 
 setDetectorProperties :: Detector a => [a] -> [DetectorParams] -> IO ()
 setDetectorProperties dets dps =
@@ -214,32 +218,47 @@ setDetectorProperties dets dps =
 
 executeFastDetectionLoop :: Detector a => [a] -> [EquipmentW] -> (Text, DetectionParams) -> Int -> TimeSpec -> IORef Word64 -> MVar [(AcquisitionMetaData, AcquiredData)] -> IO ()
 executeFastDetectionLoop dets eqs (detName, detParams) nTimesToPerform startTime dataCounter dataMVar =
-    getStagePositionSafe eqs >>= \stagePos ->
     setDetectorProperties dets (dpDetectors detParams) >>
     switchToFilters eqs (dpFilterParams detParams) >>
-    enableLightSources eqs (dpIrradiation detParams) >>
-    newChan >>= \chan ->
-    withAsync (forConcurrently_ requiredDets (\det -> acquireStreamingData det nTimesToPerform chan)) (\as ->
-        fetchData stagePos 0 0 as chan) >>
-    disableLightSources eqs (dpIrradiation detParams)
+    fastStreamingAcquisition requiredDets enableLightSourcesAction disableLightSourcesAction detName nTimesToPerform (getStagePositionSafe eqs) startTime dataCounter dataMVar
     where
         requiredDetNames = map dtpDetectorName (dpDetectors detParams)
         requiredDets = filter (\d -> (detectorName d) `elem` requiredDetNames) dets
         nRequiredDets = length requiredDets
-        fetchData :: StagePosition -> Int -> Int -> Async () -> Chan AsyncData -> IO ()
-        fetchData pos nFetched nFinished as chan
+        enableLightSourcesAction = enableLightSources eqs (dpIrradiation detParams)
+        disableLightSourcesAction = disableLightSources eqs (dpIrradiation detParams)
+
+fastStreamingAcquisition :: Detector a => [a] -> IO () -> IO () -> Text -> Int -> IO StagePosition -> TimeSpec -> IORef Word64 -> MVar [(AcquisitionMetaData, AcquiredData)] -> IO ()
+fastStreamingAcquisition requiredDets enableLightSourcesAction disableLightSourcesAction detName nTimesToPerform readStagePosFunc startTime dataCounter dataMVar =
+    newChan >>= \chan ->
+    readStagePosFunc >>= newIORef >>= \stagePosRef ->
+    withAsync (stagePositionWorker readStagePosFunc stagePosRef) (\stageAs ->
+        withAsync (acquireMultipleDetectorStreamingData requiredDets enableLightSourcesAction disableLightSourcesAction nTimesToPerform chan) (\as ->
+            fetchData stagePosRef 0 0 as chan >>
+            cancel stageAs >>
+            wait as))
+    where
+        nRequiredDets = length requiredDets
+        fetchData :: IORef StagePosition -> Int -> Int -> Async () -> Chan AsyncData -> IO ()
+        fetchData posRef nFetched nFinished as chan
             | nFinished == nRequiredDets = wait as
             | otherwise =
                   readChan chan >>= \val ->
                   case val of
                       AsyncFinished -> performMajorGC >>
-                                       fetchData pos nFetched (nFinished + 1) as chan
+                                       fetchData posRef nFetched (nFinished + 1) as chan
                       AsyncError    -> performMajorGC >> throwIO (userError "error during fast acquisition loop")
                       AsyncData r   -> when (nFetched `mod` 50 == 49) (performMajorGC) >>
+                                       readIORef posRef >>= \pos ->
                                        readIORef dataCounter >>= \idx ->
                                        writeIORef dataCounter (idx + 1) >>
                                        r `deepseq` addDataToMVar dataMVar startTime idx pos detName r >>
-                                       fetchData pos (nFetched + 1) nFinished as chan
+                                       fetchData posRef (nFetched + 1) nFinished as chan
+        stagePositionWorker :: IO StagePosition -> IORef StagePosition -> IO ()
+        stagePositionWorker readStagePosFunc positionRef =
+            mask $ \restore ->
+                forever (readStagePosFunc >>= writeIORef positionRef >>
+                         restore (threadDelay 1e6))
 
 executeIrradiation :: [EquipmentW] -> [IrradiationParams] -> LSIlluminationDuration -> IO ()
 executeIrradiation eqs params dur =

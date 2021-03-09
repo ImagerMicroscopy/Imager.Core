@@ -1,5 +1,4 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-
 module Equipment.EquipmentTypes
 where
 
@@ -102,6 +101,10 @@ data EquipmentDescription = CoherentLightSourceDesc {
                               , ardSerialPortName :: !String
                               , ardChannels :: ![(Text, (Int, Double))]
                             }
+                          | PWMLaserControllerDesc {
+                                pwrName :: !Text
+                              , pwrSerialPortName :: !String
+                            }
                           | BlueBoxNijiDesc {
                                 bbnDescName :: !Text
                               , bbnDescPortName :: !String
@@ -149,6 +152,7 @@ data EquipmentDescription = CoherentLightSourceDesc {
                                 psDescName :: !Text
                               , psDescPortName :: !String
                             }
+
                           | MarzhauserStageDesc {
                                 msDescName :: !Text
                               , msDescPortName :: !String
@@ -157,13 +161,13 @@ data EquipmentDescription = CoherentLightSourceDesc {
                                 dsName :: !Text
                             }
                           | RobottorDesc {
-                                roDescName :: !Text
-                              , roDescIPAddress :: !String
-                              , roDescPortNum :: !Int
+                              roDescName :: !Text
+                            , roDescIPAddress :: !String
+                            , roDescPortNum :: !Int
                             }
-                          | RemoteStageDesc {
-                                rsDescName :: !Text
-                              , rsDescIPAddress :: !String
-                              , rsDescPortNum :: !Int
+                         | RemoteStageDesc {
+                              rsDescName :: !Text
+                            , rsDescIPAddress :: !String
+                            , rsDescPortNum :: !Int
                           }
                           deriving (Show, Read)

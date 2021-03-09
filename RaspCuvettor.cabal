@@ -21,6 +21,7 @@ executable RaspCuvettor
                      , async
                      , cereal
                      , deepseq
+                     , directory
                      , network
                      , text
                      , text-format
@@ -71,6 +72,9 @@ executable RaspCuvettor
                      , Camera.SCCameraTypes
                      , Detectors.SCCamDetector
                      , Equipment.Devices.Thorlabs
+                     , Equipment.Devices.PWMLaserController
+                     , Equipment.EquipmentPlugins
+                     , Equipment.EquipmentPluginsInternal
   default-extensions:  CPP, BangPatterns, OverloadedStrings, ScopedTypeVariables
   extra-lib-dirs:      C:\hslibs
   extra-libraries:     MicroscopeControl
