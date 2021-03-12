@@ -31,7 +31,7 @@ data MMLaser = MMRed | MMGreen
 
 initializeMultiModeLasersLightSource :: EquipmentDescription -> IO EquipmentW
 initializeMultiModeLasersLightSource (MultiModeLasersDesc name portName) =
-    let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS19200}) (TimeoutMillis 10000) SerialPortDebugText
+    let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS19200}) (TimeoutMillis 1000) SerialPortDebugText
     in  openSerialPort portName serialSettings >>= \port -> threadDelay (floor 2e6) >> -- delay needed, otherwise the arduino won't receive the messages.
         return (EquipmentW (MultiModeLasers (EqName name) port))
 
@@ -56,7 +56,7 @@ setMMLaserPower port laser power =
                     MMRed -> fromIntegral (ord 'R')
                     MMGreen -> fromIntegral (ord 'G')
         power8 = round (power / 100.0 * 255.0)
-        cmd = B.pack [lCode, power8, fromIntegral (ord '\r')]
+        cmd = B.singleton lCode <> T.encodeUtf8 (T.pack (show power8)) <> B.singleton (fromIntegral (ord '\r'))
     in  serialWriteAndReadUntilChar port cmd '\r' >>= \resp ->
         case resp of
             "OK\r" -> pure ()
