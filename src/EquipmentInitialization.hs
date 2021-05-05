@@ -35,6 +35,7 @@ import Lumencor
 import Marzhauser
 import MicroscopeController
 import Olympus
+import OxxiusLBX
 import Oxxius
 import Prior
 import Robottor
@@ -94,6 +95,7 @@ initializeDevice d@(ThorlabsFW103HDesc _ _ _) = initializeThorlabsFW130H d
 initializeDevice d@(ThorlabsFW102CDesc _ _ _) = initializeThorlabsFW102C d
 initializeDevice d@(SutterLambda10BDesc _ _ _) = initializeSutterLambda10B d
 initializeDevice d@(OlympusIX71DichroicDesc _ _ _) = initializeOlympusIX71Dichroic d
+initializeDevice d@(OxxiusLBXDesc _ _) = initializeOxxiusLBX d
 initializeDevice d@(OxxiusLCDesc _ _) = initializeOxxiusLC d
 initializeDevice d@(MarcelOxxiusLCDesc _ _ _) = initializeMarcelOxxiusLC d
 initializeDevice d@(DummyFilterWheelDesc _ _) = initializeDummyFilterWheel d
@@ -118,6 +120,7 @@ deviceDescName (ThorlabsFW103HDesc _ _ _) = "Thorlabs FW130H filter wheel"
 deviceDescName (ThorlabsFW102CDesc _ _ _) = "ThorlabsFW102C filter wheel"
 deviceDescName (SutterLambda10BDesc _ _ _) = "Sutter filter wheel"
 deviceDescName (OlympusIX71DichroicDesc _ _ _) = "Olympus IX71 dichroic turret"
+deviceDescName (OxxiusLBXDesc _ _) = "Oxxius LBX laser module"
 deviceDescName (OxxiusLCDesc _ _) = "Oxxius laser combiner"
 deviceDescName (MarcelOxxiusLCDesc _ _ _) = "MarcelOxxius"
 deviceDescName (DummyFilterWheelDesc _ _) = "Dummy filter wheel"
