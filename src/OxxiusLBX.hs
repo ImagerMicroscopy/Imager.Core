@@ -29,7 +29,7 @@ initializeOxxiusLBX desc =
 
 initializeOxxiusLBX' :: EquipmentDescription -> IO OxxiusLBX
 initializeOxxiusLBX' (OxxiusLBXDesc name portName) =
-    let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS19200}) (TimeoutMillis 1000) SerialPortDebugText
+    let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS19200}) (TimeoutMillis 1000) SerialPortNoDebug
     in  openSerialPort portName serialSettings >>= \port ->
         oxxiusLBXInit port >>
         getMaxPower port >>= \power ->

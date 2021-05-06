@@ -38,7 +38,7 @@ instance Equipment Coherent where
     flushSerialPorts (Coherent _ port _ _) = flushSerialPort port
     closeDevice (Coherent _ port _ _) = closeSerialPort port
     availableLightSources (Coherent n _ _ _) =
-        [LightSourceDescription (LSName "ls") True False [LSChannelName "laser"]]
+        [LightSourceDescription (LSName "ls") True True [LSChannelName "laser"]]
     activateLightSource (Coherent _ port powerRange currentPower) _ ((_, power) : _) =
         needToSetPower >>= \needPower ->
         when (needPower) (setPower power) >>
