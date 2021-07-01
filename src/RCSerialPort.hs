@@ -35,7 +35,7 @@ import Data.Word
 import System.Clock
 import qualified System.Hardware.Serialport as SP
 
-import MiscUtils
+import Utils.MiscUtils
 
 data SerialPortDebugMode = SerialPortNoDebug
                          | SerialPortDebugBinary

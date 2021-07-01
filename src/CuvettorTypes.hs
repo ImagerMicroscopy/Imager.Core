@@ -24,14 +24,14 @@ import System.Clock
 import System.IO.Unsafe
 
 import AcquiredDataTypes
-import MiscUtils
-import Detector
-import Equipment
-import EquipmentEncoding
-import EquipmentTypes
-import MeasurementProgram
-import MeasurementProgramTypes
-import SCCameraTypes
+import Utils.MiscUtils
+import Detectors.Detector
+import Equipment.Equipment
+import Encodings.EquipmentEncoding
+import Equipment.EquipmentTypes
+import Measurements.MeasurementProgram
+import Measurements.MeasurementProgramTypes
+import Camera.SCCameraTypes
 
 data Environment a = Environment {
                       envEquipment :: ![EquipmentW]

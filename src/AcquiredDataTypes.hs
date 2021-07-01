@@ -11,8 +11,8 @@ import Data.Word
 import GHC.Generics (Generic)
 import System.Clock
 
-import EquipmentTypes
-import MiscUtils
+import Equipment.EquipmentTypes
+import Utils.MiscUtils
 
 data NumberType = UINT8
                 | UINT16

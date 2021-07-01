@@ -30,18 +30,20 @@ import System.FilePath
 
 import AcquiredDataTypes
 import CuvettorTypes
-import Detector
-import AvailableDetector
-import Equipment
-import EquipmentTypes
-import EquipmentInitialization
+import Detectors.Detector
+import Detectors.AvailableDetector
+import Equipment.Equipment
+import Equipment.EquipmentTypes
+import Equipment.EquipmentInitialization
 import SimpleJSONServer
-import MeasurementProgram
-import MeasurementProgramTypes
-import MeasurementProgramUtils
-import MeasurementProgramVerification
-import MiscUtils
-import BinaryEncoding
+import Measurements.MeasurementProgram
+import Measurements.MeasurementProgramTypes
+import Utils.MeasurementProgramUtils
+import Measurements.MeasurementProgramVerification
+import Utils.MiscUtils
+import Encodings.BinaryEncoding
+
+import Debug.Trace as DT
 
 handlerTimeout :: Int
 handlerTimeout = 2 * 1000000
@@ -54,7 +56,7 @@ serverSettings = defaultSettings {ssBindToAllInterfaces = False,
 main :: IO ()
 main =
     getExecutablePath >>= \exePath ->
-    readAvailableEquipment >>= \descs ->
+    DT.trace (show exePath)  readAvailableEquipment >>= \descs ->
     withEquipment descs $ \availableEquipment ->
       read <$> readFile (takeDirectory exePath </> "cameraoptions.txt") >>= \imageOrientationOpss ->
 
