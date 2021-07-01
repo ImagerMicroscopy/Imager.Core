@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-
 module Equipment.EquipmentInitialization
 where
 
@@ -20,15 +19,17 @@ import System.FilePath
 
 import AggregateMotorizedStage
 import Equipment.Equipment
+import Equipment.EquipmentPlugins
 import Equipment.EquipmentTypes
 import Utils.MiscUtils
 import RCSerialPort
 
-import Dummy.DummyEquipment
 import Equipment.Devices.Arduino
+import Equipment.Devices.PWMLaserController
 import Equipment.Devices.Asahi
 import Equipment.Devices.BlueBoxOptics
 import Equipment.Devices.Coherent
+import Dummy.DummyEquipment
 import Equipment.Devices.Lumencor
 import Equipment.Devices.Marzhauser
 import Equipment.Devices.MicroscopeController
@@ -51,12 +52,15 @@ readAvailableEquipment =
 withEquipment :: [EquipmentDescription] -> ([EquipmentW] -> IO ()) -> IO ()
 withEquipment descs action =
     bracket (initializeEquipment descs) closeEquipment (\eqs ->
-        installHandlers eqs >> action eqs)
+        bracket (loadPlugins) closeEquipment (\pluginEqs ->
+            let allEquipment = aggregateMotorizedStagesIfNeeded (eqs ++ pluginEqs)
+            in  verifyEquipmentThrows allEquipment >>
+                installHandlers >> action allEquipment))
     where
-        installHandlers eqs =
+        installHandlers =
             myThreadId >>= \mainThreadID ->
-            installHandler (Catch (f eqs mainThreadID))
-        f eqs mainThreadID event =
+            installHandler (Catch (f mainThreadID))
+        f mainThreadID event =
             case event of
                 ControlC -> putStrLn "User Interrupt" >> throwTo mainThreadID UserInterrupt
                 Break    -> putStrLn "User Interrupt" >> throwTo mainThreadID UserInterrupt
@@ -70,8 +74,7 @@ initializeEquipment descs = doInit `catch` (\e -> displayStringThenError (displa
                      putStr ("Initializing " ++ deviceDescName desc ++ "...") >>
                      initializeDevice desc >>= \dev ->
                      putStr " done!\n" >>
-                     pure dev) >>=
-                 verifyEquipmentThrows . aggregateMotorizedStagesIfNeeded
+                     pure dev)
 
 closeEquipment :: [EquipmentW] -> IO ()
 closeEquipment = mapM_ closeDevice
@@ -82,6 +85,7 @@ initializeDevice d@(LumencorLightSourceDesc _ _) = initializeLumencor d
 initializeDevice d@(MarcelLumencorLightSourceDesc _ _ _) = initializeMarcelLumencor d
 initializeDevice d@(AsahiLightSourceDesc _ _ _) = initializeAsahiLightSource d
 initializeDevice d@(ArduinoLightSourceDesc _ _ _) = initializeArduinoLightSource d
+initializeDevice d@(PWMLaserControllerDesc _ _) = initializePWMLaserControllerLightSource d
 initializeDevice d@(BlueBoxNijiDesc _ _) = initializeBlueBoxNiji d
 initializeDevice d@(DummyLightSourceDesc _) = initializeDummyLightSource d
 initializeDevice d@(MicroscopeControllerDesc _) = initializeMicroscopeController d
@@ -105,6 +109,7 @@ deviceDescName (LumencorLightSourceDesc _ _) = "Lumencor"
 deviceDescName (MarcelLumencorLightSourceDesc _ _ _) = "MarcelLumencor"
 deviceDescName (AsahiLightSourceDesc _ _ _) = "Asahi lamp"
 deviceDescName (ArduinoLightSourceDesc _ _ _) = "Arduino-controlled light source"
+deviceDescName (PWMLaserControllerDesc _ _) = "PWM Laser Controller"
 deviceDescName (BlueBoxNijiDesc _ _) = "BlueBox Niji"
 deviceDescName (DummyLightSourceDesc _) = "Dummy light source"
 deviceDescName (MicroscopeControllerDesc _) = "Microscope"
