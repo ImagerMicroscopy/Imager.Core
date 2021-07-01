@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings, BangPatterns #-}
-module MultiModeLasers where
+module Equipment.Devices.MultiModeLasers where
 
 import Control.Concurrent
 import Control.Exception
@@ -20,9 +20,9 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Data.Word
 
-import Equipment
-import EquipmentTypes
-import MiscUtils
+import Equipment.Equipment
+import Equipment.EquipmentTypes
+import Utils.MiscUtils
 import RCSerialPort
 
 data MultiModeLasers = MultiModeLasers !EqName !SerialPort

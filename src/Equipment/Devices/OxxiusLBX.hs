@@ -1,4 +1,4 @@
-module OxxiusLBX where
+module Equipment.Devices.OxxiusLBX where
 
 import Control.Concurrent
 import Control.Exception
@@ -13,8 +13,8 @@ import qualified Data.Text.Encoding as T
 import qualified Data.Text.Lazy as LT
 import qualified Data.Text.Format as T
 
-import Equipment
-import EquipmentTypes
+import Equipment.Equipment
+import Equipment.EquipmentTypes
 import RCSerialPort
 
 data OxxiusLBX = OxxiusLBX {

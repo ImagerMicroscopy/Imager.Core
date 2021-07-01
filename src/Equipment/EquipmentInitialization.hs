@@ -40,6 +40,8 @@ import Equipment.Devices.Robottor
 import Equipment.Devices.Sutter
 import Equipment.Devices.Thorlabs
 import Equipment.Devices.RemoteStage
+import Equipment.Devices.MultiModeLasers
+import Equipment.Devices.OxxiusLBX
 
 readAvailableEquipment :: IO [EquipmentDescription]
 readAvailableEquipment =
