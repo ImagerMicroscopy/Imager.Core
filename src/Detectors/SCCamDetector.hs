@@ -5,8 +5,10 @@ module Detectors.SCCamDetector where
 import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Concurrent.Chan
+import Control.Concurrent.MVar
 import Control.DeepSeq
 import Control.Exception
+import Control.Monad
 import Control.Monad.Trans.Except
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
@@ -40,14 +42,14 @@ instance Detector SCCamDetector where
             numType = UINT16
         in return (AcquiredData nRows nCols timeStamp camName bytes numType)
 
-    acquireStreamingData :: SCCamDetector -> NMeasurementsToPerform -> Chan AsyncData -> IO ()
-    acquireStreamingData (SCCamDetector camName) nMeasurements chan =
+    acquireStreamingData :: SCCamDetector -> NMeasurementsToPerform -> Signal -> Chan AsyncData -> IO ()
+    acquireStreamingData (SCCamDetector camName) nMeasurements hasStarted chan =
         performAcq `onException` (SC.abortAsyncAcquisition camName >> writeChan chan AsyncError)
         where
             performAcq = getTime Monotonic >>= \acqStart ->
-                         SC.startAsyncAcquisition camName >>
+                         SC.startBoundedAsyncAcquisition camName (fromIntegral nMeasurements) >>
+                         raiseSignal hasStarted >>
                          fetchImages nMeasurements acqStart chan >>
-                         SC.abortAsyncAcquisition camName >>
                          writeChan chan AsyncFinished
             fetchImages :: Int -> TimeSpec -> Chan AsyncData -> IO ()
             fetchImages nImagesRemaining acqStart chan
@@ -69,6 +71,7 @@ instance Detector SCCamDetector where
     setDetectorOption (SCCamDetector camName) opt = SC.setCameraOption camName opt
     getDetectorFrameRate :: SCCamDetector -> IO Double
     getDetectorFrameRate (SCCamDetector camName) = SC.getFrameRate camName
+    isConfiguredForHardwareTriggering (SCCamDetector camName) = SC.isConfiguredForHardwareTriggering camName
 
     setImageOrientation :: SCCamDetector -> [ImageOrientationOperation] -> IO ()
     setImageOrientation (SCCamDetector camName) ops =

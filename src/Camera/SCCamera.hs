@@ -74,6 +74,17 @@ getFrameRate camName =
   when (result /= 0) (throwIO $ userError ("cGetFrameRate returned error code " ++ show result)) >>
   fromCDouble <$> peek frPtr
 
+isConfiguredForHardwareTriggering :: Text -> IO Bool
+isConfiguredForHardwareTriggering camName =
+    withCString (T.unpack camName) $ \nameStr ->
+    alloca $ \isConfPtr ->
+    cIsConfiguredForHardwareTriggering nameStr isConfPtr >>= \result ->
+    when (result /= 0) (throwIO $ userError ("cIsConfiguredForHardwareTriggering returned error code " ++ show result)) >>
+    peek isConfPtr >>= \isConf ->
+    if (isConf == 0)
+        then (pure False)
+        else (pure True)
+
 setCameraOrientation :: Text -> [OrientationOp] -> IO ()
 setCameraOrientation camName ops =
     withCString (T.unpack camName) $ \nameStr ->
@@ -109,6 +120,14 @@ startAsyncAcquisition camName =
        case result of
            0 -> return ()
            e -> throwIO (userError ("startAsyncAcquisition returned error code " ++ show e))
+
+startBoundedAsyncAcquisition :: Text -> Word64 -> IO ()
+startBoundedAsyncAcquisition camName nImages =
+    withCString (T.unpack camName) $ \nameStr ->
+    cStartBoundedAsyncAcquisition nameStr nImages >>= \result ->
+       case result of
+           0 -> return ()
+           e -> throwIO (userError ("StartBoundedAsyncAcquisition returned error code " ++ show e))
 
 getNextAcquiredImage :: Text -> Word -> IO (Maybe MeasuredImages)
 getNextAcquiredImage camName timeoutMillis =
@@ -166,6 +185,9 @@ foreign import ccall "SCCameraDLL.h SetCameraOption"
 foreign import ccall unsafe "SCCameraDLL.h GetFrameRate"
     cGetFrameRate :: CString -> Ptr CDouble -> IO CInt
 
+foreign import ccall unsafe "SCCameraDLL.h IsConfiguredForHardwareTriggering"
+    cIsConfiguredForHardwareTriggering :: CString -> Ptr CInt -> IO CInt
+
 foreign import ccall unsafe "SCCameraDLL.h SetImageOrientation"
     cSetImageOrientation :: CString -> Ptr CInt -> CInt -> IO CInt
 
@@ -174,6 +196,9 @@ foreign import ccall "SCCameraDLL.h AcquireSingleImage"
 
 foreign import ccall "SCCameraDLL.h StartAsyncAcquisition"
     cStartAsyncAcquisition :: CString -> IO CInt
+
+foreign import ccall "SCCameraDLL.h StartBoundedAsyncAcquisition"
+    cStartBoundedAsyncAcquisition :: CString -> Word64 -> IO CInt
 
 foreign import ccall "SCCameraDLL.h GetOldestImageAsyncAcquired"
     cGetOldestImageAsyncAcquired :: CString -> Word32 -> Ptr (Ptr Word16) -> Ptr CInt -> Ptr CInt -> Ptr CDouble -> IO CInt
