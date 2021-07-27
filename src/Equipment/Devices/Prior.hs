@@ -36,8 +36,9 @@ initializePriorStage :: EquipmentDescription -> IO EquipmentW
 initializePriorStage (PriorDesc name portName) =
     let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS9600}) (TimeoutMillis 30000) SerialPortNoDebug
     in  openSerialPort portName serialSettings >>= \port ->
-        handlePriorMessage port "COMP 0" >>= \resp ->
-        when (resp /= "0\r") (throwIO (userError "unexpected reply from Prior stage")) >>
+        handlePriorSettingChange port "COMP 0" >>
+        handlePriorSettingChange port "ZD -1" >>
+        handlePriorSettingChange port "JZD -1" >>
         determineAvailableAxes port >>= \axes ->
         pure (EquipmentW (PriorStage (EqName name) port axes))
     where
@@ -78,6 +79,10 @@ instance Equipment PriorStage where
 
 handlePriorMessage :: SerialPort -> ByteString -> IO ByteString
 handlePriorMessage port bs = serialWriteAndReadUntilChar port (bs <> "\r") '\r'
+
+handlePriorSettingChange :: SerialPort -> ByteString -> IO ()
+handlePriorSettingChange port msg = handlePriorMessage port msg >>= \resp ->
+                                    when (resp /= "0\r") (throwIO (userError "unexpected reply from Prior stage"))
 
 sendPriorCommand :: SerialPort -> ByteString -> IO ()
 sendPriorCommand port bs = handlePriorMessage port bs >>= \resp ->
