@@ -43,17 +43,17 @@ instance Equipment PWMLaserController where
     flushSerialPorts (PWMLaserController _ port _) = flushSerialPort port
     closeDevice (PWMLaserController _ port _) = closeSerialPort port
     availableLightSources (PWMLaserController n _ lNames) =
-        [LightSourceDescription (LSName "PWM") True True (map (LSChannelName . fst) (M.toList lNames))]
+        [LightSourceDescription (LSName "ls") True True (map (LSChannelName . fst) (M.toList lNames))]
     activateLightSource (PWMLaserController _ port lNames) _ chs =
         forM_ chs (\(LSChannelName ch, LSIlluminationPower power) ->
-            let bytePower = floor ((100.0 - power) / 100.0 * 255.0)
+            let bytePower = floor (power / 100.0 * 255.0)
             in  setLaserPower port lNames ch bytePower)
     deactivateLightSource (PWMLaserController _ port lMap) =
         forM_ (M.keys lMap) (\lName -> setLaserPower port lMap lName 0)
 
 queryLaserNames :: SerialPort -> IO [Text]
 queryLaserNames port =
-    serialWriteAndReadUntilChar port "laser names" '\r' >>= (return . T.splitOn ";" . T.dropEnd 1 . T.decodeUtf8)
+    serialWriteAndReadUntilChar port "laser names\r" '\r' >>= (return . filter (not . T.null) . T.splitOn ";" . T.dropEnd 1 . T.decodeUtf8)
 
 setLaserPower :: SerialPort -> Map Text Int -> Text -> Word8 -> IO ()
 setLaserPower port lMap lName power =
