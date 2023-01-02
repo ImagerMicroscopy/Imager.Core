@@ -116,9 +116,6 @@ data EquipmentDescription = CoherentLightSourceDesc {
                           | DummyLightSourceDesc {
                                 dlsdName :: !Text
                             }
-                          | MicroscopeControllerDesc {
-                                mcdName :: !Text
-                            }
                           | ThorlabsFW103HDesc {
                                 fw103DescName :: !Text
                               , fw103DescPortName :: !String

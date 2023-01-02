@@ -1,5 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
+-- THIS MODULE HAS BEEN REPLACED BY THE EQUIPMENTPLUGINS SYSTEM
+
 module Equipment.Devices.MicroscopeController where
 
 import Control.Exception

@@ -32,7 +32,6 @@ import Equipment.Devices.Coherent
 import Dummy.DummyEquipment
 import Equipment.Devices.Lumencor
 import Equipment.Devices.Marzhauser
-import Equipment.Devices.MicroscopeController
 import Equipment.Devices.Olympus
 import Equipment.Devices.Oxxius
 import Equipment.Devices.Prior
@@ -91,7 +90,6 @@ initializeDevice d@(PWMLaserControllerDesc _ _) = initializePWMLaserControllerLi
 initializeDevice d@(MultiModeLasersDesc _ _) = initializeMultiModeLasersLightSource d
 initializeDevice d@(BlueBoxNijiDesc _ _) = initializeBlueBoxNiji d
 initializeDevice d@(DummyLightSourceDesc _) = initializeDummyLightSource d
-initializeDevice d@(MicroscopeControllerDesc _) = initializeMicroscopeController d
 initializeDevice d@(ThorlabsFW103HDesc _ _ _) = initializeThorlabsFW130H d
 initializeDevice d@(ThorlabsFW102CDesc _ _ _) = initializeThorlabsFW102C d
 initializeDevice d@(SutterLambda10BDesc _ _ _) = initializeSutterLambda10B d
@@ -117,7 +115,6 @@ deviceDescName (PWMLaserControllerDesc _ _) = "PWM Laser Controller"
 deviceDescName (MultiModeLasersDesc _ _) = "Multimode lasers controller"
 deviceDescName (BlueBoxNijiDesc _ _) = "BlueBox Niji"
 deviceDescName (DummyLightSourceDesc _) = "Dummy light source"
-deviceDescName (MicroscopeControllerDesc _) = "Microscope"
 deviceDescName (ThorlabsFW103HDesc _ _ _) = "Thorlabs FW130H filter wheel"
 deviceDescName (ThorlabsFW102CDesc _ _ _) = "ThorlabsFW102C filter wheel"
 deviceDescName (SutterLambda10BDesc _ _ _) = "Sutter filter wheel"

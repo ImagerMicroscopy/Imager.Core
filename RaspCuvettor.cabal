@@ -52,7 +52,6 @@ executable RaspCuvettor
                      , Measurements.MeasurementProgramTypes
                      , Utils.MeasurementProgramUtils
                      , Measurements.MeasurementProgramVerification
-                     , Equipment.Devices.MicroscopeController
                      , RCSerialPort
                      , Detectors.Detector
                      , Detectors.AvailableDetector
@@ -79,8 +78,7 @@ executable RaspCuvettor
                      , Equipment.Devices.OxxiusLBX
   default-extensions:  CPP, BangPatterns, OverloadedStrings, ScopedTypeVariables
   extra-lib-dirs:      C:\hslibs
-  extra-libraries:     MicroscopeControl
-                     , SCCamera
+  extra-libraries:     SCCamera
   ghc-options:         -O2 -threaded -rtsopts -funbox-strict-fields
 
   if (os(windows))
