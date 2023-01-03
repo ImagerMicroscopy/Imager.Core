@@ -238,7 +238,7 @@ castFARPROC (FARPROC address) = castPtrToFunPtr address
 
 pluginPrinter :: Text -> CString -> IO ()
 pluginPrinter pluginName str = T.putStr pluginName >> T.putStr ": " >>
-                               B.packCString str >>= B.putStr
+                               B.packCString str >>= B.putStrLn
 
 
 withCStringArray :: [String] -> (Ptr CString -> IO b) -> IO b
