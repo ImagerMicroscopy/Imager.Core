@@ -90,6 +90,7 @@ initializeOxxiusLC' (OxxiusLCDesc name portName) =
             in  handleOxxiusCombinerOKCommand port msg
         oxxiusTypeSpecificInit port LBX idx = handleOxxiusLaserCommand port idx "L=0" >> -- turn off the laser just to make sure
                                               handleOxxiusLaserCommand port idx "TTL=0" >> -- disable digital modulation
+                                              handleOxxiusLaserCommand port idx "AM=0" >> -- disable analog modulation
                                               handleOxxiusLaserCommand port idx "ACC=0" >> -- regulate output power mode
                                               handleOxxiusLaserCommand port idx "CW=1" -- constant power mode
 
