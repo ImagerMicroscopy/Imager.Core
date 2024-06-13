@@ -172,6 +172,8 @@ executeMeasurementElement env ddets (MERelativeStageLoop sn (RelativeStageLoopPa
     withStatusMessage env "relative stage loop" (
         getStagePosition stageEq >>= \(StagePosition startX startY startZ usingAF afOffset) ->
         if (not usingAF) then
+            -- if not using an autofocus system (e.g. Nikon PFS) then we simply make a rectangular
+            -- stage loop over the sample.
             let xCoords = map ((+) startX . (*) dx . fromIntegral) [negate bx .. ax]
                 yCoords = map ((+) startY . (*) dy . fromIntegral) [negate by .. ay]
             in  forM_ xCoords (\ x->
@@ -184,6 +186,9 @@ executeMeasurementElement env ddets (MERelativeStageLoop sn (RelativeStageLoopPa
                                 executeMeasurementElements env ddets es
                             )))
         else
+            -- if we are using an autofocus system, and the sample is uneven, the AF system may not be able to find
+            -- the focus if we move too far away from the current position. So we cover the grid in a pattern
+            -- that makes sure we explore in the vicinity of locations with known AF positions.
             let
                 (xCoords, yCoords,z_dep_list) = callGrid ax ay bx by dx dy startX startY
                 z_list = [startZ] ++ (replicate (length(z_dep_list)-1) 0)
@@ -212,8 +217,6 @@ cyclePositions xCoords yCoords zCoords z_list n stageEq usingAF afOffset bz az d
                       in cyclePositions xCoords yCoords new_zlist z_list upd_n stageEq usingAF afOffset bz az dz env ddtes es
         else
           return ()
-
-
 
 getZposition upZ zCoords n =
     let   (x,_:ys) = splitAt n zCoords
@@ -257,14 +260,12 @@ getClosestNeighbour x_pos y_pos grid visited walked_list_x walked_list_y z_list 
 
     in (closest_neighbour, updated_visit, updated_walked_list_x, updated_walked_list_y , updated_z_list )
 
-
-
 assignVisit x_pos y_pos visited grid =
     let ind_pos = [n  | n <- [0..length(grid)-1], (((grid!!n)!!0 == x_pos) && ((grid!!n)!!1 == y_pos) )]!!0
         (x,_:ys) = splitAt ind_pos visited
     in (x ++ [1] ++ ys)
 
---
+
 getClosestZPos walked_list_x  walked_list_y  x_pos y_pos =
     let
         dist_x = [abs(x- x_pos) | x <-  walked_list_x]
@@ -273,8 +274,6 @@ getClosestZPos walked_list_x  walked_list_y  x_pos y_pos =
         minvalue = minimum( manhattan_transform)
         min_arg = fromJust (elemIndex  minvalue manhattan_transform)
     in [min_arg]
-
-
 
 getLowestRow neighbours =
     let lowest_row = minimum([x!!0 | x <- neighbours])
@@ -285,8 +284,6 @@ getLowestCol neighbours =
     in [x | x <- neighbours, x!!1 == lowest_col]
 
 getXYCoords xC yC = [ [xC!!n,yC!!n] | n <- [0..length(xC)-1] ]
-
-
 
 
 insertFastAcquisitionLoops :: DefinedDetections -> MeasurementElement -> MeasurementElement
