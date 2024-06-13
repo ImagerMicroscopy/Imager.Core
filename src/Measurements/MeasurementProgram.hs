@@ -11,6 +11,7 @@ import Control.DeepSeq
 import Control.Exception
 import Control.Monad
 import Control.Monad.Trans.Except
+import Control.Monad.IO.Class
 import Data.Either
 import Data.IORef
 import Data.List
@@ -169,19 +170,141 @@ executeMeasurementElement env ddets (MEStageLoop sn poss es) =
 executeMeasurementElement env ddets (MERelativeStageLoop sn (RelativeStageLoopParams dx dy dz (bx, ax) (by, ay) (bz, az)) es) =
     withStatusMessage env "relative stage loop" (
         getStagePosition stageEq >>= \(StagePosition startX startY startZ usingAF afOffset) ->
-        let xCoords = map ((+) startX . (*) dx . fromIntegral) [negate bx .. ax]
-            yCoords = map ((+) startY . (*) dy . fromIntegral) [negate by .. ay]
-        in  forM_ xCoords (\ x->
-                forM_ yCoords (\y ->
-                    setStagePosition stageEq (StagePosition x y startZ usingAF afOffset) >>
-                    getStagePosition stageEq >>= \(StagePosition upX upY upZ upAF upOffset) ->
-                    let zCoords = map ((+) upZ . (*) dz . fromIntegral) [negate bz .. az]
-                    in  forM_ zCoords (\z ->
-                            setStagePosition stageEq (StagePosition upX upY z upAF upOffset) >> -- predetermined pfs
-                            executeMeasurementElements env ddets es
-                    ))))
+        let
+            (xCoords, yCoords,z_dep_list) = callGrid ax ay bx by dx dy startX startY
+
+
+            z_list = [startZ] ++ (replicate (length(z_dep_list)-1) 0)
+        in
+            cyclePositions xCoords yCoords z_list z_dep_list 0 stageEq usingAF afOffset bz az dz env ddets es)
+        -- ((coords!!n)!!0) ((coords!!n)!!1) (z_list!!n)
+            -- forM_  [0..length(xCoords)-1] (\n ->
+            --     setStagePosition stageEq (StagePosition (xCoords!!n) (yCoords!!n) startZ usingAF afOffset) >>
+            --     getStagePosition stageEq >>= \(StagePosition upX upY upZ upAF upOffset) ->
+            --     let zCoords = map ((+) upZ . (*) dz . fromIntegral) [negate bz .. az]
+            --             in  forM_ zCoords (\z ->
+            --                     setStagePosition stageEq (StagePosition upX upY (z_list!!n) upAF upOffset) >> -- predetermined pfs
+            --                     executeMeasurementElements env ddets es
+            --             )))
+
+
+
+            -- forM_ xCoords (\ x->
+            --     forM_ yCoords (\y ->
+            --         setStagePosition stageEq (StagePosition x y startZ usingAF afOffset) >>
+            --         getStagePosition stageEq >>= \(StagePosition upX upY upZ upAF upOffset) ->
+            --         let zCoords = map ((+) upZ . (*) dz . fromIntegral) [negate bz .. az]
+            --         in  forM_ zCoords (\z ->
+            --                 setStagePosition stageEq (StagePosition upX upY z upAF upOffset) >> -- predetermined pfs
+            --                 executeMeasurementElements env ddets es
+            --         ))))
     where
         [stageEq] = filter (\e -> hasMotorizedStage e && motorizedStageName e == sn) (peEquipment env)
+--
+cyclePositions xCoords yCoords zCoords z_list n stageEq usingAF afOffset bz az dz env ddtes es  =
+      -- getStagePosition stageEq >>= \(StagePosition upX upY startZ usingAF afOffset) ->
+      if n/=length(z_list)
+        then
+          let
+              x_pos = xCoords!!n
+              y_pos = yCoords!!n
+              ind_n = z_list!!n
+              z_pos = zCoords!!ind_n
+              upd_n = n+1
+
+          in print upd_n >> setStagePosition stageEq (StagePosition   x_pos y_pos z_pos usingAF afOffset)  >>  getStagePosition stageEq >>= \(StagePosition upX upY upZ upAF upOffset) ->
+              let zVals = map ((+) upZ . (*) dz . fromIntegral) [negate bz .. az]
+              in (forM_ zVals (\z ->
+                      setStagePosition stageEq (StagePosition upX upY z upAF upOffset) >>  executeMeasurementElements env ddtes es )) >>  getStagePosition stageEq >>= \(StagePosition currX currY currZ upAF upOffset) ->
+                      let
+                          new_zlist =   getZposition  currZ zCoords n
+                      in cyclePositions xCoords yCoords new_zlist z_list upd_n stageEq usingAF afOffset bz az dz env ddtes es
+        else
+          return ()
+
+
+
+getZposition upZ zCoords n =
+    let   (x,_:ys) = splitAt n zCoords
+    in (x ++ [upZ] ++ ys)
+
+
+
+
+callGrid ax ay bx by dx dy startX startY =
+    let xC = map ((+) startX . (*)  dx . fromIntegral) [negate ax .. bx]
+        yC = map ((+) startY . (*)  dy . fromIntegral) [negate ay .. by]
+        grid =  [ [x,y] | x <- xC, y <- yC ]
+        walk_x = [startX]
+        walk_y = [startY]
+        z_list = [0]
+        visited_new = assignVisit startX startY (replicate (length(grid)) 0) grid
+
+    in walkGrid startX startY grid visited_new walk_x walk_y z_list
+
+
+
+
+walkGrid xpos ypos grid visited walk_x walk_y z_list = if all (==1) visited
+                                                        then
+                                                          -- let z_output = z_list
+                                                          let x  = walk_x
+                                                              y  = walk_y
+                                                              -- xyCoords = getXYCoords x y
+                                                          in (x,y , z_list)
+
+                                                        else
+                                                          let (closest_neighbour, updated_visit, updated_walk_x , updated_walk_y, updated_z_list) = getClosestNeighbour xpos ypos grid visited walk_x walk_y z_list
+                                                          in walkGrid (closest_neighbour!!0) (closest_neighbour!!1) grid  updated_visit updated_walk_x  updated_walk_y  updated_z_list
+
+getClosestNeighbour x_pos y_pos grid visited walked_list_x walked_list_y z_list  =
+    let dist_x = [abs(x!!0 - x_pos) | x <- grid]
+        dist_y = [abs(y!!1 - y_pos) | y <- grid]
+        manhattan_transform = [if (( sum([dist_x!!n , dist_y!!n ])/= 0 ) && visited!!n==0 ) then sum([dist_x!!n , dist_y!!n ]) else 1e100 | n <- [0..length(dist_x)-1] ]
+        closest_neighbours  = [[(grid!!n)!!0,(grid!!n)!!1] | n <- [0..length(manhattan_transform)-1],  ((manhattan_transform!!n == minimum(manhattan_transform)) && (visited!!n==0 ))]
+
+        closest_neighbour = (getLowestCol ( getLowestRow closest_neighbours ) )!!0
+        updated_visit = assignVisit (closest_neighbour!!0) (closest_neighbour!!1) visited grid
+        min_val = getClosestZPos  walked_list_x  walked_list_y  (closest_neighbour!!0)  (closest_neighbour!!1)
+
+        updated_walked_list_x = walked_list_x ++ [closest_neighbour!!0]
+        updated_walked_list_y = walked_list_y ++ [closest_neighbour!!1]
+
+        updated_z_list = z_list ++ min_val
+
+    in (closest_neighbour, updated_visit, updated_walked_list_x, updated_walked_list_y , updated_z_list )
+
+
+
+assignVisit x_pos y_pos visited grid =
+    let ind_pos = [n  | n <- [0..length(grid)-1], (((grid!!n)!!0 == x_pos) && ((grid!!n)!!1 == y_pos) )]!!0
+        (x,_:ys) = splitAt ind_pos visited
+    in (x ++ [1] ++ ys)
+
+--
+getClosestZPos walked_list_x  walked_list_y  x_pos y_pos =
+    let
+        dist_x = [abs(x- x_pos) | x <-  walked_list_x]
+        dist_y = [abs(y- y_pos) | y <-  walked_list_y]
+        manhattan_transform = [sum([dist_x!!n , dist_y!!n ])  | n <- [0..length(dist_x)-1] ]
+        minvalue = minimum( manhattan_transform)
+        min_arg = fromJust (elemIndex  minvalue manhattan_transform)
+    in [min_arg]
+
+
+
+getLowestRow neighbours =
+    let lowest_row = minimum([x!!0 | x <- neighbours])
+    in [x | x <- neighbours, x!!0 == lowest_row]
+
+getLowestCol neighbours =
+    let lowest_col = minimum([x!!1 | x <- neighbours])
+    in [x | x <- neighbours, x!!1 == lowest_col]
+
+getXYCoords xC yC = [ [xC!!n,yC!!n] | n <- [0..length(xC)-1] ]
+
+
+
 
 insertFastAcquisitionLoops :: DefinedDetections -> MeasurementElement -> MeasurementElement
 insertFastAcquisitionLoops ddets (MEDoTimes n [MEDetection [dName]]) = MEFastAcquisitionLoop n (dName, fromJust $ M.lookup dName ddets)
