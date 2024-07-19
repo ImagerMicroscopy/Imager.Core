@@ -49,12 +49,12 @@ instance Equipment ASIStage where
     getStagePosition (ASIStage _ port ) =
         StagePosition <$> ((/ 10) <$> readNumberP port "WHERE X")  -- divide by 10 because positions are in units of 0.1 µm
                       <*> ((/ 10) <$> readNumberP port "WHERE Y")
-                      <*> ((/ 10) <$> readNumberP port "WHERE X")
+                      <*> ((/ 10) <$> readNumberP port "WHERE Z")
                       <*> pure False <*> pure 0
         where
           readNumberP :: SerialPort -> ByteString -> IO Double
           readNumberP port query = handleASIMessage port query >>= \resp ->
-                                   case (B.stripPrefix "A: " resp) of
+                                   case (B.stripPrefix ":A " resp) of
                                        Nothing -> throwIO (userError "unable to read ASI position")
                                        Just r  -> (return . read . T.unpack . T.decodeUtf8) r
                                    
@@ -62,8 +62,8 @@ instance Equipment ASIStage where
         doMove `onException` abortMovement
         where
           doMove = sendASICommand port posMsg >> waitUntilMovementStops
-          posMsg = T.encodeUtf8 . LT.toStrict $ T.format "MOVE X {} Y {} Z {}" ((round (x * 10), round (y * 10), round (z * 10)) :: (Int, Int, Int))
-          waitUntilMovementStops = isMoving . read . T.unpack . T.decodeUtf8 <$> handleASIMessage port "/" >>= \moves ->
+          posMsg = T.encodeUtf8 . LT.toStrict $ T.format "MOVE X={} Y={} Z={}" ((round (x * 10), round (y * 10), round (z * 10)) :: (Int, Int, Int))
+          waitUntilMovementStops = isMoving <$> handleASIMessage port "/" >>= \moves ->
                                    if (moves)
                                    then threadDelay 20000 >> waitUntilMovementStops
                                    else pure ()
@@ -83,7 +83,9 @@ verifyIsASIStage port = handleASIMessage port "BUILD" >>= \resp ->
                        pure ()
 
 sendASICommand :: SerialPort -> ByteString -> IO ()
-sendASICommand port bs = handleASIMessage port bs >>= \resp ->
+sendASICommand port bs = dropSpaces <$> handleASIMessage port bs >>= \resp ->
                            case resp of
                                ":A" -> return ()
                                e     -> throwIO (userError ("unexpected response " ++ show e ++ " from ASI stage"))
+    where
+        dropSpaces b = B.filter (\c -> c /= 32) b
