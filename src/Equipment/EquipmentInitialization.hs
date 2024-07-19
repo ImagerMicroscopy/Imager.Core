@@ -25,6 +25,7 @@ import Utils.MiscUtils
 import RCSerialPort
 
 import Equipment.Devices.Arduino
+import Equipment.Devices.ASIStage
 import Equipment.Devices.PWMLaserController
 import Equipment.Devices.Asahi
 import Equipment.Devices.BlueBoxOptics
@@ -85,6 +86,7 @@ initializeDevice d@(CoherentLightSourceDesc _ _) = initializeCoherent d
 initializeDevice d@(LumencorLightSourceDesc _ _) = initializeLumencor d
 initializeDevice d@(MarcelLumencorLightSourceDesc _ _ _) = initializeMarcelLumencor d
 initializeDevice d@(AsahiLightSourceDesc _ _ _) = initializeAsahiLightSource d
+initializeDevice d@(ASIStageDesc _ _) = initializeASIStage d
 initializeDevice d@(ArduinoLightSourceDesc _ _ _) = initializeArduinoLightSource d
 initializeDevice d@(PWMLaserControllerDesc _ _) = initializePWMLaserControllerLightSource d
 initializeDevice d@(MultiModeLasersDesc _ _) = initializeMultiModeLasersLightSource d
@@ -110,6 +112,7 @@ deviceDescName (CoherentLightSourceDesc _ _) = "Coherent laser"
 deviceDescName (LumencorLightSourceDesc _ _) = "Lumencor"
 deviceDescName (MarcelLumencorLightSourceDesc _ _ _) = "MarcelLumencor"
 deviceDescName (AsahiLightSourceDesc _ _ _) = "Asahi lamp"
+deviceDescName (ASIStageDesc _ _) = "ASI motorized stage"
 deviceDescName (ArduinoLightSourceDesc _ _ _) = "Arduino-controlled light source"
 deviceDescName (PWMLaserControllerDesc _ _) = "PWM Laser Controller"
 deviceDescName (MultiModeLasersDesc _ _) = "Multimode lasers controller"
