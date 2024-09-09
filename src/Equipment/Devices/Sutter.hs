@@ -30,7 +30,7 @@ data SutterLambda10B = SutterLambda10B !EqName ![(FName, Int)] !SerialPort
 
 initializeSutterLambda10B :: EquipmentDescription -> IO EquipmentW
 initializeSutterLambda10B (SutterLambda10BDesc name portName chs) =
-    let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS128000}) (TimeoutMillis 10000) SerialPortNoDebug
+    let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS115200}) (TimeoutMillis 10000) SerialPortNoDebug
     in  openSerialPort portName serialSettings >>= \port ->
         serialWriteByteAndReadUntilChar port 238 '\r'>>
         serialWriteByteAndReadUntilChar port 253 '\r' >>
