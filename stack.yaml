@@ -1,20 +1,18 @@
 # For more information, see: http://docs.haskellstack.org/en/stable/yaml_configuration.html
 
 # Specifies the GHC version and set of packages available (e.g., lts-3.5, nightly-2015-09-21, ghc-7.10.2)
-resolver: lts-12.16
+resolver: lts-22.33
 
 # Local packages, usually specified by relative directory name
 packages:
     - .
 
 extra-deps:
-    - text-format-0.3.2
+    - serialport-0.5.5
     - git: git@bitbucket.org:pdedecker/simplejsonserver.git
-      commit: 75407bb5358b909c850b2929ff66a846e58cabe8
+      commit: e8293b6fcb86daff6b776a2972b48f34e49d6f43
     - git: git@bitbucket.org:pdedecker/hsoceanoptics.git
       commit: 5540ca4aac349c4403dcbd2ff75e6b0c51e0281d
-    - git: git@bitbucket.org:pdedecker/serialport.git
-      commit: de4d586e44c3157f4971a2cd9a6c215bb116c3eb
 
 # Override default flag values for local packages and extra-deps
 flags: {}

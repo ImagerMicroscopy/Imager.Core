@@ -311,7 +311,7 @@ executeDetection dets eqs (detNames, detParams) startTime dataCounter dataMVar =
                  forM_ acquiredData (\acq ->
                      readIORef dataCounter >>= \idx ->
                      writeIORef dataCounter (idx + 1) >>
-                     acq `deepseq` addDataToMVar dataMVar startTime idx stagePos dName acq))
+                     (acq `deepseq` (addDataToMVar dataMVar startTime idx stagePos dName acq))))
 
 setDetectorProperties :: Detector a => [a] -> [DetectorParams] -> IO ()
 setDetectorProperties dets dps =
@@ -355,7 +355,7 @@ fastStreamingAcquisition requiredDets enableLightSourcesAction disableLightSourc
                                        readIORef posRef >>= \pos ->
                                        readIORef dataCounter >>= \idx ->
                                        writeIORef dataCounter (idx + 1) >>
-                                       r `deepseq` addDataToMVar dataMVar startTime idx pos detName r >>
+                                       (r `deepseq` (addDataToMVar dataMVar startTime idx pos detName r)) >>
                                        fetchData posRef (nFetched + 1) nFinished as chan
         stagePositionWorker :: IO StagePosition -> IORef StagePosition -> IO ()
         stagePositionWorker readStagePosFunc positionRef =

@@ -8,6 +8,7 @@ module Equipment.EquipmentPluginsInternal (
 import Control.Monad
 import Data.ByteString(ByteString)
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as B
 import Data.Text(Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
