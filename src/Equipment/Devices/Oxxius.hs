@@ -68,6 +68,7 @@ initializeOxxiusLC' (OxxiusLCDesc name portName modulationMode) =
             oxxiusTypeSpecificInit port lType idx) >>
         pure (OxxiusLC (EqName name) port lasers)
     where
+        useDigitalModulation = modulationMode == DigitalModulation
         getLaserDetails :: SerialPort -> IO [(LSChannelName, OxxiusLaserParams)]
         getLaserDetails port = concat <$> mapM (getLaserDetail port) [1 .. 6]
         getLaserDetail :: SerialPort -> Int -> IO [(LSChannelName, OxxiusLaserParams)]
@@ -75,7 +76,7 @@ initializeOxxiusLC' (OxxiusLCDesc name portName modulationMode) =
             let msg = T.encodeUtf8 . LT.toStrict $ T.format "L{} INF?\r\n" (T.Only idx)
             in  T.decodeUtf8 <$> serialWriteAndReadUntilChar port msg '\n' >>= \resp ->
                 if ("timeout" `T.isPrefixOf` resp)
-                then pure []
+                then pure []    -- no laser present at this index
                 else
                     let [lasertTypeStr, wavelengthStr, powerStr] = T.split (== '-') resp
                         laserType = case (lasertTypeStr) of
@@ -86,7 +87,6 @@ initializeOxxiusLC' (OxxiusLCDesc name portName modulationMode) =
                         maxPower = read (T.unpack powerStr)
                         params = OxxiusLaserParams laserType maxPower wavelength idx
                     in  pure [(LSChannelName resp, params)]
-        useDigitalModulation = modulationMode == DigitalModulation
         oxxiusTypeSpecificInit :: SerialPort -> OxxiusLaserType -> Int -> IO ()
         oxxiusTypeSpecificInit port LCX idx =
             let msg = LT.toStrict (T.format "L{} DL=1\r\n" [idx])
@@ -117,19 +117,23 @@ instance Equipment OxxiusLC where
     availableLightSources (OxxiusLC n _ chs) =
         [LightSourceDescription (LSName "ls") True True (map fst chs)]
     activateLightSource olc@(OxxiusLC _ port availChs) _ chs =
-        setRequestedPowers olc chs >>
-        activateLasers port availChs chs
+        forM_ chs (\(chName, LSIlluminationPower p) ->
+            let idx = oxxIndex . fromJust $ (lookup chName availChs)
+            in  handleOxxiusCombinerEchoCommand port (powerCmd idx p) >>
+                handleOxxiusLaserCommand port idx "L=1"
+        )
         where
-            activateLasers port availChs chs =
-                forM_ chs (\(chName, LSIlluminationPower p) ->
-                    let cmd = "L=1"
-                        idx = oxxIndex . fromJust $ (lookup chName availChs)
-                    in  handleOxxiusLaserCommand port idx cmd)
+            powerCmd :: Int -> Double -> Text
+            powerCmd idx pct = LT.toStrict (T.format "PPL{} {}.{}" (idx, fst (separateParts pct), snd (separateParts pct))) -- Oxxius seems to like exactly one digit after the comma
+            separateParts :: Double -> (Int, Int)
+            separateParts d = (round d, round (10.0 * (d - (fromIntegral (floor d)))))
     deactivateLightSource (OxxiusLC _ port chs) =
         forM_ (map snd chs) (\(OxxiusLaserParams lType _ _ idx) ->
-            case lType of
-                LBX -> handleOxxiusLaserCommand port idx "L=0"
-                LCX -> handleOxxiusCombinerEchoCommand port "P=0.0")
+            let cmd = LT.toStrict (T.format "PPL{} 0.0" (T.Only idx))
+            in  handleOxxiusCombinerEchoCommand port cmd)
+            --case lType of
+            --    LBX -> handleOxxiusLaserCommand port idx "L=0"
+            --    LCX -> handleOxxiusCombinerEchoCommand port "P=0.0")
 
 initializeMarcelOxxiusLC :: EquipmentDescription -> IO EquipmentW
 initializeMarcelOxxiusLC (MarcelOxxiusLCDesc name oxxPortName ardPortName) =
