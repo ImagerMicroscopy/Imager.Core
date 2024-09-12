@@ -78,6 +78,10 @@ data FilterWheelDescription = FilterWheelDescription {
 data StageAxis = XAxis | YAxis | ZAxis
                deriving (Eq, Show)
 
+data WantDigitalModulation = DigitalModulation 
+                           | NoDigitalModulation
+                           deriving (Eq, Show, Read)
+
 data EquipmentDescription = CoherentLightSourceDesc {
                                 clsdName :: !Text
                               , clsdSerialPortName :: !String
@@ -142,6 +146,7 @@ data EquipmentDescription = CoherentLightSourceDesc {
                           | OxxiusLCDesc {
                                 oxxDescName :: !Text
                               , oxxDescPortName :: !String
+                              , oxxModulationMode :: !WantDigitalModulation
                           }
                           | MarcelOxxiusLCDesc {
                                 moxxDescName :: !Text

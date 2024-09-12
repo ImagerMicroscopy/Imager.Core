@@ -54,11 +54,13 @@ initializeOxxiusLC desc =
     EquipmentW <$> (initializeOxxiusLC' desc)
 
 initializeOxxiusLC' :: EquipmentDescription -> IO OxxiusLC
-initializeOxxiusLC' (OxxiusLCDesc name portName) =
+initializeOxxiusLC' (OxxiusLCDesc name portName modulationMode) =
     let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS19200}) (TimeoutMillis 1000) SerialPortNoDebug
     in  openSerialPort portName serialSettings >>= \port ->
-        handleOxxiusCombinerEchoCommand port "AM=0" >> -- disable analog modulation
         handleOxxiusCombinerOKCommand port "SH1=1" >> -- open shutter 1
+        (if useDigitalModulation
+         then handleOxxiusCombinerEchoCommand port "AM=1" -- enable analog modulation
+         else handleOxxiusCombinerEchoCommand port "AM=0") >>
         getLaserDetails port >>= \lasers ->
         forM_ (map snd lasers) (\(OxxiusLaserParams lType _ _ idx) ->
             handleOxxiusLaserCommand port idx "CDRH=0" >>
@@ -84,29 +86,21 @@ initializeOxxiusLC' (OxxiusLCDesc name portName) =
                         maxPower = read (T.unpack powerStr)
                         params = OxxiusLaserParams laserType maxPower wavelength idx
                     in  pure [(LSChannelName resp, params)]
+        useDigitalModulation = modulationMode == DigitalModulation
         oxxiusTypeSpecificInit :: SerialPort -> OxxiusLaserType -> Int -> IO ()
         oxxiusTypeSpecificInit port LCX idx =
             let msg = LT.toStrict (T.format "L{} DL=1\r\n" [idx])
             in  handleOxxiusCombinerOKCommand port msg
         oxxiusTypeSpecificInit port LBX idx = handleOxxiusLaserCommand port idx "L=0" >> -- turn off the laser just to make sure
-                                              handleOxxiusLaserCommand port idx "TTL=0" >> -- disable digital modulation
-                                              handleOxxiusLaserCommand port idx "AM=0" >> -- disable analog modulation
-                                              handleOxxiusLaserCommand port idx "ACC=0" >> -- regulate output power mode
-                                              handleOxxiusLaserCommand port idx "CW=1" -- constant power mode
-
-initializeMarcelOxxiusLC :: EquipmentDescription -> IO EquipmentW
-initializeMarcelOxxiusLC (MarcelOxxiusLCDesc name oxxPortName ardPortName) =
-    let arSerialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS19200}) (TimeoutMillis 60000) SerialPortNoDebug
-    in  initializeOxxiusLC' (OxxiusLCDesc name oxxPortName) >>= \(ox@(OxxiusLC _ oxPort lasers)) ->
-        openSerialPort ardPortName arSerialSettings >>= \arPort -> threadDelay 2000000 >>
-        handleOxxiusCombinerEchoCommand oxPort "AM=1" >> -- enable analog modulation
-        forM_ (map snd lasers) (\(OxxiusLaserParams lType _ _ idx) ->
-            enableAnalogMode oxPort lType idx) >>
-        pure (EquipmentW (MarcelOxxiusLC ox arPort))
-        where
-            enableAnalogMode :: SerialPort -> OxxiusLaserType -> Int -> IO ()
-            enableAnalogMode port LBX idx = handleOxxiusLaserCommand port idx "AM=1" -- enable analog modulation
-            enableAnalogMode _ _ _ = pure ()
+                                              if (useDigitalModulation)
+                                              then
+                                                  handleOxxiusLaserCommand port idx "TTL=0" >> -- disable digital modulation
+                                                  handleOxxiusLaserCommand port idx "AM=0" >> -- disable analog modulation
+                                                  handleOxxiusLaserCommand port idx "ACC=0" >> -- regulate output power mode
+                                                  handleOxxiusLaserCommand port idx "CW=1" -- constant power mode
+                                              else
+                                                  handleOxxiusLaserCommand port idx "ACC=1" >> -- constant current mode  
+                                                  handleOxxiusLaserCommand port idx "TTL=1" -- enable digital modulation
 
 instance Equipment OxxiusLC where
     equipmentName (OxxiusLC n _ _) = n
@@ -137,6 +131,20 @@ instance Equipment OxxiusLC where
                 LBX -> handleOxxiusLaserCommand port idx "L=0"
                 LCX -> handleOxxiusCombinerEchoCommand port "P=0.0")
 
+initializeMarcelOxxiusLC :: EquipmentDescription -> IO EquipmentW
+initializeMarcelOxxiusLC (MarcelOxxiusLCDesc name oxxPortName ardPortName) =
+    let arSerialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS19200}) (TimeoutMillis 60000) SerialPortNoDebug
+    in  initializeOxxiusLC' (OxxiusLCDesc name oxxPortName DigitalModulation) >>= \(ox@(OxxiusLC _ oxPort lasers)) ->
+        openSerialPort ardPortName arSerialSettings >>= \arPort -> threadDelay 2000000 >>
+        handleOxxiusCombinerEchoCommand oxPort "AM=1" >> -- enable analog modulation
+        forM_ (map snd lasers) (\(OxxiusLaserParams lType _ _ idx) ->
+            enableAnalogMode oxPort lType idx) >>
+        pure (EquipmentW (MarcelOxxiusLC ox arPort))
+        where
+            enableAnalogMode :: SerialPort -> OxxiusLaserType -> Int -> IO ()
+            enableAnalogMode port LBX idx = handleOxxiusLaserCommand port idx "AM=1" -- enable analog modulation
+            enableAnalogMode _ _ _ = pure ()
+
 instance Equipment MarcelOxxiusLC where
     equipmentName (MarcelOxxiusLC ox _) = equipmentName ox
     flushSerialPorts (MarcelOxxiusLC ox arPort) = flushSerialPorts ox >> flushSerialPort arPort
@@ -160,7 +168,7 @@ setRequestedPowers (OxxiusLC _ port availChs) chs =
       setLaserPower :: SerialPort -> OxxiusLaserParams -> Double -> IO ()
       setLaserPower port (OxxiusLaserParams lType maxP _ idx) p =
          let actualP = (p / 100.0 * maxP)
-             powerStr = LT.toStrict (T.format "{}.{}" (separateParts actualP)) -- Oxxius seems to like exactly one number after the comma
+             powerStr = LT.toStrict (T.format "{}.{}" (separateParts actualP)) -- Oxxius seems to like exactly one digit after the comma
          in  case lType of
                  LBX -> handleOxxiusLaserCommand port idx ("PM=" <> powerStr)
                  LCX -> handleOxxiusCombinerEchoCommand port ("P=" <> powerStr)
