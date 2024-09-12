@@ -55,7 +55,7 @@ initializeOxxiusLC desc =
 
 initializeOxxiusLC' :: EquipmentDescription -> IO OxxiusLC
 initializeOxxiusLC' (OxxiusLCDesc name portName modulationMode) =
-    let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS19200}) (TimeoutMillis 1000) SerialPortNoDebug
+    let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS19200}) (TimeoutMillis 1000) SerialPortDebugText
     in  openSerialPort portName serialSettings >>= \port ->
         handleOxxiusCombinerOKCommand port "SH1=1" >> -- open shutter 1
         (if useDigitalModulation
