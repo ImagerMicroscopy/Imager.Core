@@ -78,7 +78,7 @@ executable RaspCuvettor
                      , Equipment.EquipmentPluginsInternal
                      , Equipment.Devices.MultiModeLasers
                      , Equipment.Devices.OxxiusLBX
-  default-extensions:  CPP, BangPatterns, OverloadedStrings, ScopedTypeVariables
+  default-extensions:  CPP, BangPatterns, OverloadedStrings, ScopedTypeVariables, OverloadedRecordDot
   extra-lib-dirs:      C:\hslibs
   extra-libraries:     SCCamera
   ghc-options:         -O2 -threaded -rtsopts -funbox-strict-fields

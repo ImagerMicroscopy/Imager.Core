@@ -34,6 +34,7 @@ import qualified Data.Text.Format as T
 import Data.Word
 import System.Clock
 import qualified System.Hardware.Serialport as SP
+import qualified System.Timeout as ST
 
 import Utils.MiscUtils
 
@@ -117,19 +118,19 @@ serialWriteAndReadAtLeastNBytes port bs n =
 
 serialRead :: SerialPort -> (ByteString -> Bool) -> IO ByteString
 serialRead port satisfiedP =
-    fromNanoSecs . (+) (fromIntegral timeoutMillis * 1e6) . toNanoSecs <$> getTime Monotonic >>= \deadline ->
-    readWorker port satisfiedP B.empty deadline
+    ST.timeout timeoutMicros (readWorker port satisfiedP B.empty) >>= \result ->
+    case result of
+        Just bytes -> possiblyPrintMessage port.spPortName port.spDebugMode "RECEIVED" bytes >>
+                      pure (bytes)
+        Nothing    -> throwIO (userError ("time limit exceeded reading from serial port " ++ show port.spPortName))
     where
-        timeoutMillis = toMillis $ spTimeout port
-        readWorker :: SerialPort -> (ByteString -> Bool) -> ByteString -> TimeSpec -> IO ByteString
-        readWorker p@(SerialPort port portName _ debugMode _) satisfiedP accum deadline =
-            getTime Monotonic >>= \now ->
-            when (now > deadline)
-                (throwIO (userError ("time limit exceeded reading from serial port " ++ show portName))) >>
-            B.append accum <$> SP.recv port 4096 >>= \newAccum ->
-            if (not $ satisfiedP newAccum)
-              then readWorker p satisfiedP newAccum deadline
-              else possiblyPrintMessage portName debugMode "RECEIVED" newAccum >> return newAccum
+        timeoutMicros = (toMillis port.spTimeout) * 1000
+        readWorker :: SerialPort -> (ByteString -> Bool) -> ByteString -> IO ByteString
+        readWorker p satisfiedP accum =
+            B.append accum <$> SP.recv p.spPort 4096 >>= \newAccum ->
+            if (not (satisfiedP newAccum))
+              then readWorker p satisfiedP newAccum
+              else pure newAccum
 
 possiblyPrintMessage :: Text -> SerialPortDebugMode -> Text -> ByteString -> IO ()
 possiblyPrintMessage portName dbgMode prefix msg =
