@@ -28,6 +28,7 @@ data OxxiusLaserParams = OxxiusLaserParams {
                            , oxxMaxPower :: !Double
                            , oxxWavelength :: !Int
                            , oxxIndex :: !Int -- index in combiner
+                           , oxxShutter :: !(Maybe Int) -- index of the optional shutter
                          }
                        deriving (Eq, Show)
 
@@ -54,7 +55,7 @@ initializeOxxiusLC desc =
     EquipmentW <$> (initializeOxxiusLC' desc)
 
 initializeOxxiusLC' :: EquipmentDescription -> IO OxxiusLC
-initializeOxxiusLC' (OxxiusLCDesc name portName modulationMode) =
+initializeOxxiusLC' (OxxiusLCDesc name portName modulationMode shutterDetails) =
     let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS19200}) (TimeoutMillis 1000) SerialPortDebugText
     in  openSerialPort portName serialSettings >>= \port ->
         handleOxxiusCombinerCommand_ port "AS=0" >>
@@ -62,17 +63,17 @@ initializeOxxiusLC' (OxxiusLCDesc name portName modulationMode) =
         (if useDigitalModulation
          then handleOxxiusCombinerEchoCommand port "AM=1" -- enable analog modulation
          else handleOxxiusCombinerEchoCommand port "AM=0") >>
-        getLaserDetails port >>= \lasers ->
-        forM_ (map snd lasers) (\(OxxiusLaserParams lType _ _ idx) ->
-            handleOxxiusLaserCommand port idx "CDRH=0" >>
-            oxxiusTypeSpecificInit port lType idx) >>
+        getLaserDetails port shutterDetails >>= \lasers ->
+        forM_ (map snd lasers) (\laserParams ->
+            handleOxxiusLaserCommand port laserParams.oxxIndex "CDRH=0" >>
+            oxxiusTypeSpecificInit port laserParams.oxxType laserParams.oxxIndex) >>
         pure (OxxiusLC (EqName name) port lasers)
     where
         useDigitalModulation = modulationMode == DigitalModulation
-        getLaserDetails :: SerialPort -> IO [(LSChannelName, OxxiusLaserParams)]
-        getLaserDetails port = concat <$> mapM (getLaserDetail port) [1 .. 6]
-        getLaserDetail :: SerialPort -> Int -> IO [(LSChannelName, OxxiusLaserParams)]
-        getLaserDetail port idx =
+        getLaserDetails :: SerialPort -> [(Int, Int)] -> IO [(LSChannelName, OxxiusLaserParams)]
+        getLaserDetails port shutterDetails = concat <$> mapM (getLaserDetail port shutterDetails) [1 .. 6]
+        getLaserDetail :: SerialPort -> [(Int, Int)] -> Int -> IO [(LSChannelName, OxxiusLaserParams)]
+        getLaserDetail port shutterDetails idx =
             let msg = T.encodeUtf8 . LT.toStrict $ T.format "L{} INF?\r\n" (T.Only idx)
             in  T.decodeUtf8 <$> serialWriteAndReadUntilChar port msg '\n' >>= \resp ->
                 if (("timeout" `T.isPrefixOf` resp) || ("Not authorized" `T.isPrefixOf` resp))
@@ -85,7 +86,8 @@ initializeOxxiusLC' (OxxiusLCDesc name portName modulationMode) =
                                        v     -> throw $ userError ("unknown oxxius lasertype " ++ T.unpack v)
                         wavelength = read (T.unpack wavelengthStr)
                         maxPower = read (T.unpack powerStr)
-                        params = OxxiusLaserParams laserType maxPower wavelength idx
+                        shutterIdx = lookup idx shutterDetails
+                        params = OxxiusLaserParams laserType maxPower wavelength idx shutterIdx
                     in  pure [(LSChannelName resp, params)]
         oxxiusTypeSpecificInit :: SerialPort -> OxxiusLaserType -> Int -> IO ()
         oxxiusTypeSpecificInit port LCX idx = handleOxxiusLaserCommand_ port idx "T=0" -- disable temperature regulation so the laser is off until first use
@@ -105,10 +107,10 @@ instance Equipment OxxiusLC where
     equipmentName (OxxiusLC n _ _) = n
     flushSerialPorts (OxxiusLC _ port _) = flushSerialPort port
     closeDevice (OxxiusLC _ port chs) =
-        forM_ (map snd chs) (\(OxxiusLaserParams lType _ _ idx) ->
-            case lType of
-                LBX -> handleOxxiusLaserCommand port idx "L=0"
-                LCX -> handleOxxiusLaserCommand_ port idx "T=0" -- turn off temperature regulation shutdown
+        forM_ (map snd chs) (\laserParams ->
+            case laserParams.oxxType of
+                LBX -> handleOxxiusLaserCommand port laserParams.oxxIndex "L=0"
+                LCX -> handleOxxiusLaserCommand_ port laserParams.oxxIndex "T=0" -- turn off temperature regulation shutdown
             ) >>
         handleOxxiusCombinerOKCommand port "SH1 0" >> -- close shutter 1
         closeSerialPort port
@@ -116,10 +118,16 @@ instance Equipment OxxiusLC where
         [LightSourceDescription (LSName "ls") True True (map fst chs)]
     activateLightSource olc@(OxxiusLC _ port availChs) _ chs =
         forM_ chs (\(chName, LSIlluminationPower p) ->
-            let idx = oxxIndex . fromJust $ (lookup chName availChs)
+            let laserParams = fromJust $ lookup chName availChs
+                idx = laserParams.oxxIndex
+                maybeShutterIdx = laserParams.oxxShutter
             in  handleOxxiusCombinerCommand_ port (powerCmd idx p) >>
                 handleOxxiusLaserCommand_ port idx "T=1" >>
-                handleOxxiusLaserCommand port idx "L=1"
+                handleOxxiusLaserCommand port idx "L=1" >>
+                when (isJust maybeShutterIdx) (
+                    let cmd = LT.toStrict (T.format "SH{} 1" (T.Only $ fromJust maybeShutterIdx))
+                    in  handleOxxiusCombinerOKCommand port cmd
+                )
         )
         where
             powerCmd :: Int -> Double -> Text
@@ -127,21 +135,22 @@ instance Equipment OxxiusLC where
             separateParts :: Double -> (Int, Int)
             separateParts d = (round d, round (10.0 * (d - (fromIntegral (floor d)))))
     deactivateLightSource (OxxiusLC _ port chs) =
-        forM_ (map snd chs) (\(OxxiusLaserParams lType _ _ idx) ->
-            let cmd = LT.toStrict (T.format "PPL{} 0.0" (T.Only idx))
-            in  handleOxxiusCombinerCommand_ port cmd)
-            --case lType of
-            --    LBX -> handleOxxiusLaserCommand port idx "L=0"
-            --    LCX -> handleOxxiusCombinerEchoCommand port "P=0.0")
+        forM_ (map snd chs) (\laserParams ->
+            if (not $ isJust laserParams.oxxShutter)
+            then let cmd = LT.toStrict (T.format "PPL{} 0.0" (T.Only laserParams.oxxIndex))
+                 in  handleOxxiusCombinerCommand_ port cmd
+            else let cmd = LT.toStrict (T.format "SH{} 0" (T.Only $ fromJust laserParams.oxxShutter)) -- close the shutter but keep the laser going
+                 in  handleOxxiusCombinerOKCommand port cmd
+        )
 
 initializeMarcelOxxiusLC :: EquipmentDescription -> IO EquipmentW
 initializeMarcelOxxiusLC (MarcelOxxiusLCDesc name oxxPortName ardPortName) =
     let arSerialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS19200}) (TimeoutMillis 60000) SerialPortNoDebug
-    in  initializeOxxiusLC' (OxxiusLCDesc name oxxPortName DigitalModulation) >>= \(ox@(OxxiusLC _ oxPort lasers)) ->
+    in  initializeOxxiusLC' (OxxiusLCDesc name oxxPortName DigitalModulation []) >>= \(ox@(OxxiusLC _ oxPort lasers)) ->
         openSerialPort ardPortName arSerialSettings >>= \arPort -> threadDelay 2000000 >>
         handleOxxiusCombinerEchoCommand oxPort "AM=1" >> -- enable analog modulation
-        forM_ (map snd lasers) (\(OxxiusLaserParams lType _ _ idx) ->
-            enableAnalogMode oxPort lType idx) >>
+        forM_ (map snd lasers) (\laserParams ->
+            enableAnalogMode oxPort laserParams.oxxType laserParams.oxxIndex) >>
         pure (EquipmentW (MarcelOxxiusLC ox arPort))
         where
             enableAnalogMode :: SerialPort -> OxxiusLaserType -> Int -> IO ()
@@ -169,7 +178,7 @@ setRequestedPowers (OxxiusLC _ port availChs) chs =
        in  setLaserPower port params p)
     where
       setLaserPower :: SerialPort -> OxxiusLaserParams -> Double -> IO ()
-      setLaserPower port (OxxiusLaserParams lType maxP _ idx) p =
+      setLaserPower port (OxxiusLaserParams lType maxP _ idx _) p =
          let actualP = (p / 100.0 * maxP)
              powerStr = LT.toStrict (T.format "{}.{}" (separateParts actualP)) -- Oxxius seems to like exactly one digit after the comma
          in  case lType of
@@ -193,7 +202,7 @@ marcelOxxiusIlluminationMessage mox chs mode =
     in  fullMsg
     where
         marcelOxxiusCodeForLaser :: OxxiusLaserParams -> ByteString
-        marcelOxxiusCodeForLaser (OxxiusLaserParams _ _ wl _)
+        marcelOxxiusCodeForLaser (OxxiusLaserParams _ _ wl _ _)
             | within wl 380 420 = "V"
             | within wl 420 470 = "B"
             | within wl 470 520 = "C"
