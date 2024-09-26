@@ -68,13 +68,16 @@ class Detector a where
 
 acquireMultipleDetectorStreamingData :: (Detector a) => [a] -> IO () -> IO () -> NMeasurementsToPerform -> Chan AsyncData -> IO ()
 acquireMultipleDetectorStreamingData dets actionBeforeAcquisition actionAfterAcquisition nMeasurements chan =
-    partitionM isConfiguredForHardwareTriggering dets >>= \(withTrigs, withoutTrigs) ->
-    replicateM (length withTrigs) newSignal >>= \trigSignals ->
-    withAsync (forConcurrently_ (zip withTrigs trigSignals) (\(det, hasStarted) ->
-                   acquireStreamingData det nMeasurements hasStarted chan)) (\firstAs ->
-        mapM_ waitForSignal trigSignals >>
-        actionBeforeAcquisition >>
-        withAsync (forConcurrently_ withoutTrigs (\det -> newSignal >>= \hasStarted ->
-                                                          acquireStreamingData det nMeasurements hasStarted chan)) (\secondAs ->
-            wait firstAs >> wait secondAs >>
-            actionAfterAcquisition))
+    doTheWork `onException` (writeChan chan AsyncError)
+    where
+        doTheWork =
+            partitionM isConfiguredForHardwareTriggering dets >>= \(withTrigs, withoutTrigs) ->
+            replicateM (length withTrigs) newSignal >>= \trigSignals ->
+            withAsync (forConcurrently_ (zip withTrigs trigSignals) (\(det, hasStarted) ->
+                        acquireStreamingData det nMeasurements hasStarted chan)) (\firstAs ->
+                mapM_ waitForSignal trigSignals >>
+                actionBeforeAcquisition >>
+                withAsync (forConcurrently_ withoutTrigs (\det -> newSignal >>= \hasStarted ->
+                                                                acquireStreamingData det nMeasurements hasStarted chan)) (\secondAs ->
+                    wait firstAs >> wait secondAs >>
+                    actionAfterAcquisition))
