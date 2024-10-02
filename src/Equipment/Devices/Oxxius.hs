@@ -137,7 +137,9 @@ instance Equipment OxxiusLC where
     deactivateLightSource (OxxiusLC _ port chs) =
         forM_ (map snd chs) (\laserParams ->
             if (not $ isJust laserParams.oxxShutter)
-            then let cmd = LT.toStrict (T.format "PPL{} 0.0" (T.Only laserParams.oxxIndex))
+            then let cmd = case laserParams.oxxType of
+                               LCX -> LT.toStrict (T.format "PPL{} 0.0" (T.Only laserParams.oxxIndex))
+                               LBX -> LT.toStrict (T.format "L{} L=0" (T.Only laserParams.oxxIndex))
                  in  handleOxxiusCombinerCommand_ port cmd
             else let cmd = LT.toStrict (T.format "SH{} 0" (T.Only $ fromJust laserParams.oxxShutter)) -- close the shutter but keep the laser going
                  in  handleOxxiusCombinerOKCommand port cmd
