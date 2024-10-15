@@ -61,7 +61,7 @@ initializeOxxiusLC' (OxxiusLCDesc name portName modulationMode shutterDetails) =
         handleOxxiusCombinerCommand_ port "AS=0" >>
         handleOxxiusCombinerOKCommand port "SH1=1" >> -- open shutter 1
         (if useDigitalModulation
-         then handleOxxiusCombinerEchoCommand port "AM=1" -- enable analog modulation
+         then handleOxxiusCombinerEchoCommand port "AM=0" >> handleOxxiusCombinerEchoCommand port "TTL=1" -- enable digital modulation
          else handleOxxiusCombinerEchoCommand port "AM=0") >>
         getLaserDetails port shutterDetails >>= \lasers ->
         forM_ (map snd lasers) (\laserParams ->
@@ -95,7 +95,9 @@ initializeOxxiusLC' (OxxiusLCDesc name portName modulationMode shutterDetails) =
                                               handleOxxiusLaserCommand_ port idx "T=1" >> -- enable temperature regulation
                                               if (useDigitalModulation)
                                               then
-                                                  handleOxxiusLaserCommand port idx "ACC=1" >> -- constant current mode  
+                                                  handleOxxiusLaserCommand port idx "ACC=1" >> -- constant current mode
+                                                  handleOxxiusLaserCommand port idx "AM=0" >> -- disable analog modulation
+                                                  handleOxxiusLaserCommand port idx "CW=0" >> -- disable CW
                                                   handleOxxiusLaserCommand port idx "TTL=1" -- enable digital modulation
                                               else
                                                   handleOxxiusLaserCommand port idx "TTL=0" >> -- disable digital modulation
