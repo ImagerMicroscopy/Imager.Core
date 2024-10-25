@@ -18,6 +18,9 @@ import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+import qualified Data.Text.Format as T
+import qualified Data.Text.Format.Params as T
+import qualified Data.Text.Lazy as LT
 import Data.Word
 import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
@@ -59,6 +62,15 @@ sequenceEither xs = let (ls, rs) = partitionEithers xs
 
 mapFirst :: (a -> b) -> [(a, c)] -> [(b, c)]
 mapFirst f = map (\(a, b) -> (f a, b))
+
+readT :: (Read a) => Text -> a
+readT = read . T.unpack
+
+formatT :: (T.Params ps) => T.Format -> ps -> Text
+formatT f p = LT.toStrict (T.format f p)
+
+formatBS :: (T.Params ps) => T.Format -> ps -> ByteString
+formatBS f p = T.encodeUtf8 (formatT f p)
 
 displayStringThenError :: String -> IO a
 displayStringThenError s = putStrLn "ERROR:" >> putStrLn s >>

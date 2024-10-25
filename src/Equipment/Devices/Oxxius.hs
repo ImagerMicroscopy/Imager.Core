@@ -15,6 +15,7 @@ import qualified Data.Text.Format as T
 
 import Equipment.Equipment
 import Equipment.EquipmentTypes
+import Utils.MiscUtils
 import RCSerialPort
 
 data OxxiusLC = OxxiusLC {
@@ -63,7 +64,7 @@ initializeOxxiusLC' (OxxiusLCDesc name portName modulationMode shutterDetails) =
         getLaserDetails port shutterDetails = concat <$> mapM (getLaserDetail port modulationMode shutterDetails) [1 .. 6]
         getLaserDetail :: SerialPort -> WantDigitalModulation -> [(Int, Int)] -> Int -> IO [(LSChannelName, OxxiusLaserParams)]
         getLaserDetail port wantModulation shutterDetails idx =
-            let msg = T.encodeUtf8 . LT.toStrict $ T.format "L{} INF?\r\n" (T.Only idx)
+            let msg = formatBS "L{} INF?\r\n" (T.Only idx)
             in  T.decodeUtf8 <$> serialWriteAndReadUntilChar port msg '\n' >>= \resp ->
                 if (("timeout" `T.isPrefixOf` resp) || ("Not authorized" `T.isPrefixOf` resp))
                 then pure []    -- no laser present at this index
@@ -73,8 +74,8 @@ initializeOxxiusLC' (OxxiusLCDesc name portName modulationMode shutterDetails) =
                                        "LBX" -> LBX
                                        "LCX" -> LCX
                                        v     -> throw $ userError ("unknown oxxius lasertype " ++ T.unpack v)
-                        wavelength = read (T.unpack wavelengthStr)
-                        maxPower = read (T.unpack powerStr)
+                        wavelength = readT wavelengthStr
+                        maxPower = readT powerStr
                         shutterIdx = lookup idx shutterDetails
                         regulationMode = if (wantModulation == DigitalModulation) then ConstantCurrent else ConstantPower
                         params = OxxiusLaserParams laserType maxPower wavelength regulationMode idx shutterIdx
@@ -118,7 +119,7 @@ instance Equipment OxxiusLC where
                 handleOxxiusLaserCommand_ port idx "T=1" >>
                 handleOxxiusLaserCommand port idx "L=1" >>
                 when (isJust maybeShutterIdx) (
-                    let cmd = LT.toStrict (T.format "SH{} 1" (T.Only $ fromJust maybeShutterIdx))
+                    let cmd = formatT "SH{} 1" (T.Only $ fromJust maybeShutterIdx)
                     in  handleOxxiusCombinerOKCommand port cmd
                 )
         )
@@ -126,10 +127,10 @@ instance Equipment OxxiusLC where
             powerCmd :: OxxiusLaserParams -> Double -> Text
             powerCmd laserParams pct = 
                 case lType of
-                    LCX -> LT.toStrict (T.format "PPL{} {}.{}" (idx, fst (separateParts pct), snd (separateParts pct))) -- Oxxius seems to like exactly one digit after the comma
+                    LCX -> formatT "PPL{} {}.{}" (idx, fst (separateParts pct), snd (separateParts pct)) -- Oxxius seems to like exactly one digit after the comma
                     LBX -> case regulationMode of
-                               ConstantPower   -> LT.toStrict (T.format "PPL{} {}.{}" (idx, fst (separateParts pct), snd (separateParts pct)))
-                               ConstantCurrent -> LT.toStrict (T.format "L{} CM {}.{}" (idx, fst (separateParts pct), snd (separateParts pct)))
+                               ConstantPower   -> formatT "PPL{} {}.{}" (idx, fst (separateParts pct), snd (separateParts pct))
+                               ConstantCurrent -> formatT "L{} CM {}.{}" (idx, fst (separateParts pct), snd (separateParts pct))
                 where
                     idx = laserParams.oxxIndex
                     lType = laserParams.oxxType
@@ -140,10 +141,10 @@ instance Equipment OxxiusLC where
         forM_ (map snd chs) (\laserParams ->
             if (not $ isJust laserParams.oxxShutter)
             then let cmd = case laserParams.oxxType of
-                               LCX -> LT.toStrict (T.format "PPL{} 0.0" (T.Only laserParams.oxxIndex))
-                               LBX -> LT.toStrict (T.format "L{} L=0" (T.Only laserParams.oxxIndex))
+                               LCX -> formatT "PPL{} 0.0" (T.Only laserParams.oxxIndex)
+                               LBX -> formatT "L{} L=0" (T.Only laserParams.oxxIndex)
                  in  handleOxxiusCombinerCommand_ port cmd
-            else let cmd = LT.toStrict (T.format "SH{} 0" (T.Only $ fromJust laserParams.oxxShutter)) -- close the shutter but keep the laser going
+            else let cmd = formatT "SH{} 0" (T.Only $ fromJust laserParams.oxxShutter) -- close the shutter but keep the laser going
                  in  handleOxxiusCombinerOKCommand port cmd
         )
 
@@ -156,7 +157,7 @@ setRequestedPowers (OxxiusLC _ port availChs) chs =
       setLaserPower :: SerialPort -> OxxiusLaserParams -> Double -> IO ()
       setLaserPower port (OxxiusLaserParams lType maxP _ _ idx _) p =
          let actualP = (p / 100.0 * maxP)
-             powerStr = LT.toStrict (T.format "{}.{}" (separateParts actualP)) -- Oxxius seems to like exactly one digit after the comma
+             powerStr = formatT "{}.{}" (separateParts actualP) -- Oxxius seems to like exactly one digit after the comma
          in  case lType of
                  LBX -> handleOxxiusLaserCommand port idx ("PM=" <> powerStr)
                  LCX -> handleOxxiusCombinerEchoCommand port ("P=" <> powerStr)
@@ -187,7 +188,7 @@ handleOxxiusCombinerCommand_ port cmd =
 
 handleOxxiusLaserQuery :: SerialPort -> Int -> Text -> IO Text
 handleOxxiusLaserQuery port idx q =
-    let msg = LT.toStrict (T.format "L{} {}\r\n" (idx, q))
+    let msg = formatT "L{} {}\r\n" (idx, q)
     in  handleOxxiusQuery port msg
     where
         handleOxxiusQuery :: SerialPort -> Text -> IO Text
@@ -198,13 +199,13 @@ handleOxxiusLaserQuery port idx q =
 handleOxxiusLaserCommand :: SerialPort -> Int -> Text -> IO ()
 handleOxxiusLaserCommand port idx comm =
     let expectedResponse = comm <> "\r\n"
-        msg = LT.toStrict (T.format "L{} {}\r\n" (idx, comm))
+        msg = formatT "L{} {}\r\n" (idx, comm)
     in  T.decodeUtf8 <$> serialWriteAndReadUntilChar port (T.encodeUtf8 msg) '\n' >>= \resp ->
         when ((resp /= expectedResponse) && (resp /= "OK\r\n")) (
             throwIO (userError ("unexpected response from Oxxius: sent " ++ T.unpack comm ++ " received " ++ T.unpack resp)))
 
 handleOxxiusLaserCommand_ :: SerialPort -> Int -> Text -> IO ()
 handleOxxiusLaserCommand_ port idx comm =
-    let msg = LT.toStrict (T.format "L{} {}\r\n" (idx, comm))
+    let msg = formatT "L{} {}\r\n" (idx, comm)
     in  T.decodeUtf8 <$> serialWriteAndReadUntilChar port (T.encodeUtf8 msg) '\n' >>
         pure ()
