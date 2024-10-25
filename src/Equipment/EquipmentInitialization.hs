@@ -35,6 +35,7 @@ import Equipment.Devices.Lumencor
 import Equipment.Devices.Marzhauser
 import Equipment.Devices.Olympus
 import Equipment.Devices.Oxxius
+import Equipment.Devices.MarcelOxxius
 import Equipment.Devices.Prior
 import Equipment.Devices.Robottor
 import Equipment.Devices.Sutter

@@ -65,6 +65,7 @@ executable RaspCuvettor
                      , Equipment.Devices.Lumencor
                      , Equipment.Devices.Olympus
                      , Equipment.Devices.Oxxius
+                     , Equipment.Devices.MarcelOxxius
                      , Equipment.Devices.Prior
                      , Equipment.Devices.Robottor
                      , Equipment.Devices.Sutter
