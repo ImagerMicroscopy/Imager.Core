@@ -52,8 +52,10 @@ getCameraOptions camName =
     alloca $ \strPtr ->
     poke strPtr nullPtr >>
     cGetCameraOptions nameStr strPtr >>= \result ->
+    when (result /= 0) (
+        T.unpack <$> getLastSCCamError >>=
+        throwIO . userError) >>
     peek strPtr >>= newForeignPtr cReleaseOptionsData >>= \fPtr ->
-    when (result /= 0) (throwIO $ userError ("cGetCameraOptions returned error code " ++ show result)) >>
     withForeignPtr fPtr (\dataPtr ->
         decodeStrict' <$> B.unsafePackCString dataPtr >>= \decoded ->
         when ((not . isJust) decoded) (print decoded) >>
@@ -64,14 +66,18 @@ setCameraOption camName option =
     withCString (T.unpack camName) $ \nameStr ->
     B.useAsCString (LB.toStrict $ encode option) $ \optStr ->
     cSetCameraOption nameStr optStr >>= \result ->
-    when (result /= 0) (throwIO $ userError ("cSetCameraOption returned error code " ++ show result))
+    when (result /= 0) (
+        T.unpack <$> getLastSCCamError >>=
+        throwIO . userError)
 
 getFrameRate :: Text -> IO Double
 getFrameRate camName =
   withCString (T.unpack camName) $ \nameStr ->
   alloca $ \frPtr ->
   cGetFrameRate nameStr frPtr >>= \result ->
-  when (result /= 0) (throwIO $ userError ("cGetFrameRate returned error code " ++ show result)) >>
+  when (result /= 0) (
+        T.unpack <$> getLastSCCamError >>=
+        throwIO . userError) >>
   fromCDouble <$> peek frPtr
 
 isConfiguredForHardwareTriggering :: Text -> IO Bool
@@ -79,7 +85,9 @@ isConfiguredForHardwareTriggering camName =
     withCString (T.unpack camName) $ \nameStr ->
     alloca $ \isConfPtr ->
     cIsConfiguredForHardwareTriggering nameStr isConfPtr >>= \result ->
-    when (result /= 0) (throwIO $ userError ("cIsConfiguredForHardwareTriggering returned error code " ++ show result)) >>
+    when (result /= 0) (
+        T.unpack <$> getLastSCCamError >>=
+        throwIO . userError) >>
     peek isConfPtr >>= \isConf ->
     if (isConf == 0)
         then (pure False)
@@ -91,7 +99,8 @@ setCameraOrientation camName ops =
     withArray (map encodedOp ops) $ \opsPtr ->
     cSetImageOrientation nameStr opsPtr (fromIntegral $ length ops) >>= \errorCode ->
     when (errorCode /= 0) (
-         throwIO (userError ("SetImageOrientation returned error code " ++ show errorCode)))
+        T.unpack <$> getLastSCCamError >>=
+        throwIO . userError)
     where
         encodedOp :: OrientationOp -> CInt
         encodedOp RotateCWOp = 0
@@ -107,7 +116,9 @@ acquireSingleImage camName =
     alloca $ \imagePtrPtr ->
     poke imagePtrPtr nullPtr >>
     cAcquireSingleImage nameStr imagePtrPtr nRowsPtr nColsPtr >>= \result ->
-    when (result /= 0) (throwIO (userError ("AcquireSingleImage returned error code " ++ show result))) >>
+    when (result /= 0) (
+        T.unpack <$> getLastSCCamError >>=
+        throwIO . userError) >>
     peek imagePtrPtr >>= newForeignPtr cReleaseImageData >>= \fPtr ->
     fromIntegral <$> peek nRowsPtr >>= \nRows ->
     fromIntegral <$> peek nColsPtr >>= \nCols ->
@@ -117,17 +128,17 @@ startAsyncAcquisition :: Text -> IO ()
 startAsyncAcquisition camName =
     withCString (T.unpack camName) $ \nameStr ->
     cStartAsyncAcquisition nameStr >>= \result ->
-       case result of
-           0 -> return ()
-           e -> throwIO (userError ("startAsyncAcquisition returned error code " ++ show e))
+    when (result /= 0) (
+        T.unpack <$> getLastSCCamError >>=
+        throwIO . userError)
 
 startBoundedAsyncAcquisition :: Text -> Word64 -> IO ()
 startBoundedAsyncAcquisition camName nImages =
     withCString (T.unpack camName) $ \nameStr ->
     cStartBoundedAsyncAcquisition nameStr nImages >>= \result ->
-       case result of
-           0 -> return ()
-           e -> throwIO (userError ("StartBoundedAsyncAcquisition returned error code " ++ show e))
+    when (result /= 0) (
+        T.unpack <$> getLastSCCamError >>=
+        throwIO . userError)
 
 getNextAcquiredImage :: Text -> Word -> IO (Maybe MeasuredImages)
 getNextAcquiredImage camName timeoutMillis =
@@ -138,7 +149,9 @@ getNextAcquiredImage camName timeoutMillis =
     alloca $ \timeStampPtr ->
     poke imagePtrPtr nullPtr >>
     cGetOldestImageAsyncAcquired nameStr (fromIntegral timeoutMillis) imagePtrPtr nRowsPtr nColsPtr timeStampPtr >>= \result ->
-    when (result /= 0) (throwIO (userError ("GetLastImageAsyncAcquired returned error code " ++ show result))) >>
+    when (result /= 0) (
+        T.unpack <$> getLastSCCamError >>=
+        throwIO . userError) >>
     peek imagePtrPtr >>= \imgPtr ->
     if (imgPtr == nullPtr)
         then return Nothing
@@ -153,9 +166,9 @@ abortAsyncAcquisition :: Text -> IO ()
 abortAsyncAcquisition camName =
     withCString (T.unpack camName) $ \nameStr ->
     cAbortAsyncAcquisition nameStr >>= \result ->
-    case result of
-        0 -> return ()
-        e -> throwIO (userError ("abortAsyncAcquisition returned error code " ++ show e))
+    when (result /= 0) (
+        T.unpack <$> getLastSCCamError >>=
+        throwIO . userError)
 
 fromCDouble :: CDouble -> Double
 fromCDouble (CDouble d) = d
@@ -163,6 +176,14 @@ fromCDouble (CDouble d) = d
 maxNCameras, maxCameraNameLength :: Int
 maxNCameras = 10
 maxCameraNameLength = 128
+
+getLastSCCamError :: IO Text
+getLastSCCamError =
+    allocaArray bufSize (\strPtr ->
+        cGetLastSCCamError strPtr (fromIntegral bufSize) >>
+        T.decodeUtf8 <$> B.packCString strPtr)
+    where
+        bufSize = 512
 
 foreign import ccall "SCCameraDLL.h InitCameraDLL"
     cInitCameraDLL :: IO CInt
@@ -208,3 +229,6 @@ foreign import ccall unsafe "SCCameraDLL.h &ReleaseImageData"
 
 foreign import ccall "SCCameraDLL.h AbortAsyncAcquisition"
     cAbortAsyncAcquisition :: CString -> IO CInt
+
+foreign import ccall "SCCameraDLL.h GetLastSCCamError"
+    cGetLastSCCamError :: CString -> CSize -> IO ()
