@@ -37,6 +37,7 @@ import Equipment.Devices.Olympus
 import Equipment.Devices.Oxxius
 import Equipment.Devices.MarcelOxxius
 import Equipment.Devices.Prior
+import Equipment.Devices.PIStage
 import Equipment.Devices.Robottor
 import Equipment.Devices.Sutter
 import Equipment.Devices.Thorlabs
@@ -102,6 +103,7 @@ initializeDevice d@(OxxiusLCDesc {}) = initializeOxxiusLC d
 initializeDevice d@(MarcelOxxiusLCDesc {}) = initializeMarcelOxxiusLC d
 initializeDevice d@(DummyFilterWheelDesc {}) = initializeDummyFilterWheel d
 initializeDevice d@(PriorDesc {}) = initializePriorStage d
+initializeDevice d@(PIStageDesc {}) = initializePIStage d
 initializeDevice d@(MarzhauserStageDesc {}) = initializeMarzhauserStage d
 initializeDevice d@(DummyStageDesc {}) = initializeDummyStage d
 initializeDevice d@(RobottorDesc {}) = initializeRobottor d
@@ -128,6 +130,7 @@ deviceDescName (OxxiusLCDesc {}) = "Oxxius laser combiner"
 deviceDescName (MarcelOxxiusLCDesc {}) = "MarcelOxxius"
 deviceDescName (DummyFilterWheelDesc {}) = "Dummy filter wheel"
 deviceDescName (PriorDesc {}) = "Prior motorized stage"
+deviceDescName (PIStageDesc {}) = "PI Stage"
 deviceDescName (MarzhauserStageDesc {}) = "Marzhauser motorized stage"
 deviceDescName (DummyStageDesc {}) = "Dummy motorized stage"
 deviceDescName (RobottorDesc {}) = "Robottor"

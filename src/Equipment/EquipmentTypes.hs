@@ -167,7 +167,10 @@ data EquipmentDescription = CoherentLightSourceDesc {
                                 psDescName :: !Text
                               , psDescPortName :: !String
                             }
-
+                          | PIStageDesc {
+                                pisDescName :: !Text
+                              , pisDescPortName :: !String
+                          }
                           | MarzhauserStageDesc {
                                 msDescName :: !Text
                               , msDescPortName :: !String

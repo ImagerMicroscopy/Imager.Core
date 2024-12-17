@@ -18,6 +18,7 @@ module RCSerialPort (
   , serialWriteByteAndReadByte
   , serialWriteAndReadUntilSequence
   , serialWriteAndReadAtLeastNBytes
+  , serialReadAndWriteUntilCustom
   , flushSerialPort
 )
 where
@@ -115,6 +116,9 @@ serialWriteAndReadAtLeastNBytes port bs n =
         serialWrite' port bs >>
         let satisfiedP bs = B.length bs >= n
         in  serialRead port satisfiedP)
+
+serialReadAndWriteUntilCustom :: SerialPort -> (ByteString -> Bool) -> IO ByteString
+serialReadAndWriteUntilCustom = serialRead
 
 serialRead :: SerialPort -> (ByteString -> Bool) -> IO ByteString
 serialRead port satisfiedP =
