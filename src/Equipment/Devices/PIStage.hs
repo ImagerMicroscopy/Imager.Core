@@ -1,6 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Equipment.Devices.PIStage where
+module Equipment.Devices.PIStage (
+    initializePIStage,
+    PIStage
+)
+
+where
 
 import Control.Concurrent
 import Control.Exception
@@ -32,79 +37,82 @@ data PIStage = PIStage {
                     , pisAxes :: ![StageAxis]
                   }
 
-initializePriorStage :: EquipmentDescription -> IO EquipmentW
-initializePriorStage (PIStageDesc name portName) =
+initializePIStage :: EquipmentDescription -> IO EquipmentW
+initializePIStage (PIStageDesc name portName) =
     let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS115200}) (TimeoutMillis 30000) SerialPortDebugText
     in  openSerialPort portName serialSettings >>= \port ->
         isPIStage port >>= \isStage ->
         when (not isStage) (
-            throwIO userError "not a PI stage"
-        )
+            throwIO $ userError "not a PI stage") >>
         determineAvailableAxes port >>= \axes ->
+        enableDisableServos port axes True >>
         pure (EquipmentW (PIStage (EqName name) port axes))
     where
         determineAvailableAxes port =
             handlePIStageMessage port "SAI?" >>= \response ->
-            pure [second ax | ax <- [(1, XAxis), (2, YAxis), (3, ZAxis)], (first ax `elem` response)]
-        isPIStage :: IO Bool
+            pure [snd ax | ax <- [(1, XAxis), (2, YAxis), (3, ZAxis)], ((fst ax) `B.elem` response)]
+        isPIStage :: SerialPort -> IO Bool
         isPIStage port = 
             handlePIStageMessage port "*IDN?" >>= \resp ->
             pure ("Physik" `B.isInfixOf` resp)
 
-instance Equipment PriorStage where
-    equipmentName = psName
+instance Equipment PIStage where
+    equipmentName = pisName
     flushSerialPorts p = flushSerialPort (pisPort p)
-    closeDevice p = closeSerialPort (pisPort p)
+    closeDevice p = enableDisableServos p.pisPort p.pisAxes False >> closeSerialPort (pisPort p)
     hasMotorizedStage _ = True
-    motorizedStageName _ = StageName "stage"
+    motorizedStageName _ = StageName "PI Stage"
     supportedStageAxes = pisAxes
-    getStagePosition (PriorStage _ port axes) =
-        StagePosition <$> (if (XAxis `elem` axes) then posOfAxis 1 else -1)
-                      <*> (if (YAxis `elem` axes) then posOfAxis 2 else -1)
-                      <*> (if (ZAxis `elem` axes) then posOfAxis 3 else -1)
+    getStagePosition (PIStage _ port axes) =
+        StagePosition <$> (if (XAxis `elem` axes) then posOfAxis 1 else pure (-1))
+                      <*> (if (YAxis `elem` axes) then posOfAxis 2 else pure (-1))
+                      <*> (if (ZAxis `elem` axes) then posOfAxis 3 else pure (-1))
                       <*> pure False <*> pure 0
         where
           posOfAxis :: Int -> IO Double
           posOfAxis idx =
               handlePIStageMessage port (formatBS "POS? {}" (T.Only idx)) >>= \response ->
-              (pure . read . B.toString) (B.drop 2 response))
-          readNumberP :: SerialPort -> ByteString -> IO Double
-          readNumberP port query = handlePriorMessage port query >>=
-                                   return . read . T.unpack . T.decodeUtf8
-    setStagePosition (PriorStage _ port _) (StagePosition x y z _ _) =
+              (pure . read . byteStringAsString) (B.drop 2 response)
+
+    setStagePosition (PIStage _ port axes) (StagePosition x y z _ _) =
         doMove `onException` abortMovement
         where
-          doMove = sendPriorCommand port posMsg >> waitUntilMovementStops
-          axisPosMsg :: Int -> Double -> ByteString
-          axisPosMsg idx pos = formatBS "MOV {} {} " (idx, pos)
-          msgs = map f axes
-              where
-                  f XAxis = axisPosMsg 1 x
-                  f YAxis = axisPosMsg 2 y
-                  f ZAxis = axisPosMsg 3 z
-          posMsg = T.encodeUtf8 . LT.toStrict $ T.format "G {}, {}, {}" ((round x, round y, round (z * 10)) :: (Int, Int, Int))
-          waitUntilMovementStops = isMoving . read . T.unpack . T.decodeUtf8 <$> handlePriorMessage port "$" >>= \moves ->
+          doMove = handlePIStageMessage_ port posMsg >> waitUntilMovementStops
+          axisSpecs :: [(StageAxis, Int, Double)]
+          axisSpecs = filter (\(ax, _, _) -> ax `elem` axes) [(XAxis, 1, x), (YAxis, 2, y), (ZAxis, 3, z)]
+          axisPosMsg = mconcat . intersperse " " . map (\(_, idx, pos) -> formatBS "{} {}" (idx, pos)) $ axisSpecs
+          posMsg = "MOV " <> axisPosMsg
+          waitUntilMovementStops = isMoving >>= \moves ->
                                    if (moves)
-                                   then threadDelay 20000 >> waitUntilMovementStops
+                                   then threadDelay 5000 >> waitUntilMovementStops
                                    else pure ()
-          isMoving :: Int -> Bool
-          isMoving a = any ((/=) 0) [a .&. (2^0), a .&. (2^1), a .&. (2^2)]
-          abortMovement = sendPriorCommand port "I"
+          isMoving :: IO Bool
+          isMoving = handlePIStageMessage port (B.singleton (toEnum 5)) >>= \response ->
+                     pure (response /= "0\n")
+          abortMovement = handlePIStageMessage port "HLT"
+
+enableDisableServos :: SerialPort -> [StageAxis] -> Bool -> IO ()
+enableDisableServos port axes enabled = 
+    when (XAxis `elem` axes) (handlePIStageMessage_ port (msg 1)) >>
+    when (YAxis `elem` axes) (handlePIStageMessage_ port (msg 2)) >>
+    when (ZAxis `elem` axes) (handlePIStageMessage_ port (msg 3))
+    where
+        msg :: Int -> ByteString
+        msg idx =
+            let flag = if enabled then 1 else 0
+            in  formatBS "SVO {} {}" (idx, flag :: Int)
 
 handlePIStageMessage :: SerialPort -> ByteString -> IO ByteString
 handlePIStageMessage port bs = 
-    serialReadAndWriteUntilCustom port (bs <> "\n") satisfiedP
+    serialWriteAndReadUntilCustom port (bs <> "\n") satisfiedP
     where
         -- PI says: if multiline response then non-last lines terminated by " \n"
+        -- with a leading space character. Last line has no leading space.
         satisfiedP :: ByteString -> Bool
-        satisfiedP bs | (length >= 2) && (B.drop (length - 2) bs == " \n" = False
-                      | B.last bs == '\n'                                 = True
-                      | otherwise                                         = False
-        where
-            length = B.length bs
+        satisfiedP bs | (length >= 2) && ((B.drop (length - 2) bs) == " \n") = False
+                      | B.last bs == fromIntegral (fromEnum '\n')            = True
+                      | otherwise                                            = False
+            where
+                length = B.length bs
 
-sendPIStageCommand :: SerialPort -> ByteString -> IO ()
-sendPIStageCommand port bs = handlePIStageMessage port bs >>= \resp ->
-                            case resp of
-                                "R\r" -> return ()
-                                e     -> throwIO (userError ("unexpected response " ++ show e ++ " from Prior stage"))
+handlePIStageMessage_ port bs = handlePIStageMessage port bs >> pure ()
