@@ -21,6 +21,7 @@ import qualified Data.Text.Encoding as T
 import qualified Data.Text.Format as T
 import qualified Data.Text.Format.Params as T
 import qualified Data.Text.Lazy as LT
+import qualified Data.Text.Read as T
 import Data.Word
 import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
@@ -66,6 +67,9 @@ mapFirst f = map (\(a, b) -> (f a, b))
 readT :: (Read a) => Text -> a
 readT = read . T.unpack
 
+readB :: (Read a) => ByteString -> a
+readB = read . T.unpack . T.decodeUtf8
+
 formatT :: (T.Params ps) => T.Format -> ps -> Text
 formatT f p = LT.toStrict (T.format f p)
 
@@ -86,6 +90,11 @@ byteStringFromVector v = unsafePerformIO $
     mallocBytes nBytes >>= \bsPtr ->
     copyBytes (castPtr bsPtr) vecPtr nBytes >>
     SB.unsafePackMallocCStringLen (bsPtr, nBytes)
+
+readHexIntB :: ByteString -> Int
+readHexIntB bs = case T.hexadecimal (T.decodeUtf8 bs) of
+                    Left err       -> error err
+                    Right (val, _) -> val
 
 timeSpecAsDouble :: TimeSpec -> Double
 timeSpecAsDouble ts = (*) 1.0e-9 . fromIntegral . toNanoSecs $ ts
