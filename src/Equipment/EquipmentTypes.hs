@@ -79,7 +79,8 @@ data StageAxis = XAxis | YAxis | ZAxis
                deriving (Eq, Show)
 
 data WantDigitalModulation = DigitalModulation 
-                           | NoDigitalModulation
+                           | NoModulation
+                           | AnalogModulation
                            deriving (Eq, Show, Read)
 
 data EquipmentDescription = CoherentLightSourceDesc {

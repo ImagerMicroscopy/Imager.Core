@@ -36,7 +36,7 @@ data MarcelOxxiusIlluminationMode = MOMGated
 initializeMarcelOxxiusLC :: EquipmentDescription -> IO EquipmentW
 initializeMarcelOxxiusLC (MarcelOxxiusLCDesc name oxxPortName ardPortName) =
     let arSerialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS19200}) (TimeoutMillis 60000) SerialPortNoDebug
-    in  initializeOxxiusLC' (OxxiusLCDesc name oxxPortName DigitalModulation []) >>= \(ox@(OxxiusLC _ oxPort lasers)) ->
+    in  initializeOxxiusLC' (OxxiusLCDesc name oxxPortName DigitalModulation []) >>= \(ox@(OxxiusLC _ oxPort lasers _)) ->
         openSerialPort ardPortName arSerialSettings >>= \arPort -> threadDelay 2000000 >>
         handleOxxiusCombinerEchoCommand oxPort "AM=1" >> -- enable analog modulation
         forM_ (map snd lasers) (\laserParams ->
