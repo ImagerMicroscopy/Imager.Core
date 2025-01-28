@@ -50,14 +50,14 @@ initializeOxxiusLC' (OxxiusLCDesc name portName modulationMode shutterDetails) =
     let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS19200}) (TimeoutMillis 1000) SerialPortDebugText
     in  openSerialPort portName serialSettings >>= \port ->
         handleOxxiusCombinerCommand_ port "AS=0" >>
-        handleOxxiusCombinerOKCommand port "SH1=1" >> -- open shutter 1
-        (case modulationMode of
-            DigitalModulation -> handleOxxiusCombinerEchoCommand port "AM=0" >> handleOxxiusCombinerEchoCommand port "TTL=1" -- enable digital modulation
-            NoModulation      -> handleOxxiusCombinerEchoCommand port "AM=0"
-            AnalogModulation  -> undefined) >>
+        handleOxxiusCombinerOKCommand port "SH1=1" >> -- open shutter 1, which is always present and is the main shutter of the combiner
+        --(case modulationMode of
+        --    DigitalModulation -> handleOxxiusCombinerEchoCommand port "AM=0"-- >> handleOxxiusCombinerEchoCommand port "TTL=1" -- enable digital modulation
+        --    NoModulation      -> handleOxxiusCombinerEchoCommand port "AM=0"
+        --    AnalogModulation  -> undefined) >>
         getLaserDetails port shutterDetails >>= \lasers ->
         forM_ (map snd lasers) (\laserParams ->
-            handleOxxiusLaserCommand port laserParams.oxxIndex "CDRH=0" >>
+            --handleOxxiusLaserCommand port laserParams.oxxIndex "CDRH=0" >>
             oxxiusTypeSpecificInit port laserParams.oxxType laserParams.oxxIndex) >>
         pure (OxxiusLC (EqName name) port lasers modulationMode)
     where
@@ -86,18 +86,21 @@ initializeOxxiusLC' (OxxiusLCDesc name portName modulationMode shutterDetails) =
         oxxiusTypeSpecificInit port LBX idx = handleOxxiusLaserCommand port idx "DL=0" >> -- turn off the laser just to make sure
                                               handleOxxiusLaserCommand_ port idx "T=1" >> -- enable temperature regulation
                                               case modulationMode of
-                                                  DigitalModulation ->
-                                                        handleOxxiusLaserCommand port idx "ACC=1" >> -- constant current mode
-                                                        handleOxxiusLaserCommand port idx "AM=0" >> -- disable analog modulation
-                                                        handleOxxiusLaserCommand port idx "CW=0" >> -- disable CW
-                                                        handleOxxiusLaserCommand port idx "TTL=1" -- enable digital modulation
                                                   NoModulation ->
                                                         handleOxxiusLaserCommand port idx "TTL=0" >> -- disable digital modulation
                                                         handleOxxiusLaserCommand port idx "AM=0" >> -- disable analog modulation
                                                         handleOxxiusLaserCommand port idx "ACC=0" >> -- regulate output power mode
                                                         handleOxxiusLaserCommand port idx "CW=1" -- constant power mode
+                                                  DigitalModulation ->
+                                                        handleOxxiusLaserCommand port idx "ACC=1" >> -- constant current mode
+                                                        handleOxxiusLaserCommand port idx "AM=0" >> -- disable analog modulation
+                                                        handleOxxiusLaserCommand port idx "CW=0" >> -- disable CW
+                                                        handleOxxiusLaserCommand port idx "TTL=1" -- enable digital modulation
                                                   AnalogModulation ->
-                                                        undefined
+                                                        handleOxxiusLaserCommand port idx "TTL=0" >> -- disable digital modulation
+                                                        handleOxxiusLaserCommand port idx "ACC=1" >> -- regulate output power mode
+                                                        handleOxxiusLaserCommand port idx "CW=0" >> -- constant power mode
+                                                        handleOxxiusLaserCommand port idx "AM=1" -- enable analog modulation
 
 instance Equipment OxxiusLC where
     equipmentName (OxxiusLC n _ _ _) = n
