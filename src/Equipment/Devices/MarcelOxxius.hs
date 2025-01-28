@@ -75,7 +75,7 @@ marcelOxxiusIlluminationMessage mox chs mode =
     in  fullMsg
     where
         marcelOxxiusCodeForLaser :: OxxiusLaserParams -> ByteString
-        marcelOxxiusCodeForLaser (OxxiusLaserParams _ _ wl _ _)
+        marcelOxxiusCodeForLaser (OxxiusLaserParams _ _ wl _ _ _)
             | within wl 380 420 = "V"
             | within wl 420 470 = "B"
             | within wl 470 520 = "C"
