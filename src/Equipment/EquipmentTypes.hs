@@ -148,7 +148,6 @@ data EquipmentDescription = CoherentLightSourceDesc {
                                 oxxDescName :: !Text
                               , oxxDescPortName :: !String
                               , oxxModulationMode :: !WantDigitalModulation
-                              , oxxShutters :: ![(Int, Int)]  -- first Int is the index of the laser that has a shutter, second is the index of the shutter
                           }
                           | MarcelOxxiusLCDesc {
                                 moxxDescName :: !Text
