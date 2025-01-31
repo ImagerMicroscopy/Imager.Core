@@ -98,7 +98,7 @@ initializeOxxiusLC' (OxxiusLCDesc name portName modulationMode) =
                                                         handleOxxiusLaserCommand port idx "AM=1" -- enable analog modulation
         setAOMMode :: SerialPort -> WantDigitalModulation -> IO ()
         setAOMMode port modulationMode =
-            forM_ [1, 2] (\aomIdx Int ->
+            forM_ [1, 2 :: Int] (\aomIdx ->
                 case modulationMode of
                     NoModulation -> handleOxxiusCombinerCommand_ port (formatT "AOM{} TTL 0" (T.Only aomIdx)) >> -- disable digital modulation
                                     handleOxxiusCombinerCommand_ port (formatT "AOM{} AM 0" (T.Only aomIdx)) -- disable analog modulation
@@ -161,7 +161,7 @@ setRequestedPowers (OxxiusLC _ port availChs _) chs =
        in  setLaserPower port params p)
     where
       setLaserPower :: SerialPort -> OxxiusLaserParams -> Double -> IO ()
-      setLaserPower port (OxxiusLaserParams lType maxP _ _ idx _) p =
+      setLaserPower port (OxxiusLaserParams lType maxP _ _ idx) p =
          let actualP = (p / 100.0 * maxP)
              powerStr = formatT "{}.{}" (separateParts actualP) -- Oxxius seems to like exactly one digit after the comma
          in  case lType of

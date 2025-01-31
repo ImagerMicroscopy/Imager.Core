@@ -50,7 +50,7 @@ class Detector a where
     detectorName :: a -> Text
     acquireData :: a -> IO AcquiredData
     acquireStreamingData :: a -> NMeasurementsToPerform -> Signal -> Chan AsyncData -> IO ()
-    acquireStreamingData det nMeasurements hasStarted chan =
+    acquireStreamingData det nMeasurements hasStarted chan =    -- default implementation that can be overwritten
         (raiseSignal hasStarted >> acquire chan >> writeChan chan AsyncFinished) `onException` (writeChan chan AsyncError)
         where
             acquire chan = forM_ [1 .. nMeasurements] (\_ ->

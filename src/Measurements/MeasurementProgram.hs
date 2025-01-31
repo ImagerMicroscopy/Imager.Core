@@ -102,20 +102,24 @@ executeMeasurementElement env _ (MEIrradiation dur ips) =
         executeIrradiation eqs ips dur)
     where
       eqs = peEquipment env
+
 executeMeasurementElement env _ (MEWait dur) =
     withStatusMessage env (T.format "waiting {} s" (T.Only dur)) (
         threadDelay (round $ dur * 1e6))
+
 executeMeasurementElement env _ (MEExecuteRobotProgram rName pName wait) =
     withStatusMessage env (T.format "executing program {} on {}" ((fromRobotProgramName pName), fromRobotName rName)) (
         executeRobotProgram robot pName wait)
     where
         [robot] = filter (\e -> hasRobot e && robotName e == rName) (peEquipment env)
+
 executeMeasurementElement env ddets (MEDoTimes n es) =
     withStatusMessage env "do times" (
         forM_ (zip [1 ..] (take n . repeat $ es)) (\(index :: Int, ses) ->
             updateStatusMessage env (T.format "do times {} of {}" (index, n)) >>
             executeMeasurementElements env ddets ses
         ))
+
 executeMeasurementElement env ddets (MEFastAcquisitionLoop n (detName, detParams)) =
     withStatusMessage env (T.format "fast acquisition ({} images)" (T.Only n)) (
         executeFastDetectionLoop detectors eqs (detName, detParams) n startTime counter mvar)
@@ -125,6 +129,7 @@ executeMeasurementElement env ddets (MEFastAcquisitionLoop n (detName, detParams
       startTime = peStartTime env
       detectors = peDetectors env
       counter = peDataCounter env
+
 executeMeasurementElement env ddets (METimeLapse n dur es) =
     futureTimes >>= \fts ->
     timeSpecToUTCTimes fts >>= \utcs ->
