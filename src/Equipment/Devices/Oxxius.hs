@@ -73,7 +73,7 @@ initializeOxxiusLC' (OxxiusLCDesc name portName modulationMode) =
                                        v     -> throw $ userError ("unknown oxxius lasertype " ++ T.unpack v)
                         wavelength = readT wavelengthStr
                         maxPower = readT powerStr
-                        regulationMode = if (wantModulation /= NoModulation) then ConstantPower else ConstantCurrent
+                        regulationMode = if (wantModulation == NoModulation) then ConstantPower else ConstantCurrent
                         params = OxxiusLaserParams laserType maxPower wavelength regulationMode idx
                     in  pure [(LSChannelName resp, params)]
         oxxiusTypeSpecificInit :: SerialPort -> OxxiusLaserType -> Int -> IO ()
