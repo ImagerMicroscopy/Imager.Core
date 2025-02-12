@@ -175,7 +175,7 @@ executeMeasurementElement env ddets (MEStageLoop sn poss es) =
 
 executeMeasurementElement env ddets (MERelativeStageLoop sn (RelativeStageLoopParams dx dy dz (bx, ax) (by, ay) (bz, az)) es) =
     withStatusMessage env "relative stage loop" (
-        getStagePosition stageEq >>= \(StagePosition startX startY startZ usingAF afOffset) ->
+        getStagePosition stageEq >>= \(startPosition@(StagePosition startX startY startZ usingAF afOffset)) ->
         if (not usingAF) then
             -- if not using an autofocus system (e.g. Nikon PFS) then we simply make a rectangular
             -- stage loop over the sample.
@@ -189,7 +189,8 @@ executeMeasurementElement env ddets (MERelativeStageLoop sn (RelativeStageLoopPa
                         in  forM_ zCoords (\z ->
                                 setStagePosition stageEq (StagePosition upX upY z upAF upOffset) >> -- predetermined pfs
                                 executeMeasurementElements env ddets es
-                            )))
+                            ))) >>
+                setStagePosition stageEq startPosition
         else
             -- if we are using an autofocus system, and the sample is uneven, the AF system may not be able to find
             -- the focus if we move too far away from the current position. So we cover the grid in a pattern
@@ -198,7 +199,8 @@ executeMeasurementElement env ddets (MERelativeStageLoop sn (RelativeStageLoopPa
                 (xCoords, yCoords,z_dep_list) = callGrid ax ay bx by dx dy startX startY
                 z_list = [startZ] ++ (replicate (length(z_dep_list)-1) 0)
             in
-                cyclePositions xCoords yCoords z_list z_dep_list 0 stageEq usingAF afOffset bz az dz env ddets es
+                cyclePositions xCoords yCoords z_list z_dep_list 0 stageEq usingAF afOffset bz az dz env ddets es >>
+                setStagePosition stageEq startPosition
     )
     where
         [stageEq] = filter (\e -> hasMotorizedStage e && motorizedStageName e == sn) (peEquipment env)
