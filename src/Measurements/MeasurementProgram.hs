@@ -176,34 +176,51 @@ executeMeasurementElement env ddets (MEStageLoop sn poss es) =
 executeMeasurementElement env ddets (MERelativeStageLoop sn (RelativeStageLoopParams dx dy dz (bx, ax) (by, ay) (bz, az)) es) =
     withStatusMessage env "relative stage loop" (
         getStagePosition stageEq >>= \(startPosition@(StagePosition startX startY startZ usingAF afOffset)) ->
-        if (not usingAF) then
-            -- if not using an autofocus system (e.g. Nikon PFS) then we simply make a rectangular
-            -- stage loop over the sample.
-            let xCoords = map ((+) startX . (*) dx . fromIntegral) [negate bx .. ax]
-                yCoords = map ((+) startY . (*) dy . fromIntegral) [negate by .. ay]
-            in  forM_ xCoords (\ x->
-                    forM_ yCoords (\y ->
-                        setStagePosition stageEq (StagePosition x y startZ usingAF afOffset) >>
-                        getStagePosition stageEq >>= \(StagePosition upX upY upZ upAF upOffset) ->
-                        let zCoords = map ((+) upZ . (*) dz . fromIntegral) [negate bz .. az]
-                        in  forM_ zCoords (\z ->
-                                setStagePosition stageEq (StagePosition upX upY z upAF upOffset) >> -- predetermined pfs
-                                executeMeasurementElements env ddets es
-                            ))) >>
-                setStagePosition stageEq startPosition
-        else
-            -- if we are using an autofocus system, and the sample is uneven, the AF system may not be able to find
-            -- the focus if we move too far away from the current position. So we cover the grid in a pattern
-            -- that makes sure we explore in the vicinity of locations with known AF positions.
-            let
-                (xCoords, yCoords,z_dep_list) = callGrid ax ay bx by dx dy startX startY
-                z_list = [startZ] ++ (replicate (length(z_dep_list)-1) 0)
-            in
-                cyclePositions xCoords yCoords z_list z_dep_list 0 stageEq usingAF afOffset bz az dz env ddets es >>
-                setStagePosition stageEq startPosition
+        let xCoords = map ((+) startX . (*) dx . fromIntegral) [negate bx .. ax]
+            yCoords = map ((+) startY . (*) dy . fromIntegral) [negate by .. ay]
+            (firstX, firstY) = (head xCoords, head yCoords)
+            (lastX, lastY) = (head xCoords, head yCoords)
+            extraPositionsToStart = if (not usingAF) then [] else (extraPositionsBetween (startPosition.spX, startPosition.spY) (firstX, firstY))
+            extraPositionsFromEnd = if (not usingAF) then [] else (extraPositionsBetween (lastX, lastY) (startPosition.spX, startPosition.spY))
+        in  forM_ extraPositionsToStart (\(x, y) ->
+                setStagePosition stageEq (StagePosition x y startZ usingAF afOffset)) >>
+            forM_ xCoords (\ x->
+                forM_ yCoords (\y ->
+                    setStagePosition stageEq (StagePosition x y startZ usingAF afOffset) >>
+                    getStagePosition stageEq >>= \(StagePosition upX upY upZ upAF upOffset) ->
+                    let zCoords = map ((+) upZ . (*) dz . fromIntegral) [negate bz .. az]
+                    in  forM_ zCoords (\z ->
+                            setStagePosition stageEq (StagePosition upX upY z upAF upOffset) >> -- predetermined pfs
+                            executeMeasurementElements env ddets es
+                        ))) >>
+            forM_ extraPositionsFromEnd (\(x, y) ->
+                setStagePosition stageEq (StagePosition x y startZ usingAF afOffset)) >>
+            setStagePosition stageEq startPosition
+    --else
+        -- if we are using an autofocus system, and the sample is uneven, the AF system may not be able to find
+        -- the focus if we move too far away from the current position. So we may make intermediate stops on the way
+        -- to the first stage position
+        -- that makes sure we explore in the vicinity of locations with known AF positions.
+    --    let
+    --        (xCoords, yCoords,z_dep_list) = callGrid ax ay bx by dx dy startX startY
+    --        z_list = [startZ] ++ (replicate (length(z_dep_list)-1) 0)
+    --     in
+    --        cyclePositions xCoords yCoords z_list z_dep_list 0 stageEq usingAF afOffset bz az dz env ddets es >>
+    --        setStagePosition stageEq startPosition
     )
     where
         [stageEq] = filter (\e -> hasMotorizedStage e && motorizedStageName e == sn) (peEquipment env)
+        extraPositionsBetween :: (Double, Double) -> (Double, Double) -> [(Double, Double)]
+        extraPositionsBetween (xStart, yStart) (xEnd, yEnd) =
+            take nAdditional $ map (\idx -> (xStart + idx * dx, yStart + idx * dy)) [1.0, 2.0.. ]
+            where
+                distanceX = xEnd - xStart
+                distanceY = yEnd - yStart
+                distance = sqrt (distanceX^2 + distanceY^2)
+                nAdditional = floor (distance / maxDistanceBetweenIntermediatePoints) :: Int
+                dx = distanceX / fromIntegral (nAdditional + 1)
+                dy = distanceY / fromIntegral (nAdditional + 1)
+                maxDistanceBetweenIntermediatePoints = 2000 -- need an extra position every this many microns when proceeding to the first point
 
 cyclePositions xCoords yCoords zCoords z_list n stageEq usingAF afOffset bz az dz env ddtes es  =
       if n/=length(z_list)
