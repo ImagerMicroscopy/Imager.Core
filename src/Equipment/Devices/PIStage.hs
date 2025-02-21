@@ -39,6 +39,20 @@ data PIStage = PIStage {
                   }
 
 -- todo: only reference if needed: FRF? return 1=1\n2=1 if referenced, or =0 if not referenced
+    -- example:
+    --FRF?
+    --1=1 
+    --2=1
+-- todo: call ERR? after each manipulation
+    -- example:
+    --ERR?
+    --0
+-- todo: read the axis limits with TMN? <axisID> (min) and TMX? <axisID> (max)
+-- example:
+    --TMX?
+    --1=50.000000 
+    --2=37.500000
+-- todo: investigate how/when to enable or disable HID device (presumably HIN commands?)
 
 initializePIStage :: EquipmentDescription -> IO EquipmentW
 initializePIStage (PIStageDesc name portName) =
@@ -105,6 +119,10 @@ enableDisableServos port axes enabled =
             let flag = if enabled then 1 else 0
             in  formatBS "SVO {} {}" (idx, flag :: Int)
 
+-- example output of SRG? without axis specifier:
+-- SRG?
+-- 1 1=0xA 
+-- 2 1=0xA
 getAxisStatus :: SerialPort -> StageAxis -> IO Int
 getAxisStatus port axis =
     handlePIStageMessage port (formatBS "SRG? {} 1" (T.Only axisID)) >>= pure . parseResponse
