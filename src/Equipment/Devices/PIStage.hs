@@ -40,15 +40,6 @@ data PIStage = PIStage {
                     , pisAxes :: ![StageAxis]
                   }
 
--- todo: only reference if needed: FRF? return 1=1\n2=1 if referenced, or =0 if not referenced
-    -- example:
-    --FRF?
-    --1=1 
-    --2=1
--- todo: call ERR? after each manipulation
-    -- example:
-    --ERR?
-    --0
 -- todo: read the axis limits with TMN? <axisID> (min) and TMX? <axisID> (max)
 -- example:
     --TMX?
@@ -58,7 +49,7 @@ data PIStage = PIStage {
 
 initializePIStage :: EquipmentDescription -> IO EquipmentW
 initializePIStage (PIStageDesc name portName) =
-    let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS115200}) (TimeoutMillis 30000) SerialPortNoDebug
+    let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS115200}) (TimeoutMillis 30000) SerialPortDebugText
     in  openSerialPort portName serialSettings >>= \port ->
         isPIStage port >>= \isStage ->
         when (not isStage) (
@@ -67,6 +58,7 @@ initializePIStage (PIStageDesc name portName) =
         enableDisableServos port axes True >>
         anyNeedReferencing port >>= \needRef ->
         when (needRef) (sendPIStageMessageNoResponse port "FRF") >> -- reference axes (move to home)
+        enableDisableHIDDevices port axes True >>
         pure (EquipmentW (PIStage (EqName name) port axes))
     where
         determineAvailableAxes port =
@@ -99,9 +91,10 @@ instance Equipment PIStage where
     setStagePosition (PIStage _ port axes) (StagePosition x y z _ _) =
         doMove `onException` abortMovement
         where
-          doMove = enableDisableServos port axes True >>
+          doMove = (enableDisableHIDDevices port axes False >>
+                   enableDisableServos port axes True >>
                    forM_ posMsgs (sendPIStageMessageNoResponse port) >>
-                   waitUntilMovementStops
+                   waitUntilMovementStops) `finally` (enableDisableHIDDevices port axes True)
           axisSpecs :: [(StageAxis, Int, Double)]
           axisSpecs = filter (\(ax, _, _) -> ax `elem` axes) [(XAxis, 1, x / 1000), (YAxis, 2, y / 1000), (ZAxis, 3, z / 1000)]
           posMsgs = map (\(_, idx, pos) -> formatBS "MOV {} {}" (idx, pos)) axisSpecs
@@ -125,6 +118,17 @@ enableDisableServos port axes enabled =
         msg idx =
             let flag = if enabled then 1 else 0
             in  formatBS "SVO {} {}" (idx, flag :: Int)
+
+enableDisableHIDDevices :: SerialPort -> [StageAxis] -> Bool -> IO ()
+enableDisableHIDDevices port axes enabled = 
+    when (XAxis `elem` axes) (sendPIStageMessageNoResponse port (msg 1)) >>
+    when (YAxis `elem` axes) (sendPIStageMessageNoResponse port (msg 2)) >>
+    when (ZAxis `elem` axes) (sendPIStageMessageNoResponse port (msg 3))
+    where
+        msg :: Int -> ByteString
+        msg idx =
+            let flag = if enabled then 1 else 0
+            in  formatBS "HIN {} {}" (idx, flag :: Int)
 
 -- example output of SRG? without axis specifier:
 -- SRG?
@@ -174,11 +178,11 @@ readPIAllAxesStatus port cmd =
         splitResponse :: ByteString -> [String]
         splitResponse = map (filter ((/=) ' ')) . lines . T.unpack . T.decodeUtf8
         splitOnEquals :: String -> (String, String)
-        splitOnEquals s = let (f, s) = (span ((/=) '=') s)
+        splitOnEquals str = let (f, s) = (span ((/=) '=') str)
                         in  (f, drop 1 s)
         parsePairs :: (String, String) -> (StageAxis, Int)
         parsePairs (f, s) = let axList = [("1", XAxis), ("2", YAxis), ("3", ZAxis)]
-                            in  (fromJust (lookup f axList), (fst . head . readHex) s)
+                            in  (fromJust (lookup f axList), read s)
 
 sendPIStageMessageNoResponse :: SerialPort -> ByteString -> IO ()
 sendPIStageMessageNoResponse port bs =
