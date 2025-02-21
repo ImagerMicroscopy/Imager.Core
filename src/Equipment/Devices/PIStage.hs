@@ -15,6 +15,7 @@ import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import Data.List
+import Data.Maybe
 import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -22,6 +23,7 @@ import qualified Data.Text.Encoding as T
 import qualified Data.Text.Format as T
 import qualified Data.Text.Lazy as LT
 import Data.Word
+import Numeric
 import System.Environment
 import System.FilePath
 import qualified System.Timeout as ST
@@ -63,7 +65,8 @@ initializePIStage (PIStageDesc name portName) =
             throwIO $ userError "not a PI stage") >>
         determineAvailableAxes port >>= \axes ->
         enableDisableServos port axes True >>
-        sendPIStageMessageNoResponse port "FRF" >>  -- reference axes (move to home)
+        anyNeedReferencing port >>= \needRef ->
+        when (needRef) (sendPIStageMessageNoResponse port "FRF") >> -- reference axes (move to home)
         pure (EquipmentW (PIStage (EqName name) port axes))
     where
         determineAvailableAxes port =
@@ -73,6 +76,7 @@ initializePIStage (PIStageDesc name portName) =
         isPIStage port = 
             handlePIStageMessage port "*IDN?" >>= \resp ->
             pure ("Physik" `B.isInfixOf` resp)
+        anyNeedReferencing port = any (\(_, n) -> n /= 1) <$> readPIAllAxesStatus port "FRF?"
 
 instance Equipment PIStage where
     equipmentName = pisName
@@ -95,7 +99,9 @@ instance Equipment PIStage where
     setStagePosition (PIStage _ port axes) (StagePosition x y z _ _) =
         doMove `onException` abortMovement
         where
-          doMove = forM_ posMsgs (sendPIStageMessageNoResponse port) >> waitUntilMovementStops
+          doMove = enableDisableServos port axes True >>
+                   forM_ posMsgs (sendPIStageMessageNoResponse port) >>
+                   waitUntilMovementStops
           axisSpecs :: [(StageAxis, Int, Double)]
           axisSpecs = filter (\(ax, _, _) -> ax `elem` axes) [(XAxis, 1, x / 1000), (YAxis, 2, y / 1000), (ZAxis, 3, z / 1000)]
           posMsgs = map (\(_, idx, pos) -> formatBS "MOV {} {}" (idx, pos)) axisSpecs
@@ -104,8 +110,9 @@ instance Equipment PIStage where
                                    then threadDelay 5000 >> waitUntilMovementStops
                                    else pure ()
           isMoving :: IO Bool
-          isMoving = forM axes (getAxisStatus port) >>=
-                     pure . any (\status -> (status .&. (shift 1 13)) /= 0)
+          isMoving = any (\(_, status) -> (status .&. (shift 1 13)) /= 0) <$> readPIAllAxesStatus port "SRG?"
+                     --forM axes (getAxisStatus port) >>=
+                     --pure . any (\status -> (status .&. (shift 1 13)) /= 0)
           abortMovement = sendPIStageMessageNoResponse port "HLT"
 
 enableDisableServos :: SerialPort -> [StageAxis] -> Bool -> IO ()
@@ -158,9 +165,28 @@ handlePISingleByteMessage port byte =
         satisfiedP :: ByteString -> Bool
         satisfiedP bs = not (B.null bs)
 
+readPIAllAxesStatus :: SerialPort -> ByteString -> IO [(StageAxis, Int)]
+readPIAllAxesStatus port cmd =
+    parseResponse <$> handlePIStageMessage port cmd
+    where
+        parseResponse :: ByteString -> [(StageAxis, Int)]
+        parseResponse = map (parsePairs . splitOnEquals) . splitResponse
+        splitResponse :: ByteString -> [String]
+        splitResponse = map (filter ((/=) ' ')) . lines . T.unpack . T.decodeUtf8
+        splitOnEquals :: String -> (String, String)
+        splitOnEquals s = let (f, s) = (span ((/=) '=') s)
+                        in  (f, drop 1 s)
+        parsePairs :: (String, String) -> (StageAxis, Int)
+        parsePairs (f, s) = let axList = [("1", XAxis), ("2", YAxis), ("3", ZAxis)]
+                            in  (fromJust (lookup f axList), (fst . head . readHex) s)
+
 sendPIStageMessageNoResponse :: SerialPort -> ByteString -> IO ()
 sendPIStageMessageNoResponse port bs =
-    serialWrite port (bs <> "\n")
+    serialWrite port (bs <> "\n") >>
+    handlePIStageMessage port "ERR?" >>= \errResp ->
+    case (read . T.unpack . T.decodeUtf8 $ errResp) of
+        0 -> pure ()
+        e -> throwIO $ userError ("PIStage returned error code " ++ show e)
 
 readPIStageError :: SerialPort -> IO Int
 readPIStageError port = handlePIStageMessage port "ERR?" >>= pure . readB
