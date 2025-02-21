@@ -38,6 +38,8 @@ data PIStage = PIStage {
                     , pisAxes :: ![StageAxis]
                   }
 
+-- todo: only reference if needed: FRF? return 1=1\n2=1 if referenced, or =0 if not referenced
+
 initializePIStage :: EquipmentDescription -> IO EquipmentW
 initializePIStage (PIStageDesc name portName) =
     let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS115200}) (TimeoutMillis 30000) SerialPortNoDebug
@@ -47,6 +49,7 @@ initializePIStage (PIStageDesc name portName) =
             throwIO $ userError "not a PI stage") >>
         determineAvailableAxes port >>= \axes ->
         enableDisableServos port axes True >>
+        sendPIStageMessageNoResponse port "FRF" >>  -- reference axes (move to home)
         pure (EquipmentW (PIStage (EqName name) port axes))
     where
         determineAvailableAxes port =
