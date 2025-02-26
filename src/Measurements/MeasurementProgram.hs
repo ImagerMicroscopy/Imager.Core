@@ -173,7 +173,7 @@ executeMeasurementElement env ddets (MEStageLoop sn poss es) =
         [stageEq] = filter (\e -> hasMotorizedStage e && motorizedStageName e == sn) (peEquipment env)
         nPos = length poss
 
-executeMeasurementElement env ddets (MERelativeStageLoop sn (RelativeStageLoopParams dx dy dz (bx, ax) (by, ay) (bz, az)) es) =
+executeMeasurementElement env ddets (MERelativeStageLoop sn (RelativeStageLoopParams dx dy dz (bx, ax) (by, ay) (bz, az) returnToStarting) es) =
     withStatusMessage env "relative stage loop" (
         getStagePosition stageEq >>= \(startPosition@(StagePosition startX startY startZ usingAF afOffset)) ->
         let xCoords = map ((+) startX . (*) dx . fromIntegral) [negate bx .. ax]
@@ -195,7 +195,7 @@ executeMeasurementElement env ddets (MERelativeStageLoop sn (RelativeStageLoopPa
                         ))) >>
             forM_ extraPositionsFromEnd (\(x, y) ->
                 setStagePosition stageEq (StagePosition x y startZ usingAF afOffset)) >>
-            setStagePosition stageEq startPosition
+            when (returnToStarting) (setStagePosition stageEq startPosition)
     --else
         -- if we are using an autofocus system, and the sample is uneven, the AF system may not be able to find
         -- the focus if we move too far away from the current position. So we may make intermediate stops on the way

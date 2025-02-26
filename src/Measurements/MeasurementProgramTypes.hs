@@ -79,6 +79,7 @@ data RelativeStageLoopParams = RelativeStageLoopParams {
                                  , rslpAdditionalPlanesX :: !(Int, Int)
                                  , rslpAdditionalPlanesY :: !(Int, Int)
                                  , rslpAdditionalPlanesZ :: !(Int, Int)
+                                 , rslpReturnToStartingPosition :: !Bool
                                }
                                deriving (Show)
 
@@ -171,9 +172,10 @@ instance FromJSON RelativeStageLoopParams where
                                 <*> v .: "additionalplanesx"
                                 <*> v .: "additionalplanesy"
                                 <*> v .: "additionalplanesz"
+                                <*> v .: "returntostartingposition"
     parseJSON _ = fail "can't decode RelativeStageLoopParams"
 instance ToJSON RelativeStageLoopParams where
-    toEncoding (RelativeStageLoopParams dx dy dz px py pz) =
+    toEncoding (RelativeStageLoopParams dx dy dz px py pz ret) =
         pairs ("deltax" .= dx <> "deltay" .= dy <> "deltaz" .= dz <>
-               "additionalplanesx" .= px <> "additionalplanesy" .= py <> "additionalplanesz" .= pz)
+               "additionalplanesx" .= px <> "additionalplanesy" .= py <> "additionalplanesz" .= pz <> "returntostartingposition" .= ret)
     toJSON _ = error "no toJSON"

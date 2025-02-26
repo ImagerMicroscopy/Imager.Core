@@ -77,7 +77,7 @@ validateMeasurementElement eqs _ (MEStageLoop stageName pos es)
     | otherwise = []
     where
         stageNames = map motorizedStageName (filter hasMotorizedStage eqs)
-validateMeasurementElement eqs _ (MERelativeStageLoop stageName (RelativeStageLoopParams dx dy dz (bx, ax) (by, ay) (bz, az)) es)
+validateMeasurementElement eqs _ (MERelativeStageLoop stageName (RelativeStageLoopParams dx dy dz (bx, ax) (by, ay) (bz, az) _) es)
     | T.null (fromStageName stageName) = ["no stage name"]
     | stageName `notElem` stageNames = ["can't find stage named " ++ T.unpack (fromStageName stageName)]
     | null es = ["relative stage loop but no elements"]
