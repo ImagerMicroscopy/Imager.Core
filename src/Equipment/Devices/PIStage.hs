@@ -57,6 +57,7 @@ initializePIStage (PIStageDesc name portName) =
         determineAvailableAxes port >>= \axes ->
         enableDisableServos port axes True >>
         enableDisableHIDDevices port axes False >>
+        setInitialVelocity port axes >>
         anyNeedReferencing port >>= \needRef ->
         when (needRef) (sendPIStageMessageNoResponse port "FRF") >> -- reference axes (move to home)
         enableDisableHIDDevices port axes True >>
@@ -130,6 +131,12 @@ enableDisableHIDDevices port axes enabled =
         msg idx =
             let flag = if enabled then 1 else 0
             in  formatBS "HIN {} {}" (idx, flag :: Int)
+
+setInitialVelocity :: SerialPort -> [StageAxis] -> IO ()
+setInitialVelocity port axes = 
+    when (XAxis `elem` axes) (sendPIStageMessageNoResponse port "VEL 1 50") >>
+    when (YAxis `elem` axes) (sendPIStageMessageNoResponse port "VEL 2 50") >>
+    when (ZAxis `elem` axes) (sendPIStageMessageNoResponse port "VEL 3 50")
 
 -- example output of SRG? without axis specifier:
 -- SRG?
