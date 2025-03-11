@@ -58,9 +58,9 @@ initializePIStage (PIStageDesc name portName) =
         enableDisableServos port axes True >>
         enableDisableHIDDevices port axes False >>
         setInitialVelocity port axes >>
-        anyNeedReferencing port >>= \needRef ->
-        when (needRef) (sendPIStageMessageNoResponse port "FRF") >> -- reference axes (move to home)
+        referenceAxes port >>
         enableDisableHIDDevices port axes True >>
+        setInitialVelocity port axes >>
         pure (EquipmentW (PIStage (EqName name) port axes))
     where
         determineAvailableAxes port =
@@ -70,7 +70,6 @@ initializePIStage (PIStageDesc name portName) =
         isPIStage port = 
             handlePIStageMessage port "*IDN?" >>= \resp ->
             pure ("Physik" `B.isInfixOf` resp)
-        anyNeedReferencing port = any (\(_, n) -> n /= 1) <$> readPIAllAxesStatus port "FRF?"
 
 instance Equipment PIStage where
     equipmentName = pisName
@@ -91,24 +90,29 @@ instance Equipment PIStage where
               (pure . (*) 1000 . read . byteStringAsString) (B.drop 2 response)
 
     setStagePosition (PIStage _ port axes) (StagePosition x y z _ _) =
-        doMove `onException` abortMovement
+        doMove `onException` (abortMovement port)
         where
           doMove = (enableDisableHIDDevices port axes False >>
                    enableDisableServos port axes True >>
+                   handlePIStageMessage port "VEL?" >>
                    forM_ posMsgs (sendPIStageMessageNoResponse port) >>
-                   waitUntilMovementStops) `finally` (enableDisableHIDDevices port axes True)
+                   waitUntilMovementStops port) `finally` (enableDisableHIDDevices port axes True)
           axisSpecs :: [(StageAxis, Int, Double)]
           axisSpecs = filter (\(ax, _, _) -> ax `elem` axes) [(XAxis, 1, x / 1000), (YAxis, 2, y / 1000), (ZAxis, 3, z / 1000)]
           posMsgs = map (\(_, idx, pos) -> formatBS "MOV {} {}" (idx, pos)) axisSpecs
-          waitUntilMovementStops = isMoving >>= \moves ->
-                                   if (moves)
-                                   then threadDelay 5000 >> waitUntilMovementStops
-                                   else pure ()
-          isMoving :: IO Bool
-          isMoving = any (\(_, status) -> (status .&. (shift 1 13)) /= 0) <$> readPIAllAxesStatus port "SRG?"
-                     --forM axes (getAxisStatus port) >>=
-                     --pure . any (\status -> (status .&. (shift 1 13)) /= 0)
-          abortMovement = sendPIStageMessageNoResponse port "HLT"
+
+waitUntilMovementStops :: SerialPort -> IO ()
+waitUntilMovementStops port = 
+    isMoving >>= \moves ->
+    if (moves)
+    then threadDelay 5000 >> waitUntilMovementStops port
+    else pure ()
+    where
+        isMoving :: IO Bool
+        isMoving = any (\(_, status) -> (status .&. (shift 1 13)) /= 0) <$> readPIAllAxesStatus port "SRG?"
+
+abortMovement :: SerialPort -> IO ()
+abortMovement port = sendPIStageMessageNoResponse port "HLT"
 
 enableDisableServos :: SerialPort -> [StageAxis] -> Bool -> IO ()
 enableDisableServos port axes enabled = 
@@ -137,6 +141,15 @@ setInitialVelocity port axes =
     when (XAxis `elem` axes) (sendPIStageMessageNoResponse port "VEL 1 50") >>
     when (YAxis `elem` axes) (sendPIStageMessageNoResponse port "VEL 2 50") >>
     when (ZAxis `elem` axes) (sendPIStageMessageNoResponse port "VEL 3 50")
+
+referenceAxes :: SerialPort -> IO ()
+referenceAxes port = doReferencing `onException` (abortMovement port)
+    where
+        doReferencing =
+            anyNeedReferencing >>= \needRef ->
+            when (needRef) (sendPIStageMessageNoResponse port "FRF" >> waitUntilMovementStops port)
+        anyNeedReferencing = any (\(_, n) -> n /= 1) <$> readPIAllAxesStatus port "FRF?"
+
 
 -- example output of SRG? without axis specifier:
 -- SRG?
