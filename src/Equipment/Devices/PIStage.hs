@@ -56,6 +56,7 @@ initializePIStage (PIStageDesc name portName) =
             throwIO $ userError "not a PI stage") >>
         determineAvailableAxes port >>= \axes ->
         enableDisableServos port axes True >>
+        enableDisableHIDDevices port axes False >>
         anyNeedReferencing port >>= \needRef ->
         when (needRef) (sendPIStageMessageNoResponse port "FRF") >> -- reference axes (move to home)
         enableDisableHIDDevices port axes True >>
