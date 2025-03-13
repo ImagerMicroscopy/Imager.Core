@@ -56,7 +56,12 @@ instance Equipment ASIStage where
           readNumberP port query = handleASIMessage port query >>= \resp ->
                                    case (B.stripPrefix ":A " resp) of
                                        Nothing -> throwIO (userError "unable to read ASI position")
-                                       Just r  -> (return . read . T.unpack . T.decodeUtf8) r
+                                       Just r  -> -- the ASI stage sometimes just returns ":A " without a position
+                                                  -- so detect that and try again until we get a number
+                                                  let str = T.unpack . T.decodeUtf8 $ r
+                                                  in  if (any (`elem` ['0' .. '9']) str)
+                                                      then pure (read str)
+                                                      else readNumberP port query
                                    
     setStagePosition (ASIStage _ port) (StagePosition x y z _ _) =
         doMove `onException` abortMovement
