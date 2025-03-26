@@ -102,8 +102,8 @@ initializeOxxiusLC' (OxxiusLCDesc name portName modulationMode) =
                 case modulationMode of
                     NoModulation -> handleOxxiusCombinerCommand_ port (formatT "AOM{} TTL 0" (T.Only aomIdx)) >> -- disable digital modulation
                                     handleOxxiusCombinerCommand_ port (formatT "AOM{} AM 0" (T.Only aomIdx)) -- disable analog modulation
-                    DigitalModulation -> handleOxxiusCombinerCommand_ port (formatT "AOM{} TTL 1" (T.Only aomIdx)) -- disable digital modulation
-                    AnalogModulation -> handleOxxiusCombinerCommand_ port (formatT "AOM{} AM 1" (T.Only aomIdx)) -- disable analog modulation)
+                    DigitalModulation -> handleOxxiusCombinerCommand_ port (formatT "AOM{} TTL 1" (T.Only aomIdx)) -- enable digital modulation
+                    AnalogModulation -> handleOxxiusCombinerCommand_ port (formatT "AOM{} AM 1" (T.Only aomIdx)) -- enable analog modulation)
             )
 
 instance Equipment OxxiusLC where

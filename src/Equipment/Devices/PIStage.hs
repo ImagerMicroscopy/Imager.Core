@@ -45,7 +45,6 @@ data PIStage = PIStage {
     --TMX?
     --1=50.000000 
     --2=37.500000
--- todo: investigate how/when to enable or disable HID device (presumably HIN commands?)
 
 initializePIStage :: EquipmentDescription -> IO EquipmentW
 initializePIStage (PIStageDesc name portName) =
@@ -58,6 +57,7 @@ initializePIStage (PIStageDesc name portName) =
         enableDisableServos port axes True >>
         enableDisableHIDDevices port axes False >>
         setInitialVelocity port axes >>
+        setInitialAcceleration port axes >>
         referenceAxes port >>
         enableDisableHIDDevices port axes True >>
         setInitialVelocity port axes >>
@@ -141,6 +141,12 @@ setInitialVelocity port axes =
     when (XAxis `elem` axes) (sendPIStageMessageNoResponse port "VEL 1 50") >>
     when (YAxis `elem` axes) (sendPIStageMessageNoResponse port "VEL 2 50") >>
     when (ZAxis `elem` axes) (sendPIStageMessageNoResponse port "VEL 3 50")
+
+setInitialAcceleration :: SerialPort -> [StageAxis] -> IO ()
+setInitialAcceleration port axes =
+    when (XAxis `elem` axes) (sendPIStageMessageNoResponse port "ACC 1 500") >>
+    when (YAxis `elem` axes) (sendPIStageMessageNoResponse port "ACC 2 500") >>
+    when (ZAxis `elem` axes) (sendPIStageMessageNoResponse port "ACC 3 500")
 
 referenceAxes :: SerialPort -> IO ()
 referenceAxes port = doReferencing `onException` (abortMovement port)
