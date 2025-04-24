@@ -13,9 +13,9 @@ import Data.List
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
-import GHC.ConsoleHandler
 import System.Environment
 import System.FilePath
+import System.Signal
 
 import AggregateMotorizedStage
 import Equipment.Equipment
@@ -63,13 +63,9 @@ withEquipment descs action =
     where
         installHandlers =
             myThreadId >>= \mainThreadID ->
-            installHandler (Catch (f mainThreadID))
-        f mainThreadID event =
-            case event of
-                ControlC -> putStrLn "User Interrupt" >> throwTo mainThreadID UserInterrupt
-                Break    -> putStrLn "User Interrupt" >> throwTo mainThreadID UserInterrupt
-                Close    -> putStrLn "Close Event"    >> throwTo mainThreadID ThreadKilled >> threadDelay maxBound
-                _        -> pure ()
+            installHandler sigINT (f mainThreadID "User Interrupt") >>
+            installHandler sigTERM (f mainThreadID "Termination Request")
+        f mainThreadID desc _ = putStrLn desc >> throwTo mainThreadID UserInterrupt
 
 initializeEquipment :: [EquipmentDescription] -> IO [EquipmentW]
 initializeEquipment descs = doInit `catch` (\e -> displayStringThenError (displayException (e :: IOException)))

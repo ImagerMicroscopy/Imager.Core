@@ -33,6 +33,7 @@ executable RaspCuvettor
                      , clock
                      , random
                      , serialport
+                     , signal
                      , parallel
                      , vector
                      , filepath
