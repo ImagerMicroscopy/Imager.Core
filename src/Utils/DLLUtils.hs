@@ -25,7 +25,7 @@ newtype FARPROC = FARPROC {fromFARPROC :: (Ptr ()) }
 
 addDirectoryToLoaderPath :: Text -> IO ()
 addDirectoryToLoaderPath dir =
-#ifdef OS_Win32
+#ifdef WINDOWS
     B.useAsCString (T.encodeUtf8 dir) (\str ->
     cSetDllDirectoryA str >>= \result ->
     when (result == 0) (error "couldn't add dll loader path"))
@@ -35,7 +35,7 @@ addDirectoryToLoaderPath dir =
 
 loadModule :: Text -> IO HMODULE
 loadModule mName =
-#ifdef OS_Win32
+#ifdef WINDOWS
     B.useAsCString (T.encodeUtf8 mName) (\nameStr ->
     cLoadLibraryA nameStr >>= \modu ->
     if (fromHMODULE modu == nullPtr)
@@ -54,7 +54,7 @@ loadFunc modu name mkFunc = (mkFunc . castFARPROC) <$> loadFunctionAddress modu 
     where
         loadFunctionAddress :: HMODULE -> Text -> IO FARPROC
         loadFunctionAddress modu fName =
-#ifdef OS_Win32
+#ifdef WINDOWS
             B.useAsCString (T.encodeUtf8 fName) $ \nameStr ->
             cGetProcAddress modu nameStr >>= \address ->
             if (fromFARPROC address == nullPtr)
@@ -73,7 +73,7 @@ loadFunc modu name mkFunc = (mkFunc . castFARPROC) <$> loadFunctionAddress modu 
 
 foreign import ccall "wrapper" mkCStringCallback :: (CString -> IO ()) -> IO (FunPtr (CString -> IO ()))
 
-#ifdef OS_Win32
+#ifdef WINDOWS
 foreign import ccall "Windows.h SetDllDirectoryA"
     cSetDllDirectoryA :: CString -> IO CInt
 
