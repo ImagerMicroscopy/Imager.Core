@@ -19,6 +19,7 @@ import RCSerialPort
 data MarzhauserStage = MarzhauserStage {
                               mhsName :: !EqName
                             , mhsPort :: !SerialPort
+                            , mhsAxes :: ![StageAxis]
                             }
 
 initializeMarzhauserStage :: EquipmentDescription -> IO EquipmentW
@@ -27,7 +28,8 @@ initializeMarzhauserStage (MarzhauserStageDesc name portName) =
     in  openSerialPort portName serialSettings >>= \port ->
         sendMarzhauserMessageNoResponse port "!dim 1 1 1" >>
         sendMarzhauserMessageNoResponse port "!autostatus 0" >> -- we will poll for move completion
-        return (EquipmentW (MarzhauserStage (EqName name) port))
+        determineAvailableAxes port >>= \axes ->
+        return (EquipmentW (MarzhauserStage (EqName name) port axes))
 
 instance Equipment MarzhauserStage where
     equipmentName = mhsName
@@ -35,11 +37,13 @@ instance Equipment MarzhauserStage where
     closeDevice mh = closeSerialPort (mhsPort mh)
     hasMotorizedStage _ = True
     motorizedStageName _ = StageName "stage"
-    supportedStageAxes _ = [XAxis, YAxis, ZAxis]
-    getStagePosition (MarzhauserStage _ port) =
-        map read . words . T.unpack . T.decodeUtf8 <$> handleMarzhauserMessage port "?pos" >>= \[x, y, z] ->
-        pure (StagePosition x y z False 0)
-    setStagePosition (MarzhauserStage _ port) (StagePosition x y z _ _) =
+    supportedStageAxes mh = mh.mhsAxes
+    getStagePosition (MarzhauserStage _ port axes) =
+        map read . words . T.unpack . T.decodeUtf8 <$> handleMarzhauserMessage port "?pos" >>= \coords ->
+        if (length axes == 2)
+        then pure (StagePosition (coords !! 0) (coords !! 1) (-1.0) False 0)
+        else pure (StagePosition (coords !! 0) (coords !! 1) (coords !! 2) False 0)
+    setStagePosition (MarzhauserStage _ port _) (StagePosition x y z _ _) =
         doMove `onException` abortMovement
         where
             doMove = sendMarzhauserMessageNoResponse port (T.encodeUtf8 msg) >>
@@ -51,6 +55,14 @@ instance Equipment MarzhauserStage where
                 then threadDelay 20000 >> waitUntilMovementStops
                 else pure ()
             abortMovement = sendMarzhauserMessageNoResponse port "a -1"
+
+determineAvailableAxes :: SerialPort -> IO [StageAxis]
+determineAvailableAxes port =
+    handleMarzhauserMessage port "?axis" >>= \resp ->
+    case (length . words . T.unpack . T.decodeUtf8 $ resp) of
+        2 -> pure [XAxis, YAxis]
+        3 -> pure [XAxis, YAxis, ZAxis]
+        _ -> throwIO $ userError "can't determine number of Marzhauser axes"
 
 handleMarzhauserMessage :: SerialPort -> ByteString -> IO ByteString
 handleMarzhauserMessage port bs =
