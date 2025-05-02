@@ -11,8 +11,6 @@ extra-deps:
     - serialport-0.5.5
     - git: git@bitbucket.org:pdedecker/simplejsonserver.git
       commit: e8293b6fcb86daff6b776a2972b48f34e49d6f43
-    - git: git@bitbucket.org:pdedecker/hsoceanoptics.git
-      commit: 5540ca4aac349c4403dcbd2ff75e6b0c51e0281d
 
 # Override default flag values for local packages and extra-deps
 flags: {}
