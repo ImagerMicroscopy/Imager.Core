@@ -19,8 +19,8 @@ class Equipment e where
     activateLightSourceTimed :: e -> LSName -> [(LSChannelName, LSIlluminationPower)] -> LSIlluminationDuration -> IO ()
     deactivateLightSource :: e -> IO ()
 
-    availableFilterWheels  :: e -> [FilterWheelDescription]
-    switchToFilter :: e -> FWName -> FName -> IO ()
+    availableMovableComponents :: e -> [MovableComponentDescription]
+    moveComponent :: e -> [MovableComponentSetting] -> IO ()
 
     hasMotorizedStage :: e -> Bool
     motorizedStageName :: e -> StageName
@@ -42,8 +42,8 @@ class Equipment e where
                                            deactivateLightSource e
     deactivateLightSource e = error ("calling deactivateLightSource on " ++ show (fromEqName (equipmentName e)))
 
-    availableFilterWheels _ = []
-    switchToFilter e _ = error ("calling switchToFilter on " ++ show (fromEqName (equipmentName e)))
+    availableMovableComponents _ = []
+    moveComponent e = error ("calling moveComponent on " ++ show (fromEqName (equipmentName e)))
 
     hasMotorizedStage _ = False
     motorizedStageName e  = error ("calling motorizedStageName on " ++ show (fromEqName (equipmentName e)))
@@ -66,8 +66,8 @@ instance Equipment EquipmentW where
     activateLightSource (EquipmentW e) = activateLightSource e
     activateLightSourceTimed (EquipmentW e) = activateLightSourceTimed e
     deactivateLightSource (EquipmentW e) = deactivateLightSource e
-    availableFilterWheels (EquipmentW e) = availableFilterWheels e
-    switchToFilter (EquipmentW e) = switchToFilter e
+    availableMovableComponents (EquipmentW e) = availableMovableComponents e
+    moveComponent (EquipmentW e) = moveComponent e
     hasMotorizedStage (EquipmentW e) = hasMotorizedStage e
     motorizedStageName (EquipmentW e)  = motorizedStageName e
     supportedStageAxes (EquipmentW e) = supportedStageAxes e

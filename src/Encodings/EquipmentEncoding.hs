@@ -20,7 +20,7 @@ instance ToJSON FilterWheelDescription where
 instance ToJSON EquipmentW where
     toJSON e = object ["name" .= equipmentName e,
                        "availablelightsources" .= availableLightSources e,
-                       "availablefilterwheels" .= availableFilterWheels e,
+                       "availablemovablecomponents" .= availableMovableComponents e,
                        "hasmotorizedstage" .= hasMotorizedStage e,
                        "motorizedstageName" .= stageN,
                        "hasrobot" .= hasRobot e,

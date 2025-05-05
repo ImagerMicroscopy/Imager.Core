@@ -328,7 +328,7 @@ executeDetection dets eqs (detNames, detParams) startTime dataCounter dataMVar =
         in  mapM isConfiguredForHardwareTriggering requiredDets >>= \hasTriggering ->
             if (or hasTriggering)
             then executeFastDetectionLoop dets eqs (dName, dps) 1 startTime dataCounter dataMVar
-            else switchToFilters eqs (dpFilterParams dps) >>
+            else setMovableComponents eqs (dpMovableComponents dps) >>
                  enableLightSources eqs (dpIrradiation dps) >>
                  mapConcurrently acquireData requiredDets >>= \acquiredData ->
                  disableLightSources eqs (dpIrradiation dps) >>
@@ -346,7 +346,7 @@ setDetectorProperties dets dps =
 executeFastDetectionLoop :: Detector a => [a] -> [EquipmentW] -> (Text, DetectionParams) -> Int -> TimeSpec -> IORef Word64 -> MVar [(AcquisitionMetaData, AcquiredData)] -> IO ()
 executeFastDetectionLoop dets eqs (detName, detParams) nTimesToPerform startTime dataCounter dataMVar =
     setDetectorProperties dets (dpDetectors detParams) >>
-    switchToFilters eqs (dpFilterParams detParams) >>
+    setMovableComponents eqs (dpMovableComponents detParams) >>
     fastStreamingAcquisition requiredDets enableLightSourcesAction disableLightSourcesAction detName nTimesToPerform (getStagePositionSafe eqs) startTime dataCounter dataMVar
     where
         requiredDetNames = map dtpDetectorName (dpDetectors detParams)
@@ -393,9 +393,14 @@ executeIrradiation eqs params dur =
         let [eq] = filter (\e -> equipmentName e == eqName) eqs
         in  activateLightSourceTimed eq sourceName (zip channels powers) dur)
 
-switchToFilters :: [EquipmentW] -> [FilterParams] -> IO ()
-switchToFilters eqs fps =
-    forConcurrently_ fps (\(FilterParams eqName fwName fw) -> switchFilterWheel eqs eqName fwName fw)
+setMovableComponents :: [EquipmentW] -> [MovableComponentParams] -> IO ()
+setMovableComponents eqs mcParams =
+    forConcurrently_ mcParams (\(MovableComponentParams eqName settings) -> 
+        let [eq] = filter (\e -> equipmentName e == eqName) eqs
+        in  ST.timeout (floor 10e6) (moveComponent eq settings) >>= \result ->
+            case result of
+                Nothing -> throwIO (userError ("timeout communicating with movable component in " ++ T.unpack (fromEqName (equipmentName eq))))
+                Just v -> return v)
 
 enableLightSources :: [EquipmentW] -> [IrradiationParams] -> IO ()
 enableLightSources eqs params =
@@ -426,14 +431,6 @@ eqNamesUsedAsLightSourceIn ddets me = S.toList (eqNamesUsedAsLightSourceIn' S.em
         eqNamesUsedAsLightSourceIn' s (MEStageLoop _ _ mes) = s <> mconcat (map (eqNamesUsedAsLightSourceIn' S.empty) mes)
         eqNamesUsedAsLightSourceIn' s (MERelativeStageLoop _ _ mes) = s <> mconcat (map (eqNamesUsedAsLightSourceIn' S.empty) mes)
         eqNamesUsedAsLightSourceIn' s _ = s
-
-switchFilterWheel :: [EquipmentW] -> EqName -> FWName -> FName -> IO ()
-switchFilterWheel eqs eqName fwName fName =
-    let [eq] = filter (\e -> equipmentName e == eqName) eqs
-    in ST.timeout (floor 10e6) (switchToFilter eq fwName fName) >>= \result ->
-       case result of
-           Nothing -> throwIO (userError ("timeout communicating with filterwheel " ++ T.unpack (fromFWName fwName)))
-           Just v -> return v
 
 robotNamesUsedIn :: MeasurementElement -> [RobotName]
 robotNamesUsedIn = foldMeasurementElement f

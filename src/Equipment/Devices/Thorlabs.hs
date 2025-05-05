@@ -46,9 +46,11 @@ instance Equipment ThorlabsFW103H where
     equipmentName (ThorlabsFW103H n _ _) = n
     flushSerialPorts (ThorlabsFW103H _ _ port) = flushSerialPort port
     closeDevice (ThorlabsFW103H _ _ port) = closeSerialPort port
-    availableFilterWheels (ThorlabsFW103H _ chs _) = [FilterWheelDescription (FWName "FW") (map fst chs)]
-    switchToFilter (ThorlabsFW103H _ chs port) _ chName =
-        let filterIndex = fromJust (lookup chName chs)
+    availableMovableComponents (ThorlabsFW103H _ chs _) = 
+        let filterNames = map (fromFName . fst) chs
+        in  [DiscreteMovableComponent "FW" filterNames]
+    moveComponent (ThorlabsFW103H _ chs port) [DiscreteComponentSetting _ fName] =
+        let filterIndex = fromJust (lookup (FName fName) chs)
             wheelPos = (409600 `div` 6) * filterIndex -- Thorlabs:  1 turn represents 360 degrees which is 409600 micro steps
         in  flushSerialPort port >> serialWrite port (fw103HMoveAbsoluteMessage wheelPos) >>
             fw103HWaitUntilMotionStops port wheelPos
@@ -58,9 +60,11 @@ instance Equipment ThorlabsFW102C where
     equipmentName (ThorlabsFW102C n _ _) = n
     flushSerialPorts (ThorlabsFW102C _ _ port) = flushSerialPort port
     closeDevice (ThorlabsFW102C _ _ port) = closeSerialPort port
-    availableFilterWheels (ThorlabsFW102C _ chs _) = [FilterWheelDescription (FWName "FW") (map fst chs)]
-    switchToFilter (ThorlabsFW102C _ chs port) _ chName =
-        let filterIndex = fromJust (lookup chName chs)
+    availableMovableComponents (ThorlabsFW102C _ chs _) =
+        let filterNames = map (fromFName . fst) chs
+        in  [DiscreteMovableComponent "FW" filterNames]
+    moveComponent (ThorlabsFW102C _ chs port) [DiscreteComponentSetting _ fName] =
+        let filterIndex = fromJust (lookup (FName fName) chs)
             msg = (T.encodeUtf8 . T.pack $ "pos=" ++ show filterIndex)
         in  serialWriteAndReadUntilChar port msg '>' >> pure ()
 

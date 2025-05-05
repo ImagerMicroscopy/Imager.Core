@@ -54,8 +54,8 @@ instance Equipment AllButMotorizedStageEquipment where
     availableLightSources e = availableLightSources (abmsEq e)
     activateLightSource e = activateLightSource (abmsEq e)
     deactivateLightSource e = deactivateLightSource (abmsEq e)
-    availableFilterWheels e = availableFilterWheels (abmsEq e)
-    switchToFilter e = switchToFilter (abmsEq e)
+    availableMovableComponents e = availableMovableComponents (abmsEq e)
+    moveComponent e = moveComponent (abmsEq e)
 
     hasMotorizedStage _ = False
 

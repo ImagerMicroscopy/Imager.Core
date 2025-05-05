@@ -45,7 +45,7 @@ data ProgramEnvironment a = ProgramEnvironment {
 data DetectionParams = DetectionParams {
                            dpDetectors :: ![DetectorParams]
                          , dpIrradiation :: ![IrradiationParams]
-                         , dpFilterParams :: ![FilterParams]
+                         , dpMovableComponents :: ![MovableComponentParams]
                        }
                        deriving (Show)
 
@@ -63,11 +63,10 @@ data IrradiationParams = IrradiationParams {
                         }
                         deriving (Show, Eq)
 
-data FilterParams = FilterParams {
-                        fpEquipmentName :: !EqName
-                      , fpFilterWheelName :: !FWName
-                      , fpFilterName :: !FName
-                    } deriving (Show, Eq)
+data MovableComponentParams = MovableComponentParams {
+                                  mcEquipmentName :: !EqName
+                                , mcComponentSettings :: ![MovableComponentSetting]
+                              } deriving (Show, Eq)
 
 data PositionNameAndCoords = PositionNameAndCoords !Text !StagePosition
                              deriving (Show)
@@ -114,11 +113,11 @@ instance FromJSON DetectionParams where
     parseJSON (Object v) =
         DetectionParams <$> v .: "detectors"
                         <*> v .: "irradiation"
-                        <*> v .: "filters"
+                        <*> v .: "movablecomponents"
     parseJSON _ = fail "can't decode detection params"
 instance ToJSON DetectionParams where
-    toJSON (DetectionParams detectors irr filters) =
-        object ["detectors" .= detectors, "irradiation" .= irr, "filters" .= filters]
+    toJSON (DetectionParams detectors irr movableComponents) =
+        object ["detectors" .= detectors, "irradiation" .= irr, "movablecomponents" .= movableComponents]
 
 instance FromJSON DetectorParams where
     parseJSON (Object v) =
@@ -142,16 +141,14 @@ instance ToJSON IrradiationParams where
             <> "lightsourcechannel" .= channel <> "lightsourcepower" .= power)
     toJSON _ = error "no toJSON"
 
-instance FromJSON FilterParams where
+instance FromJSON MovableComponentParams where
     parseJSON (Object v) =
-        FilterParams <$> v .: "equipmentname"
-                     <*> v .: "filterwheelname"
-                     <*> v .: "filtername"
-    parseJSON _ = fail "can't decode FilterParams params"
-instance ToJSON FilterParams where
-    toEncoding (FilterParams eName filterWheelName filterName) =
-        pairs ("equipmentname" .= eName <> "filterwheelname" .= filterWheelName
-            <> "filtername" .= filterName)
+        MovableComponentParams <$> v .: "equipmentname"
+                               <*> v .: "movablecomponentsettings"
+    parseJSON _ = fail "can't decode MovableComponentParams params"
+instance ToJSON MovableComponentParams where
+    toEncoding (MovableComponentParams eName settings) =
+        pairs ("equipmentname" .= eName <> "movablecomponentsettings" .= settings)
     toJSON _ = error "no toJSON"
 
 instance FromJSON PositionNameAndCoords where

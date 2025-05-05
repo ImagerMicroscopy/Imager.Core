@@ -70,6 +70,71 @@ data LightSourceDescription = LightSourceDescription {
                                 , lsdAllowsMultipleChannels :: !Bool
                                 , lsdChannels :: ![LSChannelName]
                               }
+
+data MovableComponentDescription = DiscreteMovableComponent {
+                                       componentName :: !Text
+                                     , possibleSettings :: ![Text]
+                                   }
+                                 | ContinuouslyMovableComponent {
+                                       componentName :: !Text
+                                     , minValue :: !Double
+                                     , maxValue :: !Double
+                                   }
+                                   deriving (Eq, Show)
+
+instance ToJSON MovableComponentDescription where
+    toJSON c@(DiscreteMovableComponent{}) =
+        object ["componentname" .= c.componentName, "possiblesettings" .= c.possibleSettings,
+                "type" .= ("discretemovablecomponent" :: Text)]
+    toJSON c@(ContinuouslyMovableComponent{}) =
+        object ["componentname" .= c.componentName, "minvalue" .= c.minValue,
+                "maxvalue" .= c.maxValue, "type" .= ("continuousmovablecomponent" :: Text)]
+
+instance FromJSON MovableComponentDescription where
+    parseJSON (Object v) =
+        v .: "type" >>= \(t :: Text) ->
+        case (t) of
+            "discretemovablecomponent" ->
+                DiscreteMovableComponent <$> v .: "componentname"
+                                         <*> v .: "possiblesettings"
+            "continuousmovablecomponent" ->
+                ContinuouslyMovableComponent <$> v .: "componentname"
+                                             <*> v .: "minvalue"
+                                             <*> v .: "maxvalue"
+            _ -> fail "not a MovableComponentDescription type"
+    parseJSON _ = fail "not a MovableComponentDescription"
+
+data MovableComponentSetting = DiscreteComponentSetting {
+                                   mcsComponentName :: !Text
+                                 , mcsDesiredStrSetting :: !Text
+                               }
+                             | ContinuousComponentSetting {
+                                   mcsComponentName :: !Text
+                                 , mcsDesiredNumSetting :: !Double
+                               }
+                              deriving (Eq, Show)
+
+instance ToJSON MovableComponentSetting where
+    toJSON c@(DiscreteComponentSetting{}) =
+        object ["componentname" .= c.mcsComponentName, "desiredsetting" .= c.mcsDesiredStrSetting,
+                "type" .= ("discretemovablesetting" :: Text)]
+    toJSON c@(ContinuousComponentSetting{}) =
+        object ["componentname" .= c.mcsComponentName, "desiredsetting" .= c.mcsDesiredNumSetting,
+                "type" .= ("continousmovablesetting" :: Text)]
+
+instance FromJSON MovableComponentSetting where
+    parseJSON (Object v) =
+        v .: "type" >>= \(t :: Text) ->
+        case (t) of
+            "discretemovablesetting" ->
+                DiscreteComponentSetting <$> v .: "componentname"
+                                         <*> v .: "desiredsetting"
+            "continousmovablesetting" ->
+                ContinuousComponentSetting <$> v .: "componentname"
+                                          <*> v .: "desiredsetting"
+            _ -> fail "not a MovableComponentSetting type"
+    parseJSON _ = fail "not a MovableComponentSetting"
+
 data FilterWheelDescription = FilterWheelDescription {
                                   fwdName :: !FWName
                                 , fwdFilters :: ![FName]

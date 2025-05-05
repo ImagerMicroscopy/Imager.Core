@@ -48,8 +48,8 @@ instance Equipment EquipmentPlugin where
     availableLightSources = epAvailableLightSources
     activateLightSource = epActivateLightSource
     deactivateLightSource = epDeactivateLightSource
-    availableFilterWheels = epAvailableFilterWheels
-    switchToFilter = epSwitchToFilter
+    --availableFilterWheels = epAvailableFilterWheels
+    --switchToFilter = epSwitchToFilter
     hasMotorizedStage = epHasMotorizedStage
     motorizedStageName _ = StageName "stage"
     supportedStageAxes = epSupportedStageAxes

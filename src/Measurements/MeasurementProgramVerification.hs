@@ -124,24 +124,33 @@ foldMeasurementElement f me = foldMeasurementElement' f mempty me
 
 -- empty list as value means no error
 validateDetection :: [EquipmentW] -> DetectionParams -> [String]
-validateDetection eqs DetectionParams{..} =
-    if ((null . concat . map (validateIrradiation eqs) $ dpIrradiation)
-       && filtersAreValid)
+validateDetection eqs (DetectionParams _ irradiationParams movableComponentParams) =
+    if ((null . concat . map (validateIrradiation eqs) $ irradiationParams)
+       && all (\p -> isValidMovableComponentParams eqs p) movableComponentParams)
     then []
     else ["invalid detection params"]
     where
-        filterParams = dpFilterParams
-        filtersAreValid = noEmptyFilterWheelNames && noEmptyFilterNames && noDupEqsFWs && all filterExists filterParams
-        noEmptyFilterWheelNames = all (not . T.null . fromFWName) (map fpFilterWheelName filterParams)
-        noEmptyFilterNames = all (not . T.null . fromFName) (map fpFilterName filterParams)
-        noDupEqsFWs = nodups $ zip (map fpFilterWheelName filterParams) (map fpEquipmentName filterParams)
-        filterExists (FilterParams eqName fwName fName) =
-            let eqExists = eqName `elem` (map equipmentName eqs)
+        isValidMovableComponentParams :: [EquipmentW] -> MovableComponentParams -> Bool
+        isValidMovableComponentParams eqs (MovableComponentParams eqName settings) =
+            eqExists && all (\s -> isValidMovableComponentSetting eq s) settings
+            where
+                eqExists = eqName `elem` (map equipmentName eqs)
                 eq = head (filter ((==) eqName  . equipmentName) eqs)
-                filterWheelExists = fwName `elem` (map fwdName (availableFilterWheels eq))
-                filtersInFW = fwdFilters . head . filter ((==) fwName . fwdName) $ availableFilterWheels eq
-                filterExists = fName `elem` filtersInFW
-            in (eqExists && filterWheelExists && filterExists)
+        isValidMovableComponentSetting eq setting =
+            let compDescriptions = availableMovableComponents eq
+                mcDescription = filter (\d -> componentName d == setting.mcsComponentName) compDescriptions
+                componentExists = not $ null mcDescription
+                component = head (mcDescription)
+                typeMatches :: MovableComponentSetting -> MovableComponentDescription -> Bool
+                typeMatches DiscreteComponentSetting{} DiscreteMovableComponent{} = True
+                typeMatches ContinuousComponentSetting{} ContinuouslyMovableComponent{} = True
+                typeMatches _ _ = False
+                paramsValid :: MovableComponentSetting -> MovableComponentDescription -> Bool
+                paramsValid (DiscreteComponentSetting _ setting) (DiscreteMovableComponent _ possibleSettings) =
+                    setting `elem` possibleSettings
+                paramsValid (ContinuousComponentSetting _ val) (ContinuouslyMovableComponent _ minVal maxVal) =
+                    (val >= minVal) && (val <= maxVal)
+            in  componentExists && (typeMatches setting component) && (paramsValid setting component)
 
 validateIrradiation :: [EquipmentW] -> IrradiationParams -> [String]
 validateIrradiation eqs IrradiationParams{..} =

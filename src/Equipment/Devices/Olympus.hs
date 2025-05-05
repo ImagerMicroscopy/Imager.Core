@@ -42,9 +42,11 @@ instance Equipment OlympusIX71Dichroic where
     equipmentName (OlympusIX71Dichroic n _ _ _) = n
     flushSerialPorts (OlympusIX71Dichroic _ _ _ port) = flushSerialPort port
     closeDevice (OlympusIX71Dichroic _ _ _ port) = closeSerialPort port
-    availableFilterWheels (OlympusIX71Dichroic _ chs _ _) = [FilterWheelDescription (FWName "DM") (map fst chs)]
-    switchToFilter (OlympusIX71Dichroic _ chs currFilter port) _ chName =
-        let filterIndex = fromJust (lookup chName chs)
+    availableMovableComponents (OlympusIX71Dichroic _ chs _ _) =
+        let filterNames = map (fromFName . fst) chs
+        in  [DiscreteMovableComponent "FW" filterNames]
+    moveComponent (OlympusIX71Dichroic _ chs currFilter port) [DiscreteComponentSetting _ fName] =
+        let filterIndex = fromJust (lookup (FName fName) chs)
             msg = (T.encodeUtf8 . T.pack $ "1MU " ++ show (filterIndex + 1) ++ "\r")
         in  readIORef currFilter >>= \(haveInit, currFilterIdx) ->
             when ((not haveInit) || (currFilterIdx /= filterIndex)) (

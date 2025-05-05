@@ -20,7 +20,7 @@ initializeDummyLightSource (DummyLightSourceDesc name) =
 
 initializeDummyFilterWheel :: EquipmentDescription -> IO EquipmentW
 initializeDummyFilterWheel (DummyFilterWheelDesc name chs) =
-    putStrLn ("Opened dummy filter wheel " ++ T.unpack name ++ " with filters " ++ show chs) >>
+    putStrLn ("opened dummy filter wheel " ++ T.unpack name ++ " with filters " ++ show chs) >>
     return (EquipmentW $ DummyFilterWheel (EqName name) (validateFilters FName (0,5) chs))
 
 initializeDummyStage :: EquipmentDescription -> IO EquipmentW
@@ -45,9 +45,9 @@ instance Equipment DummyFilterWheel where
     equipmentName (DummyFilterWheel n _) = n
     flushSerialPorts _ = pure ()
     closeDevice (DummyFilterWheel name _) = putStrLn ("Closed filter wheel " ++ T.unpack (fromEqName name))
-    availableFilterWheels (DummyFilterWheel n chs) = [FilterWheelDescription (FWName "fw") (map fst chs)]
-    switchToFilter (DummyFilterWheel name chs) _ fName =
-        putStrLn ("Switched filter wheel " ++ T.unpack (fromEqName name) ++ " to filter " ++ T.unpack (fromFName fName))
+    availableMovableComponents (DummyFilterWheel n chs) = [DiscreteMovableComponent "fw" (map (fromFName . fst) chs)]
+    moveComponent (DummyFilterWheel name chs) [DiscreteComponentSetting _ fName] =
+        putStrLn ("Switched filter wheel " ++ T.unpack (fromEqName name) ++ " to filter " ++ T.unpack fName)
 
 instance Equipment DummyStage where
     equipmentName _ = (EqName "Dummy stage")

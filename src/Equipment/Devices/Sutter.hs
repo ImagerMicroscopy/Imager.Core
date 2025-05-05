@@ -40,9 +40,11 @@ instance Equipment SutterLambda10B where
     equipmentName (SutterLambda10B n _ _) = n
     flushSerialPorts (SutterLambda10B _ _ port) = flushSerialPort port
     closeDevice (SutterLambda10B _ _ port) = closeSerialPort port
-    availableFilterWheels (SutterLambda10B _ chs _) = [FilterWheelDescription (FWName "FW") (map fst chs)]
-    switchToFilter (SutterLambda10B _ chs port) _ chName =
-        let filterIndex = (fromIntegral . fromJust . lookup chName) chs
+    availableMovableComponents (SutterLambda10B _ chs _) =
+        let filterNames = map (fromFName . fst) chs
+        in  [DiscreteMovableComponent "FW" filterNames]
+    moveComponent (SutterLambda10B _ chs port) [DiscreteComponentSetting _ fName] =
+        let filterIndex = (fromIntegral . fromJust) (lookup (FName fName) chs)
             speed = 3
             byte = (speed `shiftL` 4) .|. filterIndex
         in serialWriteByteAndReadUntilChar port byte '\r' >> pure ()
