@@ -2,6 +2,8 @@
 
 module Dummy.DummyEquipment where
 
+import Control.Exception
+import Control.Monad
 import Data.IORef
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -45,9 +47,17 @@ instance Equipment DummyFilterWheel where
     equipmentName (DummyFilterWheel n _) = n
     flushSerialPorts _ = pure ()
     closeDevice (DummyFilterWheel name _) = putStrLn ("Closed filter wheel " ++ T.unpack (fromEqName name))
-    availableMovableComponents (DummyFilterWheel n chs) = [DiscreteMovableComponent "fw" (map (fromFName . fst) chs)]
-    moveComponent (DummyFilterWheel name chs) [DiscreteComponentSetting _ fName] =
-        putStrLn ("Switched filter wheel " ++ T.unpack (fromEqName name) ++ " to filter " ++ T.unpack fName)
+
+    availableMovableComponents (DummyFilterWheel n chs) = 
+        [DiscreteMovableComponent "fw" (map (fromFName . fst) chs),
+         ContinuouslyMovableComponent "sl" 0 100]
+    
+    moveComponent (DummyFilterWheel name chs) settings =
+        forM_ settings $ \setting ->
+            case setting of
+                DiscreteComponentSetting "fw" fName -> putStrLn ("Switched filter wheel " ++ T.unpack (fromEqName name) ++ " to filter " ++ T.unpack fName)
+                ContinuousComponentSetting "sl" val -> putStrLn ("Switched filter wheel " ++ T.unpack (fromEqName name) ++ " to slider " ++ show val)
+                _ -> throwIO $ userError "invalid component settings passed to DummyFilterWheel"
 
 instance Equipment DummyStage where
     equipmentName _ = (EqName "Dummy stage")
