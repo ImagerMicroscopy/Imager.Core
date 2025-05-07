@@ -37,7 +37,6 @@ executable RaspCuvettor
                      , parallel
                      , vector
                      , filepath
-                     , SimpleJSONServer
   other-modules:       AcquiredDataTypes
                      , AggregateMotorizedStage
                      , CuvettorTypes
@@ -81,6 +80,7 @@ executable RaspCuvettor
                      , Equipment.EquipmentPluginsInternal
                      , Equipment.Devices.MultiModeLasers
                      , Equipment.Devices.OxxiusLBX
+                     , SimpleJSONServer
   default-extensions:  CPP, BangPatterns, OverloadedStrings, ScopedTypeVariables, OverloadedRecordDot
   --extra-lib-dirs:      C:\hslibs
   extra-libraries:     SCCamera
