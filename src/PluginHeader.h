@@ -32,8 +32,14 @@ extern "C" {
     LIBSPEC int ActivateLightSource(char* lightSourceName, char** channelNames, double* illuminationPowers, int nChannels);
     LIBSPEC int DeactivateLightSource();
 
-	LIBSPEC int ListAvailableFilterWheels(char** namesPtr, int nNames, int maxNBytesPerName, int* nNamesReturned);
-    LIBSPEC int ListAvailableFilters(char* filterWheelName, char** namesPtr, int nNames, int maxNBytesPerName, int* nNamesReturned);
+	LIBSPEC int ListDiscreteMovableComponents(char** namesPtr, int nNames, int maxNBytesPerName, int* nNamesReturned);
+    LIBSPEC int ListContinuouslyMovableComponents(char** namesPtr, int nNames, int maxNBytesPerName, int* nNamesReturned);
+    LIBSPEC int ListDiscreteMovableComponentSettings(char* discreteComponentName, char** namesPtr, 
+                                                     int nNames, int maxNBytesPerName, int* nNamesReturned);
+    LIBSPEC int ListContinuouslyMovableComponentRange(char* discreteComponentName, double* minValue, double* maxValue);
+    LIBSPEC int SetMovableComponents(char** discreteComponentNames, int nDiscreteComponentNames, char** discreteSettings,
+                                     char** continuousComponentNames, int nContinuousComponentNames, double* continousSettings);
+    
     LIBSPEC int SetFilter(char* filterWheelName, char* filterName);
 
     LIBSPEC int HasMotorizedStage(int* hasIt);
