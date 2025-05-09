@@ -1,14 +1,22 @@
-#ifndef MICROSCOPECONTROLDLL_H
-#define MICROSCOPECONTROLDLL_H
+#ifndef IMAGERPLUGIN_H
+#define IMAGERPLUGIN_H
 
 // http://www.flounder.com/ultimateheaderfile.htm
 
 #include <cstdint>
 
-#ifdef COMPILING_MICROSCOPEDLL_H
-#define LIBSPEC __declspec(dllexport)
+#ifdef COMPILING_IMAGERPLUGIN  // set this define when compiling a plugin
+    #ifdef __linux__
+        #define LIBSPEC __attribute__((visibility("default")))
+    #else
+        #define LIBSPEC __declspec(dllexport)
+    #endif
 #else
-#define LIBSPEC __declspec(dllimport)
+    #ifdef __linux__
+        #define LIBSPEC 	// https://stackoverflow.com/questions/2164827/explicitly-exporting-shared-library-functions-in-linux
+    #else
+        #define LIBSPEC __declspec(dllimport)
+    #endif
 #endif
 
 #ifdef __cplusplus
