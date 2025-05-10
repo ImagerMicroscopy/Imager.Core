@@ -166,8 +166,9 @@ data EquipmentDescription = CoherentLightSourceDesc {
                               , alsSerialPortName :: !String
                               , alsFilters :: ![(Text, Int)]
                             }
-                          | ASIStageDesc {
+                          | ASITigerControllerDesc {
                                 asisName :: !Text
+                              , asisFilter :: ![(Text, Int)]
                               , asisPort :: !String
                             }
                           | ArduinoLightSourceDesc {

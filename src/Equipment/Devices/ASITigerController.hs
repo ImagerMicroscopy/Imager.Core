@@ -1,6 +1,6 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, NumDecimals #-}
 
-module Equipment.Devices.ASIStage where
+module Equipment.Devices.ASITigerController where
 
 import Control.Concurrent
 import Control.Exception
@@ -10,6 +10,7 @@ import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import Data.List
+import Data.Maybe
 import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -26,27 +27,47 @@ import Equipment.EquipmentTypes
 import Utils.MiscUtils
 import RCSerialPort
 
-data ASIStage = ASIStage {
+data ASITigerController = ASITigerController {
                       asiName :: !EqName
+                    , asiFilters :: ![(Text, Int)]
                     , asiPort :: !SerialPort
                   }
 
-initializeASIStage :: EquipmentDescription -> IO EquipmentW
-initializeASIStage (ASIStageDesc name portName) =
+initializeASITigerController :: EquipmentDescription -> IO EquipmentW
+initializeASITigerController (ASITigerControllerDesc name filters portName) =
     let serialSettings = RCSerialPortSettings (defaultSerialSettings {commSpeed = CS115200}) (TimeoutMillis 3000) SerialPortDebugText
     in  openSerialPort portName serialSettings >>= \port ->
         verifyIsASIStage port >>
         mapM_ (\s -> sendASICommand port s) ["UM X=10000", "UM Z=10000", "UM Z=10000"] >>   -- all positions expressed in units of 0.1 µm
-        pure (EquipmentW (ASIStage (EqName name) port))
+        pure (EquipmentW (ASITigerController (EqName name) filters port))
 
-instance Equipment ASIStage where
+instance Equipment ASITigerController where
     equipmentName = asiName
     flushSerialPorts p = flushSerialPort (asiPort p)
     closeDevice p = closeSerialPort (asiPort p)
+
+    availableMovableComponents tigc@(ASITigerController{}) = if (null tigc.asiFilters)
+                                                             then []
+                                                             else [DiscreteMovableComponent "FW" (map fst tigc.asiFilters)]
+    moveComponent tigc@(ASITigerController{}) [DiscreteComponentSetting "FW" fName] =
+        when (null tigc.asiFilters) (throwIO $ userError "ASI Tiger moving component but not filters") >>
+        let filterIdx = fromJust (lookup fName tigc.asiFilters)
+            port = tigc.asiPort
+            msg = formatBS "MP {}\r\n" (T.Only filterIdx)
+        in  ST.timeout 10e6 (serialWriteAndReadUntilChar port msg '\n' >> waitUntilMovementStops) >>= \resp ->
+            case resp of
+                Just _  -> pure ()
+                Nothing -> throwIO $ userError "timeout communicating with ASI filter wheel"
+        where
+            waitUntilMovementStops = serialWriteByteAndReadByte tigc.asiPort (fromIntegral $ fromEnum '?') >>= \resp ->
+                                     case (toEnum $ fromIntegral resp) of
+                                        '0' -> pure ()
+                                        _   -> waitUntilMovementStops
+
     hasMotorizedStage _ = True
     motorizedStageName _ = StageName "stage"
     supportedStageAxes _ = [XAxis, YAxis, ZAxis]
-    getStagePosition (ASIStage _ port ) =
+    getStagePosition (ASITigerController _ _ port ) =
         StagePosition <$> ((/ 10) <$> readNumberP port "WHERE X")  -- divide by 10 because positions are in units of 0.1 µm
                       <*> ((/ 10) <$> readNumberP port "WHERE Y")
                       <*> ((/ 10) <$> readNumberP port "WHERE Z")
@@ -63,7 +84,7 @@ instance Equipment ASIStage where
                                                       then pure (read str)
                                                       else readNumberP port query
                                    
-    setStagePosition (ASIStage _ port) (StagePosition x y z _ _) =
+    setStagePosition (ASITigerController _ _ port) (StagePosition x y z _ _) =
         doMove `onException` abortMovement
         where
           doMove = sendASICommand port posMsg >> waitUntilMovementStops

@@ -59,7 +59,7 @@ executable RaspCuvettor
                      , Utils.DLLUtils
                      , Equipment.Devices.Arduino
                      , Equipment.Devices.Asahi
-                     , Equipment.Devices.ASIStage
+                     , Equipment.Devices.ASITigerController
                      , Equipment.Devices.Coherent
                      , Dummy.DummyEquipment
                      , Equipment.Devices.Lumencor
