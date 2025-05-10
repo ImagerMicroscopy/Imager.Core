@@ -19,6 +19,8 @@
     #endif
 #endif
 
+#define IMAGER_API_VERSION 1
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -37,8 +39,8 @@ extern "C" {
     LIBSPEC int ListDiscreteMovableComponentSettings(char* discreteComponentName, char** namesPtr, 
                                                      int nNames, int maxNBytesPerName, int* nNamesReturned);
     LIBSPEC int ListContinuouslyMovableComponentRange(char* discreteComponentName, double* minValue, double* maxValue);
-    LIBSPEC int SetMovableComponents(char** discreteComponentNames, int nDiscreteComponentNames, char** discreteSettings,
-                                     char** continuousComponentNames, int nContinuousComponentNames, double* continousSettings);
+    LIBSPEC int SetMovableComponents(int nDiscreteComponentNames, char** discreteComponentNames, char** discreteSettings,
+                                     int nContinuousComponentNames, char** continuousComponentNames, double* continousSettings);
     
     LIBSPEC int SetFilter(char* filterWheelName, char* filterName);
 

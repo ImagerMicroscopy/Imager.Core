@@ -12,8 +12,10 @@ import qualified Data.ByteString.Char8 as B
 import Data.Text(Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+import qualified Data.Text.Foreign as T
 import qualified Data.Text.IO as T
 import Data.Int
+import Data.List
 import Foreign.Ptr
 import Foreign.C.String
 import Foreign.C.Types
@@ -26,14 +28,17 @@ import Equipment.EquipmentTypes
 import Utils.DLLUtils
 import Utils.MiscUtils
 
+pluginAPIVersion :: CInt
+pluginAPIVersion = 1
+
 data EquipmentPlugin = EquipmentPlugin {
                            epEquipmentName :: !EqName
                          , epCloseDevice :: IO ()
                          , epAvailableLightSources :: ![LightSourceDescription]
                          , epActivateLightSource :: LSName -> [(LSChannelName, LSIlluminationPower)] -> IO ()
                          , epDeactivateLightSource :: IO ()
-                         , epAvailableFilterWheels :: ![FilterWheelDescription]
-                         , epSwitchToFilter :: FWName -> FName -> IO ()
+                         , epAvailableMovableComponents :: [MovableComponentDescription]
+                         , epMoveComponent :: [MovableComponentSetting] -> IO ()
                          , epHasMotorizedStage :: !Bool
                          , epStageName :: !StageName
                          , epSupportedStageAxes :: ![StageAxis]
@@ -48,8 +53,8 @@ instance Equipment EquipmentPlugin where
     availableLightSources = epAvailableLightSources
     activateLightSource = epActivateLightSource
     deactivateLightSource = epDeactivateLightSource
-    --availableFilterWheels = epAvailableFilterWheels
-    --switchToFilter = epSwitchToFilter
+    availableMovableComponents = epAvailableMovableComponents
+    moveComponent = epMoveComponent
     hasMotorizedStage = epHasMotorizedStage
     motorizedStageName _ = StageName "stage"
     supportedStageAxes = epSupportedStageAxes
@@ -61,13 +66,18 @@ type ShutdownFunc = IO ()
 type IdentifierFunc = CString -> CUInt -> IO CInt
 type StringListFunc = Ptr CString -> CInt -> CInt -> Ptr CInt -> IO CInt
 type SingleIntPtrFunc = Ptr CInt -> IO CInt
+
 type AvailableLightSourcesFunc = StringListFunc
 type AvailableChannelsFunc      = CString -> Ptr CString -> CInt -> CInt -> Ptr CInt -> Ptr CInt -> Ptr CInt -> IO CInt
 type ActivateLightSourceFunc    = CString -> Ptr CString -> Ptr CDouble -> CInt -> IO CInt
 type DeactivateLightSourceFunc  = IO CInt
-type AvailableFilterWheelsFunc = StringListFunc
-type AvailableFiltersFunc = CString -> Ptr CString -> CInt -> CInt -> Ptr CInt -> IO CInt
-type SwitchToFilterFunc = CString -> CString -> IO CInt
+
+type ListDiscreteMovableComponentsFunc = StringListFunc
+type ListContinuouslyMovableComponentsFunc = StringListFunc
+type ListDiscreteMovableComponentSettingsFunc = StringListFunc
+type ListContinuouslyMovableComponentRangeFunc = CString -> Ptr CDouble -> Ptr CDouble -> IO CInt
+type SetMovableComponentsFunc = CInt -> Ptr CString -> Ptr CString -> CInt -> Ptr CString -> Ptr CDouble -> IO CInt
+
 type SupportedStageAxesFunc = Ptr CInt -> Ptr CInt -> Ptr CInt -> IO CInt
 type GetStagePositionFunc = Ptr CDouble -> Ptr CDouble -> Ptr CDouble -> Ptr CInt -> Ptr CInt -> IO CInt
 type SetStagePositionFunc = CDouble -> CDouble -> CDouble -> CInt -> CInt -> IO CInt
@@ -76,16 +86,21 @@ foreign import ccall "dynamic" mkInitFunc :: FunPtr InitFunc -> InitFunc
 foreign import ccall "dynamic" mkShutdownFunc :: FunPtr ShutdownFunc -> ShutdownFunc
 foreign import ccall "dynamic" mkIdentifierFunc :: FunPtr IdentifierFunc -> IdentifierFunc
 foreign import ccall "dynamic" mkSingleIntPtrFunc :: FunPtr SingleIntPtrFunc -> SingleIntPtrFunc
-foreign import ccall "dynamic" mkSupportedStageAxesFunc :: FunPtr SupportedStageAxesFunc -> SupportedStageAxesFunc
-foreign import ccall "dynamic" mkGetStagePositionFunc :: FunPtr GetStagePositionFunc -> GetStagePositionFunc
-foreign import ccall "dynamic" mkSetStagePositionFunc :: FunPtr SetStagePositionFunc -> SetStagePositionFunc
+
 foreign import ccall "dynamic" mkAvailableLightSourcesFunc :: FunPtr StringListFunc -> AvailableLightSourcesFunc
 foreign import ccall "dynamic" mkAvailableChannelsFunc :: FunPtr AvailableChannelsFunc -> AvailableChannelsFunc
 foreign import ccall "dynamic" mkActivateLightSourceFunc :: FunPtr ActivateLightSourceFunc -> ActivateLightSourceFunc
 foreign import ccall "dynamic" mkDeactivateLightSourceFunc :: FunPtr DeactivateLightSourceFunc -> DeactivateLightSourceFunc
-foreign import ccall "dynamic" mkAvailableFilterWheelsFunc :: FunPtr StringListFunc -> AvailableFilterWheelsFunc
-foreign import ccall "dynamic" mkAvailableFiltersFunc :: FunPtr AvailableFiltersFunc -> AvailableFiltersFunc
-foreign import ccall "dynamic" mkSetFilterFunc :: FunPtr SwitchToFilterFunc -> SwitchToFilterFunc
+
+foreign import ccall "dynamic" mkListDiscreteMovableComponentsFunc :: FunPtr ListDiscreteMovableComponentsFunc -> ListDiscreteMovableComponentsFunc
+foreign import ccall "dynamic" mkListContinuouslyMovableComponentsFunc :: FunPtr ListContinuouslyMovableComponentsFunc -> ListContinuouslyMovableComponentsFunc
+foreign import ccall "dynamic" mkListDiscreteMovableComponentSettingsFunc :: FunPtr ListDiscreteMovableComponentSettingsFunc -> ListDiscreteMovableComponentSettingsFunc
+foreign import ccall "dynamic" mkListContinuouslyMovableComponentRangeFunc :: FunPtr ListContinuouslyMovableComponentRangeFunc -> ListContinuouslyMovableComponentRangeFunc
+foreign import ccall "dynamic" mkSetMovableComponentsFunc :: FunPtr SetMovableComponentsFunc -> SetMovableComponentsFunc
+
+foreign import ccall "dynamic" mkSupportedStageAxesFunc :: FunPtr SupportedStageAxesFunc -> SupportedStageAxesFunc
+foreign import ccall "dynamic" mkGetStagePositionFunc :: FunPtr GetStagePositionFunc -> GetStagePositionFunc
+foreign import ccall "dynamic" mkSetStagePositionFunc :: FunPtr SetStagePositionFunc -> SetStagePositionFunc
 
 loadPlugin :: Text -> IO EquipmentW
 loadPlugin libName =
@@ -93,14 +108,20 @@ loadPlugin libName =
     loadFunc modu "InitImagerPlugin" mkInitFunc >>= \initF ->
     loadFunc modu "ShutdownImagerPlugin" mkShutdownFunc >>= \shutdownF ->
     loadFunc modu "ImagerPluginAPIVersion" mkSingleIntPtrFunc >>= \apiVersionF ->
+    
     loadFunc modu "EquipmentName" mkIdentifierFunc >>= \eqNameF ->
+    
     loadFunc modu "ListAvailableLightSources" mkAvailableLightSourcesFunc >>= \listLightSourcesF ->
     loadFunc modu "ListAvailableChannels" mkAvailableChannelsFunc >>= \listChannelsF ->
     loadFunc modu "ActivateLightSource" mkActivateLightSourceFunc >>= \activateLightSourceF ->
     loadFunc modu "DeactivateLightSource" mkDeactivateLightSourceFunc >>= \deactivateLightSourceF ->
-    loadFunc modu "ListAvailableFilterWheels" mkAvailableFilterWheelsFunc >>= \listFilterWheelsF ->
-    loadFunc modu "ListAvailableFilters" mkAvailableFiltersFunc >>= \listFiltersF ->
-    loadFunc modu "SetFilter" mkSetFilterFunc >>= \setFilterF ->
+    
+    loadFunc modu "ListDiscreteMovableComponents" mkListDiscreteMovableComponentsFunc >>= \listDiscreteMovableComponentsF ->
+    loadFunc modu "ListContinuouslyMovableComponents" mkListContinuouslyMovableComponentsFunc >>= \listContinouslyMovableComponentsF ->
+    loadFunc modu "ListDiscreteMovableComponentSettings" mkListDiscreteMovableComponentSettingsFunc >>= \listContinouslyMovableComponentSettingsF ->
+    loadFunc modu "ListContinuouslyMovableComponentRange" mkListContinuouslyMovableComponentRangeFunc >>= \listContinuouslyMovableComponentRangeF ->
+    loadFunc modu "SetMovableComponents" mkSetMovableComponentsFunc >>= \setMovableComponentsF ->
+    
     loadFunc modu "HasMotorizedStage" mkSingleIntPtrFunc >>= \hasStageF ->
     loadFunc modu "MotorizedStageName" mkIdentifierFunc >>= \stageNameF ->
     loadFunc modu "SupportedStageAxes" mkSupportedStageAxesFunc >>= \suppAxesF ->
@@ -113,13 +134,14 @@ loadPlugin libName =
     verifyPluginVersion apiVersionF >>
     EqName <$> readIdentifier eqNameF >>= \eqName ->
     readAvailableLightSources (listLightSourcesF, listChannelsF) >>= \lightSources ->
-    readAvailableFilterWheels (listFilterWheelsF, listFiltersF) >>= \filterWheels ->
+    readAvailableMovableComponents (listDiscreteMovableComponentsF, listContinouslyMovableComponentsF, 
+                                    listContinouslyMovableComponentSettingsF, listContinuouslyMovableComponentRangeF) >>= \movableComps ->
     ((/=) 0) <$> readSingleIntPtr hasStageF >>= \hasStage ->
     StageName <$> readIdentifier stageNameF >>= \stageName ->
     readSupportedAxesFunc suppAxesF >>= \supportedAxes ->
     EquipmentW <$> pure (EquipmentPlugin eqName shutdownF lightSources (handleActivateLightSource activateLightSourceF)
                                          (handleDeactivateLightSource deactivateLightSourceF)
-                                         filterWheels (handleSwitchToFilter setFilterF)
+                                         movableComps (handleSetMoveComponents setMovableComponentsF)
                                          hasStage stageName supportedAxes
                                          (handleGetStagePosition getStagePosF) (handleSetStagePosition setStagePosF))
     where
@@ -127,7 +149,7 @@ loadPlugin libName =
         verifyPluginVersion f = alloca $ \versionPtr ->
                                 checkError (f versionPtr) >>
                                 peek versionPtr >>= \version ->
-                                when (version /= 0) (error "incorrect api version")
+                                when (version /= pluginAPIVersion) (error "incorrect api version")
         readIdentifier :: IdentifierFunc -> IO Text
         readIdentifier f = allocaArray0 128 $ \nameArray ->
                            checkError (f nameArray 128) >>
@@ -136,10 +158,12 @@ loadPlugin libName =
         readSingleIntPtr f = alloca $ \intPtr ->
                              checkError (f intPtr) >>
                              fromIntegral <$> peek intPtr
+
         readAvailableLightSources :: (AvailableLightSourcesFunc, AvailableChannelsFunc) -> IO [LightSourceDescription]
         readAvailableLightSources (fLights, fChannels) =
             handleStringListFunc fLights >>= \arrayOfcStr ->
             sequence (map (readLightSourceDescription fChannels) arrayOfcStr)
+        
         readLightSourceDescription :: AvailableChannelsFunc -> CString -> IO LightSourceDescription
         readLightSourceDescription fChannels cSourceName =
             withCStringArray' 16 128 $ \namesPtr ->
@@ -153,31 +177,52 @@ loadPlugin libName =
             fromIntegral <$> peek nNamesReturnedPtr >>= \nNamesReturned ->
             map LSChannelName <$> peekArrayString nNamesReturned namesPtr >>= \channels ->
             pure (LightSourceDescription sourceName canControlPower channelsAreExclusive channels)
+        
         handleActivateLightSource :: ActivateLightSourceFunc -> (LSName -> [(LSChannelName, LSIlluminationPower)] -> IO ())
         handleActivateLightSource f (LSName name) ps =
-            withCString (T.unpack name) $ \cName ->
+            T.withCString name $ \cName ->
             withCStringArray (map (T.unpack . fromLSChannelName . fst) ps) $ \cChannels ->
             withArray (map (CDouble . fromLSIlluminationPower . snd) ps) $ \cPowers ->
             checkError (f cName cChannels cPowers (fromIntegral (length ps)))
+        
         handleDeactivateLightSource :: DeactivateLightSourceFunc -> IO ()
         handleDeactivateLightSource f = checkError f
-        readAvailableFilterWheels :: (AvailableFilterWheelsFunc, AvailableFiltersFunc) -> IO [FilterWheelDescription]
-        readAvailableFilterWheels (fwListF, filterListF) =
-            handleStringListFunc fwListF >>= \filterWheelNames ->
-            forM filterWheelNames (\fwName ->
-                handleStringListFunc (filterListF fwName)) >>= \filterNames ->
-            sequence (zipWith zipF filterWheelNames filterNames)
+
+        readAvailableMovableComponents :: (ListDiscreteMovableComponentsFunc, ListContinuouslyMovableComponentsFunc, ListDiscreteMovableComponentSettingsFunc, ListContinuouslyMovableComponentRangeFunc) -> IO [MovableComponentDescription]
+        readAvailableMovableComponents (listDiscreteCompsF, listContinuousCompsF, listDiscreteMovableComponentSettingsF, listContinouslyMovableComponentSettingsF) =
+            handleStringListFuncT listDiscreteCompsF >>= \discreteCompNames ->
+            handleStringListFuncT listContinuousCompsF >>= \continuousCompNames ->
+            forM discreteCompNames (\dCompName ->
+                handleStringListFuncT listDiscreteMovableComponentSettingsF >>= \settings ->
+                pure (DiscreteMovableComponent dCompName settings)
+            ) >>= \discreteCompDescs ->
+            forM continuousCompNames (\cCompName ->
+                alloca $ \minValPtr ->
+                alloca $ \maxValPtr ->
+                T.withCString cCompName $ \cStrName ->
+                checkError (listContinouslyMovableComponentSettingsF cStrName minValPtr maxValPtr) >>
+                ContinuouslyMovableComponent cCompName <$> (fromCDouble <$> peek minValPtr) <*> (fromCDouble <$> peek maxValPtr)
+            ) >>= \continuousCompDescs ->
+            pure (discreteCompDescs ++ continuousCompDescs)
+
+        handleSetMoveComponents :: SetMovableComponentsFunc -> [MovableComponentSetting] -> IO ()
+        handleSetMoveComponents setMovableComponentsF compSettings =
+            let (discComps, contComps) = partition isDiscreteF compSettings
+                nDisc = fromIntegral $ length discComps
+                nCont = fromIntegral $ length contComps
+                dCompNames = map mcsComponentName discComps
+                cCompNames = map mcsComponentName contComps
+                dCompSettings = map mcsDesiredStrSetting discComps
+                cCompSettings = map (realToFrac . mcsDesiredNumSetting) contComps   -- realToFrac converts the Double to a CDouble
+            in  withCStringArrayT dCompNames $ \dCompNamesArr ->
+                withCStringArrayT dCompSettings $ \dCompSettingsArr ->
+                withCStringArrayT cCompNames $ \cCompNamesArr ->
+                withArray cCompSettings $ \cCompSettingsArr ->
+                checkError (setMovableComponentsF nDisc dCompNamesArr dCompSettingsArr nCont cCompNamesArr cCompSettingsArr)
             where
-                zipF :: CString -> [CString] -> IO FilterWheelDescription
-                zipF fwName filters = do
-                    asFW <- FWName . T.pack <$> peekCString fwName
-                    asFNames <- mapM (\n -> FName . T.pack <$> peekCString n) filters
-                    pure (FilterWheelDescription asFW asFNames)
-        handleSwitchToFilter :: SwitchToFilterFunc -> (FWName -> FName -> IO ())
-        handleSwitchToFilter f (FWName fwName) (FName fName) =
-            withCString (T.unpack fwName) $ \cFwName ->
-            withCString (T.unpack fName) $ \cFName ->
-            checkError (f cFwName cFName)
+                isDiscreteF (DiscreteComponentSetting{}) = True
+                isDiscreteF _ = False
+        
         readSupportedAxesFunc :: SupportedStageAxesFunc -> IO [StageAxis]
         readSupportedAxesFunc f =
             alloca $ \xPtr ->
@@ -188,6 +233,7 @@ loadPlugin libName =
             ((/=) 0) <$> peek yPtr >>= \y ->
             ((/=) 0) <$> peek zPtr >>= \z ->
             pure ([] ++ (if x then [XAxis] else []) ++ (if y then [YAxis] else []) ++ (if z then [ZAxis] else []))
+        
         handleGetStagePosition :: GetStagePositionFunc -> IO StagePosition
         handleGetStagePosition f =
             alloca $ \xPtr ->
@@ -202,6 +248,7 @@ loadPlugin libName =
             (/= 0) <$> peek useAFPtr >>= \useAF ->
             fromIntegral <$> peek afOffsetPtr >>= \afOffset ->
             pure (StagePosition x y z useAF afOffset)
+        
         handleSetStagePosition :: SetStagePositionFunc -> (StagePosition -> IO ())
         handleSetStagePosition f =
             \(StagePosition x y z useAF afOffset) ->
@@ -218,6 +265,12 @@ withCStringArray ss f = aux ss []
         aux [] cl = withArray cl f
         aux (s:ls) cl = withCString s (\cs -> aux ls (cs:cl))
 
+withCStringArrayT :: [Text] -> (Ptr CString -> IO b) -> IO b
+withCStringArrayT ss f = aux ss []
+    where
+        aux [] cl = withArray cl f
+        aux (t : ts) cl = T.withCString t (\cs -> aux ts (cs : cl))
+
 withCStringArray' :: Int -> Int -> (Ptr CString -> IO b) -> IO b
 withCStringArray' len strLen = withCStringArray (replicate len (replicate strLen '\0'))
 
@@ -231,6 +284,10 @@ handleStringListFunc f =
     checkError (f namesPtr 16 128 nNamesReturnedPtr) >>
     fromIntegral <$> peek nNamesReturnedPtr >>= \nNamesReturned ->
     peekArray nNamesReturned namesPtr
+
+handleStringListFuncT :: StringListFunc -> IO [Text]
+handleStringListFuncT f =
+    handleStringListFunc f >>= mapM B.packCString >>= pure . map T.decodeUtf8
 
 readObjects :: StringListFunc -> (CString -> IO b) -> IO [b]
 readObjects fList fDetail =
