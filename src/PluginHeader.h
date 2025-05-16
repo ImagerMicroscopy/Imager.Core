@@ -38,7 +38,7 @@ extern "C" {
     LIBSPEC int ListContinuouslyMovableComponents(char** namesPtr, int nNames, int maxNBytesPerName, int* nNamesReturned);
     LIBSPEC int ListDiscreteMovableComponentSettings(char* discreteComponentName, char** namesPtr, 
                                                      int nNames, int maxNBytesPerName, int* nNamesReturned);
-    LIBSPEC int ListContinuouslyMovableComponentRange(char* discreteComponentName, double* minValue, double* maxValue);
+    LIBSPEC int ListContinuouslyMovableComponentRange(char* discreteComponentName, double* minValue, double* maxValue, double* increment);
     LIBSPEC int SetMovableComponents(int nDiscreteComponentNames, char** discreteComponentNames, char** discreteSettings,
                                      int nContinuousComponentNames, char** continuousComponentNames, double* continousSettings);
     

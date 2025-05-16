@@ -50,7 +50,7 @@ instance Equipment DummyFilterWheel where
 
     availableMovableComponents (DummyFilterWheel n chs) = 
         [DiscreteMovableComponent "fw" (map (fromFName . fst) chs),
-         ContinuouslyMovableComponent "sl" 0 100]
+         ContinuouslyMovableComponent "sl" 0 100 1]
     
     moveComponent (DummyFilterWheel name chs) settings =
         forM_ settings $ \setting ->

@@ -148,7 +148,7 @@ validateDetection eqs (DetectionParams _ irradiationParams movableComponentParam
                 paramsValid :: MovableComponentSetting -> MovableComponentDescription -> Bool
                 paramsValid (DiscreteComponentSetting _ setting) (DiscreteMovableComponent _ possibleSettings) =
                     setting `elem` possibleSettings
-                paramsValid (ContinuousComponentSetting _ val) (ContinuouslyMovableComponent _ minVal maxVal) =
+                paramsValid (ContinuousComponentSetting _ val) (ContinuouslyMovableComponent _ minVal maxVal _) =
                     (val >= minVal) && (val <= maxVal)
             in  componentExists && (typeMatches setting component) && (paramsValid setting component)
 

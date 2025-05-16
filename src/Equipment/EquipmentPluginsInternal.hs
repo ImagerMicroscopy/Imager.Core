@@ -75,7 +75,7 @@ type DeactivateLightSourceFunc  = IO CInt
 type ListDiscreteMovableComponentsFunc = StringListFunc
 type ListContinuouslyMovableComponentsFunc = StringListFunc
 type ListDiscreteMovableComponentSettingsFunc = StringListFunc
-type ListContinuouslyMovableComponentRangeFunc = CString -> Ptr CDouble -> Ptr CDouble -> IO CInt
+type ListContinuouslyMovableComponentRangeFunc = CString -> Ptr CDouble -> Ptr CDouble -> Ptr CDouble -> IO CInt
 type SetMovableComponentsFunc = CInt -> Ptr CString -> Ptr CString -> CInt -> Ptr CString -> Ptr CDouble -> IO CInt
 
 type SupportedStageAxesFunc = Ptr CInt -> Ptr CInt -> Ptr CInt -> IO CInt
@@ -199,10 +199,12 @@ loadPlugin libName =
             forM continuousCompNames (\cCompName ->
                 alloca $ \minValPtr ->
                 alloca $ \maxValPtr ->
+                alloca $ \incrementPtr ->
                 T.withCString cCompName $ \cStrName ->
-                checkError (listContinouslyMovableComponentSettingsF cStrName minValPtr maxValPtr) >>
-                ContinuouslyMovableComponent cCompName <$> (fromCDouble <$> peek minValPtr) <*> (fromCDouble <$> peek maxValPtr)
-            ) >>= \continuousCompDescs ->
+                checkError (listContinouslyMovableComponentSettingsF cStrName minValPtr maxValPtr incrementPtr) >>
+                ContinuouslyMovableComponent cCompName <$> (fromCDouble <$> peek minValPtr) 
+                                                       <*> (fromCDouble <$> peek maxValPtr)
+                                                       <*> (fromCDouble <$> peek incrementPtr)) >>= \continuousCompDescs ->
             pure (discreteCompDescs ++ continuousCompDescs)
 
         handleSetMoveComponents :: SetMovableComponentsFunc -> [MovableComponentSetting] -> IO ()

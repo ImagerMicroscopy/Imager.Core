@@ -79,6 +79,7 @@ data MovableComponentDescription = DiscreteMovableComponent {
                                        componentName :: !Text
                                      , minValue :: !Double
                                      , maxValue :: !Double
+                                     , increment :: !Double -- allowable increment between minValue and maxValue. <=0 means no discrete increment
                                    }
                                    deriving (Eq, Show)
 
@@ -88,7 +89,7 @@ instance ToJSON MovableComponentDescription where
                 "type" .= ("discretemovablecomponent" :: Text)]
     toJSON c@(ContinuouslyMovableComponent{}) =
         object ["componentname" .= c.componentName, "minvalue" .= c.minValue,
-                "maxvalue" .= c.maxValue, "type" .= ("continuousmovablecomponent" :: Text)]
+                "maxvalue" .= c.maxValue, "increment" .= c.increment, "type" .= ("continuousmovablecomponent" :: Text)]
 
 instance FromJSON MovableComponentDescription where
     parseJSON (Object v) =
@@ -101,6 +102,7 @@ instance FromJSON MovableComponentDescription where
                 ContinuouslyMovableComponent <$> v .: "componentname"
                                              <*> v .: "minvalue"
                                              <*> v .: "maxvalue"
+                                             <*> v .: "increment"
             _ -> fail "not a MovableComponentDescription type"
     parseJSON _ = fail "not a MovableComponentDescription"
 
@@ -120,7 +122,7 @@ instance ToJSON MovableComponentSetting where
                 "type" .= ("discretemovablesetting" :: Text)]
     toJSON c@(ContinuousComponentSetting{}) =
         object ["componentname" .= c.mcsComponentName, "desiredsetting" .= c.mcsDesiredNumSetting,
-                "type" .= ("continousmovablesetting" :: Text)]
+                "type" .= ("continuousmovablesetting" :: Text)]
 
 instance FromJSON MovableComponentSetting where
     parseJSON (Object v) =
@@ -129,7 +131,7 @@ instance FromJSON MovableComponentSetting where
             "discretemovablesetting" ->
                 DiscreteComponentSetting <$> v .: "componentname"
                                          <*> v .: "desiredsetting"
-            "continousmovablesetting" ->
+            "continuousmovablesetting" ->
                 ContinuousComponentSetting <$> v .: "componentname"
                                           <*> v .: "desiredsetting"
             _ -> fail "not a MovableComponentSetting type"
