@@ -40,7 +40,7 @@ extern "C" {
                                                      int nNames, int maxNBytesPerName, int* nNamesReturned);
     LIBSPEC int ListContinuouslyMovableComponentRange(char* discreteComponentName, double* minValue, double* maxValue, double* increment);
     LIBSPEC int SetMovableComponents(int nDiscreteComponentNames, char** discreteComponentNames, char** discreteSettings,
-                                     int nContinuousComponentNames, char** continuousComponentNames, double* continousSettings);
+                                     int nContinuousComponentNames, char** continuousComponentNames, double* continuousSettings);
     
     LIBSPEC int SetFilter(char* filterWheelName, char* filterName);
 
