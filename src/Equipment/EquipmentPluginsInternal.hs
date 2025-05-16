@@ -74,7 +74,7 @@ type DeactivateLightSourceFunc  = IO CInt
 
 type ListDiscreteMovableComponentsFunc = StringListFunc
 type ListContinuouslyMovableComponentsFunc = StringListFunc
-type ListDiscreteMovableComponentSettingsFunc = StringListFunc
+type ListDiscreteMovableComponentSettingsFunc = CString -> Ptr CString -> CInt -> CInt -> Ptr CInt -> IO CInt
 type ListContinuouslyMovableComponentRangeFunc = CString -> Ptr CDouble -> Ptr CDouble -> Ptr CDouble -> IO CInt
 type SetMovableComponentsFunc = CInt -> Ptr CString -> Ptr CString -> CInt -> Ptr CString -> Ptr CDouble -> IO CInt
 
@@ -193,7 +193,12 @@ loadPlugin libName =
             handleStringListFuncT listDiscreteCompsF >>= \discreteCompNames ->
             handleStringListFuncT listContinuousCompsF >>= \continuousCompNames ->
             forM discreteCompNames (\dCompName ->
-                handleStringListFuncT listDiscreteMovableComponentSettingsF >>= \settings ->
+                withCStringArray' 16 128 $ \namesPtr ->
+                alloca $ \nNamesReturnedPtr ->
+                T.withCString dCompName $ \cStrName ->
+                checkError (listDiscreteMovableComponentSettingsF cStrName namesPtr 16 128 nNamesReturnedPtr) >>
+                fromIntegral <$> peek nNamesReturnedPtr >>= \nNamesReturned ->
+                map T.decodeUtf8 <$> (peekArray nNamesReturned namesPtr >>= mapM B.packCString) >>= \settings ->
                 pure (DiscreteMovableComponent dCompName settings)
             ) >>= \discreteCompDescs ->
             forM continuousCompNames (\cCompName ->
