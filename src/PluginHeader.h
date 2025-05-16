@@ -41,8 +41,6 @@ extern "C" {
     LIBSPEC int ListContinuouslyMovableComponentRange(char* discreteComponentName, double* minValue, double* maxValue, double* increment);
     LIBSPEC int SetMovableComponents(int nDiscreteComponentNames, char** discreteComponentNames, char** discreteSettings,
                                      int nContinuousComponentNames, char** continuousComponentNames, double* continuousSettings);
-    
-    LIBSPEC int SetFilter(char* filterWheelName, char* filterName);
 
     LIBSPEC int HasMotorizedStage(int* hasIt);
 	LIBSPEC int MotorizedStageName(char* name, int maxNBytesPerName);
