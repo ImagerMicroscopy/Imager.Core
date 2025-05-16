@@ -73,7 +73,7 @@ initializeOxxiusLC' (OxxiusLCDesc name portName modulationMode) =
                                        v     -> throw $ userError ("unknown oxxius lasertype " ++ T.unpack v)
                         wavelength = readT wavelengthStr
                         maxPower = readT powerStr
-                        regulationMode = if (wantModulation == NoModulation) then ConstantPower else ConstantCurrent
+                        regulationMode = if (wantModulation == DigitalModulation) then ConstantCurrent else ConstantPower
                         params = OxxiusLaserParams laserType maxPower wavelength regulationMode idx
                     in  pure [(LSChannelName resp, params)]
         oxxiusTypeSpecificInit :: SerialPort -> OxxiusLaserType -> Int -> IO ()
@@ -82,20 +82,20 @@ initializeOxxiusLC' (OxxiusLCDesc name portName modulationMode) =
                                               handleOxxiusLaserCommand_ port idx "T=1" >> -- enable temperature regulation
                                               case modulationMode of
                                                   NoModulation ->
-                                                        handleOxxiusLaserCommand port idx "AM=0" >> -- disable analog modulation
-                                                        handleOxxiusLaserCommand port idx "ACC=0" >> -- regulate output power mode
-                                                        handleOxxiusLaserCommand port idx "CW=1" >> -- constant power mode
-                                                        handleOxxiusLaserCommand port idx "TTL=0" -- disable digital modulation
-                                                  DigitalModulation ->
-                                                        handleOxxiusLaserCommand port idx "ACC=1" >> -- constant current mode
-                                                        handleOxxiusLaserCommand port idx "AM=0" >> -- disable analog modulation
-                                                        handleOxxiusLaserCommand port idx "CW=0" >> -- disable CW
-                                                        handleOxxiusLaserCommand port idx "TTL=1" -- enable digital modulation
-                                                  AnalogModulation ->
-                                                        handleOxxiusLaserCommand port idx "ACC=1" >> -- regulate output power mode
-                                                        handleOxxiusLaserCommand port idx "CW=0" >> -- constant power mode
+                                                        handleOxxiusLaserCommand port idx "AM=0" >>  -- disable analog modulation
                                                         handleOxxiusLaserCommand port idx "TTL=0" >> -- disable digital modulation
-                                                        handleOxxiusLaserCommand port idx "AM=1" -- enable analog modulation
+                                                        handleOxxiusLaserCommand_ port idx "CW=1" >> -- constant power mode
+                                                        handleOxxiusLaserCommand port idx "ACC=0"    -- regulate output power mode
+                                                  DigitalModulation ->
+                                                        handleOxxiusLaserCommand port idx "AM=0" >> -- disable analog modulation
+                                                        handleOxxiusLaserCommand_ port idx "CW=0" >> -- disable CW
+                                                        handleOxxiusLaserCommand port idx "ACC=1" >> -- constant current mode
+                                                        handleOxxiusLaserCommand port idx "TTL=1"    -- enable digital modulation
+                                                  AnalogModulation ->
+                                                        handleOxxiusLaserCommand_ port idx "CW=0" >> -- constant power mode
+                                                        handleOxxiusLaserCommand port idx "TTL=0" >> -- disable digital modulation
+                                                        handleOxxiusLaserCommand port idx "ACC=0" >> -- regulate output power mode
+                                                        handleOxxiusLaserCommand port idx "AM=1"     -- enable analog modulation
         setAOMMode :: SerialPort -> WantDigitalModulation -> IO ()
         setAOMMode port modulationMode =
             forM_ [1, 2 :: Int] (\aomIdx ->
