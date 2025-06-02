@@ -137,8 +137,8 @@ loadPlugin libName =
     readAvailableMovableComponents (listDiscreteMovableComponentsF, listContinouslyMovableComponentsF, 
                                     listContinouslyMovableComponentSettingsF, listContinuouslyMovableComponentRangeF) >>= \movableComps ->
     ((/=) 0) <$> readSingleIntPtr hasStageF >>= \hasStage ->
-    StageName <$> readIdentifier stageNameF >>= \stageName ->
-    readSupportedAxesFunc suppAxesF >>= \supportedAxes ->
+    (if hasStage then (StageName <$> readIdentifier stageNameF) else (pure $ StageName "")) >>= \stageName ->
+    (if hasStage then (readSupportedAxesFunc suppAxesF) else pure []) >>= \supportedAxes ->
     EquipmentW <$> pure (EquipmentPlugin eqName shutdownF lightSources (handleActivateLightSource activateLightSourceF)
                                          (handleDeactivateLightSource deactivateLightSourceF)
                                          movableComps (handleSetMoveComponents setMovableComponentsF)
