@@ -7,12 +7,14 @@ import Control.Exception
 import Control.Monad
 import Data.Aeson hiding (withArray)
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy as LB
 import qualified Data.ByteString.Unsafe as B
 import Data.Maybe
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+import qualified Data.Text.IO as T
 import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
 import Data.Vector.Storable.Mutable (IOVector)
@@ -27,9 +29,11 @@ import Foreign.Ptr
 import Foreign.Storable
 
 import Camera.SCCameraTypes
+import Utils.DLLUtils
 
 initializeCameraDLL :: IO (Either String ())
-initializeCameraDLL = cInitCameraDLL >>= \result ->
+initializeCameraDLL = mkCStringCallback scCamPrintFunc >>= \printF ->
+                      cInitCameraDLL printF >>= \result ->
                       case result of
                           0 -> return (Right ())
                           e -> return (Left ("initialization failed with code " ++ show e))
@@ -185,8 +189,11 @@ getLastSCCamError =
     where
         bufSize = 512
 
+scCamPrintFunc :: CString -> IO ()
+scCamPrintFunc str = T.putStr "SCCam: " >> B.packCString str >>= B.putStrLn
+
 foreign import ccall "SCCameraDLL.h InitCameraDLL"
-    cInitCameraDLL :: IO CInt
+    cInitCameraDLL :: FunPtr (CString -> IO ()) -> IO CInt
 
 foreign import ccall "SCCameraDLL.h ShutdownCameraDLL"
     cShutdownCameraDLL :: IO ()
