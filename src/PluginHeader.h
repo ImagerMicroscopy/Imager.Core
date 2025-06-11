@@ -30,7 +30,7 @@ extern "C" {
 	LIBSPEC int EquipmentName(char* name, int maxNBytesPerName);
 
     LIBSPEC int ListAvailableLightSources(char** namesPtr, int nNames, int maxNBytesPerName, int* nNamesReturned);
-    LIBSPEC int ListAvailableChannels(char* lightSourceName, char** namesPtr, int nNames, int maxNBytesPerName, int* nNamesReturned, int* canControlPower, int* channelsAreExclusive);
+    LIBSPEC int ListAvailableChannels(char* lightSourceName, char** namesPtr, int nNames, int maxNBytesPerName, int* nNamesReturned, int* canControlPower, int* allowMultipleChannelsAtOnce);
     LIBSPEC int ActivateLightSource(char* lightSourceName, char** channelNames, double* illuminationPowers, int nChannels);
     LIBSPEC int DeactivateLightSource();
 

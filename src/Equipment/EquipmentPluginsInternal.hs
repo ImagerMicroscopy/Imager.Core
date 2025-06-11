@@ -169,14 +169,14 @@ loadPlugin libName =
             withCStringArray' 16 128 $ \namesPtr ->
             alloca $ \nNamesReturnedPtr ->
             alloca $ \canControlPowerPtr ->
-            alloca $ \channelsAreExclusivePtr ->
-            checkError (fChannels cSourceName namesPtr 16 128 nNamesReturnedPtr canControlPowerPtr channelsAreExclusivePtr) >>
+            alloca $ \allowMultipleChannelsPtr ->
+            checkError (fChannels cSourceName namesPtr 16 128 nNamesReturnedPtr canControlPowerPtr allowMultipleChannelsPtr) >>
             LSName <$> T.pack <$> peekCString cSourceName >>= \sourceName ->
             ((/=) 0) <$> peek canControlPowerPtr >>= \canControlPower ->
-            ((/=) 0) <$> peek channelsAreExclusivePtr >>= \channelsAreExclusive ->
+            ((/=) 0) <$> peek allowMultipleChannelsPtr >>= \allowMultipleChannels ->
             fromIntegral <$> peek nNamesReturnedPtr >>= \nNamesReturned ->
             map LSChannelName <$> peekArrayString nNamesReturned namesPtr >>= \channels ->
-            pure (LightSourceDescription sourceName canControlPower channelsAreExclusive channels)
+            pure (LightSourceDescription sourceName canControlPower allowMultipleChannels channels)
         
         handleActivateLightSource :: ActivateLightSourceFunc -> (LSName -> [(LSChannelName, LSIlluminationPower)] -> IO ())
         handleActivateLightSource f (LSName name) ps =
