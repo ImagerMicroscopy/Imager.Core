@@ -19,10 +19,15 @@ data NumberType = UINT8
                 | FP64
                 deriving (Show, Eq)
 
-data AsyncMeasurementMessage = AcquiredDataMessage (AcquisitionMetaData, AcquiredData)
+data AsyncMeasurementMessage = AcquiredDataMessage {
+                                   messageIdx :: Word64
+                                 , acquisitionMetaData :: AcquisitionMetaData
+                                 , acquiredData :: AcquiredData
+                               }
+                             deriving (Show)
 
 asyncMessageIndex :: AsyncMeasurementMessage -> Word64
-asyncMessageIndex (AcquiredDataMessage (md, _)) = md.amdSequence
+asyncMessageIndex = messageIdx
 
 data AcquiredData = AcquiredData {
                         acqNRows :: !Int
@@ -40,8 +45,7 @@ instance ToJSON AcquiredData where
         pairs ("nrows" .= nRows <> "ncols" .= nCols <> "timestamp" .= (timeSpecAsDouble timeStamp) <> "detectorname" .= camName <> "data" .= (show bytes) <> "numtype" .= (show numType))
 
 data AcquisitionMetaData = AcquisitionMetaData {
-                               amdSequence :: !Word64
-                             , amdStagePosition :: !StagePosition
+                               amdStagePosition :: !StagePosition
                              , amdAcquisitionTypename :: !Text
                            } deriving (Show, Generic, NFData)
 
@@ -49,7 +53,8 @@ instance ToJSON AcquisitionMetaData
 instance FromJSON AcquisitionMetaData
 
 instance ToJSON AsyncMeasurementMessage where
-  toJSON (AcquiredDataMessage p) = toJSON p
+  toJSON p@(AcquiredDataMessage{}) = toJSON (p.acquisitionMetaData, p.acquiredData) -- should not be used since this data should be binary encoded instead
+  toJSON _                       = error "no ToJSON for this AcquiredDataMessage type"
 
 instance NFData NumberType where
   rnf t = t `seq` ()

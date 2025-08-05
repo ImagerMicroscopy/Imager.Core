@@ -41,23 +41,23 @@ shouldBinaryEncode (Wavelengths _) = True
 shouldBinaryEncode _ = False
 
 binaryEncode :: ResponseMessage -> [ByteString]
-binaryEncode (AcquiredDataResponse d) = encodeAcquiredData (map (\(AcquiredDataMessage ps) -> ps) d)
-binaryEncode (AsyncAcquiredData ds) = encodeAcquiredData (map (\(AcquiredDataMessage ps) -> ps) ds)
-binaryEncode (Wavelengths d) = encodeAcquiredData [(AcquisitionMetaData 0 (StagePosition (-1.0) (-1.0) (-1.0) False 0) "DUMMY", d)]
+binaryEncode (AcquiredDataResponse ds) = encodeAcquiredData ds
+binaryEncode (AsyncAcquiredData ds) = encodeAcquiredData ds
+binaryEncode (Wavelengths d) = error "TODO: encoding wavelengths is unsupported for now" --encodeAcquiredData [(AcquisitionMetaData 0 (StagePosition (-1.0) (-1.0) (-1.0) False 0) "DUMMY", d)]
 binaryEncode _ = error "no binary encoding for this type"
 
-encodeAcquiredData :: [(AcquisitionMetaData, AcquiredData)] -> [ByteString]
+encodeAcquiredData :: [AsyncMeasurementMessage] -> [ByteString]
 encodeAcquiredData [] = error "Encoding empty data"
 encodeAcquiredData acqs = let header = encodeHeader messageLength indices stagePositions acqTypeNames detectorNames dataSizes numType timeStamps
                           in  header : acqBytes
   where
-      metadatas = map fst acqs
-      datas = map snd acqs
+      metadatas = map acquisitionMetaData acqs
+      datas = map acquiredData acqs
+      indices = map messageIdx acqs
       messageLength = 11 + (length acqs) * (8 + 24 + 8 + 8) + lengthOfEncodedAcquisitionNames + lengthOfEncodedDetectorNames + sum (map B.length acqBytes)
       lengthOfEncodedAcquisitionNames = sum (map ((+) 1  . B.length) acqTypeNames)
       lengthOfEncodedDetectorNames = sum (map ((+) 1 . B.length) detectorNames)
       timeStamps = map (timeSpecAsDouble . acqTimeStamp) datas
-      indices = map amdSequence metadatas
       stagePositions = map amdStagePosition metadatas
       acqTypeNames = map (B.take 255 . T.encodeUtf8 . amdAcquisitionTypename) metadatas
       detectorNames = map (B.take 255 . T.encodeUtf8 . acqDetectorName) datas

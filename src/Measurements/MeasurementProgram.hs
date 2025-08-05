@@ -462,10 +462,10 @@ addDataToMVar dataMVar startTime idx stagePosition acqType d =
     modifyMVar_ dataMVar (\previousData ->
         when (length previousData > 250) (throwIO (userError "too many async data stored")) >>
         if (null previousData)
-        then pure [AcquiredDataMessage (metaData, adjustTime d)]
-        else pure (AcquiredDataMessage (metaData, adjustTime d) : previousData))
+        then pure [AcquiredDataMessage idx metaData (adjustTime d)]
+        else pure ((AcquiredDataMessage idx metaData (adjustTime d)) : previousData))
     where
-       metaData = AcquisitionMetaData idx stagePosition acqType
+       metaData = AcquisitionMetaData stagePosition acqType
        adjustTime :: AcquiredData -> AcquiredData
        adjustTime acqDat = let t = acqTimeStamp acqDat
                            in acqDat {acqTimeStamp = diffTimeSpec t startTime}
