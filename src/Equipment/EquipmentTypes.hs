@@ -6,6 +6,8 @@ import Control.DeepSeq
 import Control.Concurrent.MVar
 import Data.Aeson
 import Data.IORef
+import qualified Data.Map as M
+import Data.MessagePack
 import Data.Text (Text)
 import qualified Data.Text as T
 
@@ -63,6 +65,15 @@ instance FromJSON StagePosition where
                                          <*> v .: "usinghardwareautofocus"
                                          <*> v .: "hardwareautofocusoffset"
     parseJSON _ = fail "expected a JSON object"
+  
+instance MessagePack StagePosition where
+    toObject p = toObject ([
+                    ("x" :: Text, toObject $ spX p),
+                    ("y", toObject $ spY p),
+                    ("z", toObject $ spZ p),
+                    ("usinghardwareautofocus", toObject $ spUsingHardwareAutoFocus p),
+                    ("hardwareautofocusoffset", toObject $ spHardwareAFOffset p)
+                  ])
 
 data LightSourceDescription = LightSourceDescription {
                                   lsdName :: !LSName

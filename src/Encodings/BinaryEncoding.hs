@@ -6,6 +6,7 @@ module Encodings.BinaryEncoding (
 import Control.Monad
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
+import Data.MessagePack
 import Data.Serialize
 import qualified Data.Text.Encoding as T
 import Data.Word
@@ -46,6 +47,12 @@ binaryEncode (AsyncAcquiredData ds) = encodeAcquiredData ds
 binaryEncode (Wavelengths d) = error "TODO: encoding wavelengths is unsupported for now" --encodeAcquiredData [(AcquisitionMetaData 0 (StagePosition (-1.0) (-1.0) (-1.0) False 0) "DUMMY", d)]
 binaryEncode _ = error "no binary encoding for this type"
 
+encodeInMessagePack :: ResponseMessage -> [ByteString]
+encodeInMessagePack (AcquiredDataResponse ds) = map (B.toStrict . pack) ds
+encodeInMessagePack (AsyncAcquiredData ds) = map (B.toStrict . pack) ds
+encodeInMessagePack (Wavelengths d) = error "TODO: encoding wavelengths is unsupported for now" --encodeAcquiredData [(AcquisitionMetaData 0 (StagePosition (-1.0) (-1.0) (-1.0) False 0) "DUMMY", d)]
+encodeInMessagePack _ = error "no binary encoding for this type"
+
 encodeAcquiredData :: [AsyncMeasurementMessage] -> [ByteString]
 encodeAcquiredData [] = error "Encoding empty data"
 encodeAcquiredData acqs = let header = encodeHeader messageLength indices stagePositions acqTypeNames detectorNames dataSizes numType timeStamps
@@ -57,7 +64,7 @@ encodeAcquiredData acqs = let header = encodeHeader messageLength indices stageP
       messageLength = 11 + (length acqs) * (8 + 24 + 8 + 8) + lengthOfEncodedAcquisitionNames + lengthOfEncodedDetectorNames + sum (map B.length acqBytes)
       lengthOfEncodedAcquisitionNames = sum (map ((+) 1  . B.length) acqTypeNames)
       lengthOfEncodedDetectorNames = sum (map ((+) 1 . B.length) detectorNames)
-      timeStamps = map (timeSpecAsDouble . acqTimeStamp) datas
+      timeStamps = map (timeSpecAsSeconds . acqTimeStamp) datas
       stagePositions = map amdStagePosition metadatas
       acqTypeNames = map (B.take 255 . T.encodeUtf8 . amdAcquisitionTypename) metadatas
       detectorNames = map (B.take 255 . T.encodeUtf8 . acqDetectorName) datas
@@ -79,8 +86,3 @@ encodeHeader messageLength indices stagePoss acqTypeNames detectorNames dataDims
         forM_ dataDims (\(nRows, nCols) ->
             putWord32le (fromIntegral nRows) >> putWord32le (fromIntegral nCols)) >>
         mapM_ putFloat64le timeStamps
-
-encodedNumType :: NumberType -> Int
-encodedNumType UINT8 = 2
-encodedNumType UINT16 = 0
-encodedNumType FP64 = 1

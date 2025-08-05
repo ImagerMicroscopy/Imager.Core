@@ -96,8 +96,8 @@ readHexIntB bs = case T.hexadecimal (T.decodeUtf8 bs) of
                     Left err       -> error err
                     Right (val, _) -> val
 
-timeSpecAsDouble :: TimeSpec -> Double
-timeSpecAsDouble ts = (*) 1.0e-9 . fromIntegral . toNanoSecs $ ts
+timeSpecAsSeconds :: TimeSpec -> Double
+timeSpecAsSeconds ts = (*) 1.0e-9 . fromIntegral . toNanoSecs $ ts
 
 readFromSerialUntilChar :: SerialPort -> Char -> IO ByteString
 readFromSerialUntilChar port c = readUntil' port (fromIntegral . fromEnum $ c) B.empty
