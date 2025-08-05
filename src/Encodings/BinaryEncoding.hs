@@ -41,8 +41,8 @@ shouldBinaryEncode (Wavelengths _) = True
 shouldBinaryEncode _ = False
 
 binaryEncode :: ResponseMessage -> [ByteString]
-binaryEncode (AcquiredDataResponse d) = encodeAcquiredData d
-binaryEncode (AsyncAcquiredData ds) = encodeAcquiredData ds
+binaryEncode (AcquiredDataResponse d) = encodeAcquiredData (map (\(AcquiredDataMessage ps) -> ps) d)
+binaryEncode (AsyncAcquiredData ds) = encodeAcquiredData (map (\(AcquiredDataMessage ps) -> ps) ds)
 binaryEncode (Wavelengths d) = encodeAcquiredData [(AcquisitionMetaData 0 (StagePosition (-1.0) (-1.0) (-1.0) False 0) "DUMMY", d)]
 binaryEncode _ = error "no binary encoding for this type"
 

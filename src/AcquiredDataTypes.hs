@@ -19,6 +19,11 @@ data NumberType = UINT8
                 | FP64
                 deriving (Show, Eq)
 
+data AsyncMeasurementMessage = AcquiredDataMessage (AcquisitionMetaData, AcquiredData)
+
+asyncMessageIndex :: AsyncMeasurementMessage -> Word64
+asyncMessageIndex (AcquiredDataMessage (md, _)) = md.amdSequence
+
 data AcquiredData = AcquiredData {
                         acqNRows :: !Int
                       , acqNCols :: !Int
@@ -42,6 +47,9 @@ data AcquisitionMetaData = AcquisitionMetaData {
 
 instance ToJSON AcquisitionMetaData
 instance FromJSON AcquisitionMetaData
+
+instance ToJSON AsyncMeasurementMessage where
+  toJSON (AcquiredDataMessage p) = toJSON p
 
 instance NFData NumberType where
   rnf t = t `seq` ()

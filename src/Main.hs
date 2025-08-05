@@ -183,7 +183,9 @@ performAction env FetchAsyncData =
             | otherwise                = if (null newData) then StatusNoNewAsyncDataComing else (AsyncAcquiredData newData)
 
 performAction env (AcknowledgeDataReceipt upToIdx) =
-    modifyMVar_ dataMVar (\ds -> pure (filter (\d -> (amdSequence . fst) d > upToIdx) ds)) >>
+    -- delete all acquired data up to the index that has been received
+    modifyMVar_ dataMVar (\storedData ->
+        pure (filter (\d -> (asyncMessageIndex d) > upToIdx) storedData)) >>
     return (StatusOK, env)
     where
         dataMVar = envAsyncDataMVar env
@@ -212,7 +214,7 @@ performAction env IsAsyncAcquisitionRunning =
     asyncAcquisitionRunning env >>= \asyncIsRunning ->
     return (AsyncAcquisitionIsRunning asyncIsRunning, env)
 
-startAsyncAcquisition :: Detector a => Environment a -> DefinedDetections -> MeasurementElement -> IO (Async (), MVar [(AcquisitionMetaData, AcquiredData)], MVar [Text])
+startAsyncAcquisition :: Detector a => Environment a -> DefinedDetections -> MeasurementElement -> IO (Async (), MVar [AsyncMeasurementMessage], MVar [Text])
 startAsyncAcquisition env ddets me =
     ensureAsyncAcquisitionNotRunning env >>
     validateMeasurementElementThrows (envDetectors env) (envEquipment env) me ddets >>

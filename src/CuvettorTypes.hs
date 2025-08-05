@@ -37,7 +37,7 @@ data Environment a = Environment {
                       envEquipment :: ![EquipmentW]
                     , envDetectors :: ![a]
                     , envEncodedSpectrometerWavelengths :: !SB.ByteString
-                    , envAsyncDataMVar :: !(MVar [(AcquisitionMetaData, AcquiredData)])
+                    , envAsyncDataMVar :: !(MVar [AsyncMeasurementMessage])
                     , envAsyncStatusMessagesMVar :: !(MVar [Text])
                     , envAsyncProgramWorker :: !(Async ())
 }
@@ -111,7 +111,7 @@ data ResponseMessage = StatusOK
                      | StatusError !String
                      | StatusNoNewAsyncData
                      | StatusNoNewAsyncDataComing
-                     | AcquiredDataResponse ![(AcquisitionMetaData, AcquiredData)]
+                     | AcquiredDataResponse ![AsyncMeasurementMessage]
                      | Wavelengths !AcquiredData
                      | AvailableEquipment ![EquipmentW]
                      | MotorizedStagePosition !StagePosition
@@ -119,7 +119,7 @@ data ResponseMessage = StatusOK
                      | AvailableDetectorsResponse ![Text]
                      | DetectorPropertiesResponse ![DetectorProperty] Double
                      | Pong
-                     | AsyncAcquiredData ![(AcquisitionMetaData, AcquiredData)]
+                     | AsyncAcquiredData ![AsyncMeasurementMessage]
                      | AsyncStatusMessages ![Text]
                      | AsyncAcquisitionIsRunning !Bool
                      deriving (Generic)

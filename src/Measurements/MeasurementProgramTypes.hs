@@ -38,7 +38,7 @@ data ProgramEnvironment a = ProgramEnvironment {
                               , peStartTime :: !TimeSpec
                               , peEquipment :: ![EquipmentW]
                               , peDataCounter :: !(IORef Word64)
-                              , peDataMVar :: !(MVar [(AcquisitionMetaData, AcquiredData)])
+                              , peDataMVar :: !(MVar [AsyncMeasurementMessage])
                               , peStatusMVar :: !(MVar [Text])
                             }
 
