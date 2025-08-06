@@ -67,7 +67,7 @@ instance FromJSON StagePosition where
     parseJSON _ = fail "expected a JSON object"
   
 instance MessagePack StagePosition where
-    toObject p = toObject ([
+    toObject p = toObject $ M.fromList ([
                     ("x" :: Text, toObject $ spX p),
                     ("y", toObject $ spY p),
                     ("z", toObject $ spZ p),

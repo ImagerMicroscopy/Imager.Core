@@ -39,10 +39,11 @@ asyncMessageIndex = messageIdx
 
 instance MessagePack AsyncMeasurementMessage where
     toObject m@(AcquiredDataMessage{}) =
-        toObject [
+        toObject $ M.fromList [
                     ("index" :: Text, toObject (fromIntegral m.messageIdx :: Int)),
                     ("metadata", toObject m.acquisitionMetaData),
-                    ("data", toObject m.acquiredData)
+                    ("data", toObject m.acquiredData),
+                    ("type", toObject ("acquireddatamessage" :: Text))
                  ]
 
 data AcquiredData = AcquiredData {
@@ -61,12 +62,12 @@ instance ToJSON AcquiredData where
         pairs ("nrows" .= nRows <> "ncols" .= nCols <> "timestamp" .= (timeSpecAsSeconds timeStamp) <> "detectorname" .= camName <> "data" .= (show bytes) <> "numtype" .= (show numType))
 
 instance MessagePack AcquiredData where
-    toObject d = toObject [
+    toObject d = toObject $ M.fromList [
                              ("nrows" :: Text, toObject d.acqNRows),
                              ("ncols", toObject d.acqNCols),
                              ("timestamp", toObject (timeSpecAsSeconds d.acqTimeStamp)),
                              ("detectorname", toObject d.acqDetectorName),
-                             ("data", toObject d.acqData),
+                             ("imagedata", toObject d.acqData),
                              ("numtype", toObject (encodedNumType d.acqNumType))
                           ]
     fromObject _ = error "no fromObject for AcquiredData"
@@ -81,7 +82,7 @@ instance FromJSON AcquisitionMetaData
 
 instance MessagePack AcquisitionMetaData where
     toObject (AcquisitionMetaData position typename) =
-      toObject [
+      toObject $ M.fromList [
                  ("stageposition" :: Text, toObject position),
                  ("acquisitiontype", toObject typename)
                ]

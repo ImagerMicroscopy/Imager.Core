@@ -41,9 +41,12 @@ shouldBinaryEncode (AsyncAcquiredData _) = True
 shouldBinaryEncode (Wavelengths _) = True
 shouldBinaryEncode _ = False
 
+useMessagePack :: Bool
+useMessagePack = False
+
 binaryEncode :: ResponseMessage -> [ByteString]
-binaryEncode (AcquiredDataResponse ds) = encodeAcquiredData ds
-binaryEncode (AsyncAcquiredData ds) = encodeAcquiredData ds
+binaryEncode r@(AcquiredDataResponse ds) = if (useMessagePack) then encodeInMessagePack r else encodeAcquiredData ds
+binaryEncode r@(AsyncAcquiredData ds) = if (useMessagePack) then encodeInMessagePack r else encodeAcquiredData ds
 binaryEncode (Wavelengths d) = error "TODO: encoding wavelengths is unsupported for now" --encodeAcquiredData [(AcquisitionMetaData 0 (StagePosition (-1.0) (-1.0) (-1.0) False 0) "DUMMY", d)]
 binaryEncode _ = error "no binary encoding for this type"
 
