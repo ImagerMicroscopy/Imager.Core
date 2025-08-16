@@ -42,7 +42,7 @@ shouldBinaryEncode (Wavelengths _) = True
 shouldBinaryEncode _ = False
 
 useMessagePack :: Bool
-useMessagePack = False
+useMessagePack = True
 
 binaryEncode :: ResponseMessage -> [ByteString]
 binaryEncode r@(AcquiredDataResponse ds) = if (useMessagePack) then encodeInMessagePack r else encodeAcquiredData ds
