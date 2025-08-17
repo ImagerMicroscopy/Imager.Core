@@ -37,7 +37,7 @@ data Environment a = Environment {
                       envEquipment :: ![EquipmentW]
                     , envDetectors :: ![a]
                     , envEncodedSpectrometerWavelengths :: !SB.ByteString
-                    , envAsyncDataMVar :: !(MVar [AsyncMeasurementMessage])
+                    , envAsyncDataChannel :: !MessageChannel
                     , envAsyncStatusMessagesMVar :: !(MVar [Text])
                     , envAsyncProgramWorker :: !(Async ())
 }

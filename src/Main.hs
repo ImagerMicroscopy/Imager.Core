@@ -60,7 +60,7 @@ main =
     withEquipment descs $ \availableEquipment ->
       read <$> readFile (takeDirectory exePath </> "cameraoptions.txt") >>= \imageOrientationOpss ->
 
-      newMVar [] >>= \asyncSpectraMVar ->
+      newMessageChannel >>= \asyncMessageChannel ->
       newMVar [] >>= \asyncStatusMessagesMVar ->
       async (return ()) >>= \asyncProgramWorker ->
       wait asyncProgramWorker >>
@@ -72,7 +72,7 @@ main =
           putStrLn "ready to measure!" >>
           putStrLn "HOLD CONTROL-C UNTIL YOU SEE \"USER INTERRUPT\" BEFORE CLOSING THIS WINDOW" >>
           let env = Environment availableEquipment dets encodedWl
-                                asyncSpectraMVar asyncStatusMessagesMVar asyncProgramWorker
+                                asyncMessageChannel asyncStatusMessagesMVar asyncProgramWorker
           in  wait =<< async (runServer 3200 messageHandler env serverSettings))
     where
         applyCameraOptions :: Detector a => [a] -> [(Text, [ImageOrientationOperation])] -> IO ()
@@ -97,9 +97,9 @@ performAction :: Detector a => Environment a -> RequestMessage -> IO (ResponseMe
 performAction env (AcquireData params) =
     let detElem = MEDetection ["Default"]
         ddets = M.fromList [("Default", params)]
-    in  startAsyncAcquisition env ddets detElem >>= \(asyncWorker, spectraMVar, statusMVar) ->
+    in  startAsyncAcquisition env ddets detElem >>= \(asyncWorker, messageChannel, statusMVar) ->
         wait asyncWorker >>
-        takeMVar spectraMVar >>= \acquiredData ->
+        readChannelMessages messageChannel >>= \acquiredData ->
         return (AcquiredDataResponse acquiredData, env)
 
 performAction env ListWavelengths =
@@ -166,16 +166,16 @@ performAction env Ping = return (Pong, env)
 
 performAction env (ExecuteMeasurementProgram me ddets) =
     startAsyncAcquisition env ddets me >>= \(asyncWorker, spectraMVar, statusMVar) ->
-    let newEnv = env {envAsyncDataMVar = spectraMVar, envAsyncStatusMessagesMVar = statusMVar, envAsyncProgramWorker = asyncWorker}
+    let newEnv = env {envAsyncDataChannel = spectraMVar, envAsyncStatusMessagesMVar = statusMVar, envAsyncProgramWorker = asyncWorker}
     in  return (StatusOK, newEnv)
 
 performAction env FetchAsyncData =
     asyncAcquisitionRunning env >>= \asyncIsRunning ->
-    readMVar dataMVar >>= \newData ->
+    readChannelMessages messageChannel >>= \newData ->
     asyncAcquisitionErrorMessage env >>= \asyncErrorMsg ->
     return (dataResponse asyncErrorMsg asyncIsRunning (reverse newData), env)
     where
-        dataMVar = envAsyncDataMVar env
+        messageChannel = envAsyncDataChannel env
         wl = envEncodedSpectrometerWavelengths env
         dataResponse asyncErrorMsg asyncIsRunning newData
             | not (null asyncErrorMsg) = StatusError asyncErrorMsg
@@ -184,11 +184,10 @@ performAction env FetchAsyncData =
 
 performAction env (AcknowledgeDataReceipt upToIdx) =
     -- delete all acquired data up to the index that has been received
-    modifyMVar_ dataMVar (\storedData ->
-        pure (filter (\d -> (asyncMessageIndex d) > upToIdx) storedData)) >>
+    deleteChannelMessagesUpToIndex messageChannel upToIdx >>
     return (StatusOK, env)
     where
-        dataMVar = envAsyncDataMVar env
+        messageChannel = envAsyncDataChannel env
 
 performAction env FetchAsyncStatusMessages =
     asyncAcquisitionErrorMessage env >>= \asyncErrorMsg ->
@@ -214,17 +213,17 @@ performAction env IsAsyncAcquisitionRunning =
     asyncAcquisitionRunning env >>= \asyncIsRunning ->
     return (AsyncAcquisitionIsRunning asyncIsRunning, env)
 
-startAsyncAcquisition :: Detector a => Environment a -> DefinedDetections -> MeasurementElement -> IO (Async (), MVar [AsyncMeasurementMessage], MVar [Text])
+startAsyncAcquisition :: Detector a => Environment a -> DefinedDetections -> MeasurementElement -> IO (Async (), MessageChannel, MVar [Text])
 startAsyncAcquisition env ddets me =
     ensureAsyncAcquisitionNotRunning env >>
     validateMeasurementElementThrows (envDetectors env) (envEquipment env) me ddets >>
-    newMVar [] >>= \spectraMVar ->
+    newMessageChannel >>= \messageChannel ->
     newMVar [] >>= \statusMVar ->
     newIORef 0 >>= \dataCounter ->
     getTime Monotonic >>= \startTime ->
-    async (executeMeasurement (ProgramEnvironment detectors startTime (envEquipment env) dataCounter spectraMVar statusMVar) me ddets >>
+    async (executeMeasurement (ProgramEnvironment detectors startTime (envEquipment env) dataCounter messageChannel statusMVar) me ddets >>
            return ()) >>= \asyncWorker ->
-    return (asyncWorker, spectraMVar, statusMVar)
+    return (asyncWorker, messageChannel, statusMVar)
     where
         detectors = envDetectors env
 

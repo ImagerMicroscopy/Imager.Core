@@ -2,6 +2,7 @@
 module AcquiredDataTypes
 where
 
+import Control.Concurrent
 import Control.DeepSeq
 import Data.Aeson
 import Data.ByteString (ByteString)
@@ -17,15 +18,26 @@ import System.Clock
 import Equipment.EquipmentTypes
 import Utils.MiscUtils
 
-data NumberType = UINT8
-                | UINT16
-                | FP64
-                deriving (Show, Eq)
+data MessageChannel = MessageChannel (MVar [AsyncMeasurementMessage])
 
-encodedNumType :: NumberType -> Int
-encodedNumType UINT8 = 2
-encodedNumType UINT16 = 0
-encodedNumType FP64 = 1
+newMessageChannel :: IO MessageChannel
+newMessageChannel = MessageChannel <$> newMVar []
+
+sendMessageToChannel :: MessageChannel -> AsyncMeasurementMessage -> IO ()
+sendMessageToChannel (MessageChannel mvar) msg =
+    modifyMVar_ mvar (\msgs -> pure (msg : msgs))
+
+readChannelMessages :: MessageChannel -> IO [AsyncMeasurementMessage]
+readChannelMessages (MessageChannel mvar) = readMVar mvar
+
+deleteChannelMessagesUpToIndex :: MessageChannel -> Word64 -> IO ()
+deleteChannelMessagesUpToIndex (MessageChannel mvar) idx =
+    modifyMVar_ mvar (\msgs ->
+        pure $ filter (((>) idx) . asyncMessageIndex) msgs)
+
+numMessagesInChannel :: MessageChannel -> IO Int
+numMessagesInChannel (MessageChannel mvar) =
+    length <$> readMVar mvar
 
 data AsyncMeasurementMessage = AcquiredDataMessage {
                                    messageIdx :: Word64
@@ -91,6 +103,16 @@ instance MessagePack AcquisitionMetaData where
 instance ToJSON AsyncMeasurementMessage where
   toJSON p@(AcquiredDataMessage{}) = toJSON (p.acquisitionMetaData, p.acquiredData) -- should not be used since this data should be binary encoded instead
   toJSON _                       = error "no ToJSON for this AcquiredDataMessage type"
+
+data NumberType = UINT8
+                | UINT16
+                | FP64
+                deriving (Show, Eq)
+
+encodedNumType :: NumberType -> Int
+encodedNumType UINT8 = 2
+encodedNumType UINT16 = 0
+encodedNumType FP64 = 1
 
 instance NFData NumberType where
   rnf t = t `seq` ()
