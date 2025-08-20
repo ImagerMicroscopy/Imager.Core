@@ -28,7 +28,7 @@ sendMessageToChannel (MessageChannel mvar) msg =
     modifyMVar_ mvar (\msgs -> pure (msg : msgs))
 
 readChannelMessages :: MessageChannel -> IO [AsyncMeasurementMessage]
-readChannelMessages (MessageChannel mvar) = readMVar mvar
+readChannelMessages (MessageChannel mvar) = reverse <$> readMVar mvar
 
 deleteChannelMessagesUpToIndex :: MessageChannel -> Word64 -> IO ()
 deleteChannelMessagesUpToIndex (MessageChannel mvar) idx =
