@@ -173,7 +173,7 @@ performAction env FetchAsyncData =
     asyncAcquisitionRunning env >>= \asyncIsRunning ->
     readChannelMessages messageChannel >>= \newData ->
     asyncAcquisitionErrorMessage env >>= \asyncErrorMsg ->
-    return (dataResponse asyncErrorMsg asyncIsRunning (reverse newData), env)
+    return (dataResponse asyncErrorMsg asyncIsRunning (newData), env)
     where
         messageChannel = envAsyncDataChannel env
         wl = envEncodedSpectrometerWavelengths env

@@ -12,6 +12,7 @@ import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text.Encoding as T
 import Data.Word
+import Debug.Trace
 import GHC.Generics (Generic)
 import System.Clock
 
@@ -33,7 +34,7 @@ readChannelMessages (MessageChannel mvar) = reverse <$> readMVar mvar
 deleteChannelMessagesUpToIndex :: MessageChannel -> Word64 -> IO ()
 deleteChannelMessagesUpToIndex (MessageChannel mvar) idx =
     modifyMVar_ mvar (\msgs ->
-        pure $ filter (((>) idx) . asyncMessageIndex) msgs)
+        pure $ filter (\msg -> asyncMessageIndex msg > idx) msgs)
 
 numMessagesInChannel :: MessageChannel -> IO Int
 numMessagesInChannel (MessageChannel mvar) =
