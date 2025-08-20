@@ -89,13 +89,12 @@ executeMeasurementElements env ddets es = mapM_ (executeMeasurementElement env d
 executeMeasurementElement :: Detector a => ProgramEnvironment a -> DefinedDetections -> MeasurementElement -> IO ()
 executeMeasurementElement env ddets (MEDetection detNames) =
     withStatusMessage env "Detection" (
-        executeDetection detectors eqs (detNames, detParams) startTime counter messageChannel)
+        executeDetection detectors eqs (detNames, detParams) startTime messageChannel)
     where
       eqs = peEquipment env
       detectors = peDetectors env
       messageChannel = peMessageChannel env
       startTime = peStartTime env
-      counter = peDataCounter env
       detParams = map (\dn -> fromJust $ M.lookup dn ddets) detNames
 executeMeasurementElement env _ (MEIrradiation dur ips) =
     withStatusMessage env (T.format "irradiating {} s" (T.Only (fromLSIlluminationDuration dur))) (
@@ -122,13 +121,12 @@ executeMeasurementElement env ddets (MEDoTimes n es) =
 
 executeMeasurementElement env ddets (MEFastAcquisitionLoop n (detName, detParams)) =
     withStatusMessage env (T.format "fast acquisition ({} images)" (T.Only n)) (
-        executeFastDetectionLoop detectors eqs (detName, detParams) n startTime counter messageChannel)
+        executeFastDetectionLoop detectors eqs (detName, detParams) n startTime messageChannel)
     where
       eqs = peEquipment env
       messageChannel = peMessageChannel env
       startTime = peStartTime env
       detectors = peDetectors env
-      counter = peDataCounter env
 
 executeMeasurementElement env ddets (METimeLapse n dur es) =
     futureTimes >>= \fts ->
@@ -318,8 +316,8 @@ insertFastAcquisitionLoops ddets (MEStageLoop n pos es) = MEStageLoop n pos (map
 insertFastAcquisitionLoops ddets (MERelativeStageLoop n ps es) = MERelativeStageLoop n ps (map (insertFastAcquisitionLoops ddets) es)
 insertFastAcquisitionLoops d m = m
 
-executeDetection :: Detector a => [a] -> [EquipmentW] -> ([Text], [DetectionParams]) -> TimeSpec -> IORef Word64 -> MessageChannel -> IO ()
-executeDetection dets eqs (detNames, detParams) startTime dataCounter messageChannel =
+executeDetection :: Detector a => [a] -> [EquipmentW] -> ([Text], [DetectionParams]) -> TimeSpec -> MessageChannel -> IO ()
+executeDetection dets eqs (detNames, detParams) startTime messageChannel =
     getStagePositionSafe eqs >>= \stagePos ->
     forM_ (zip detNames detParams) (\(dName, dps) ->
         setDetectorProperties dets (dpDetectors dps) >>
@@ -327,15 +325,13 @@ executeDetection dets eqs (detNames, detParams) startTime dataCounter messageCha
             requiredDets = filter (\d -> (detectorName d) `elem` requiredDetNames) dets
         in  mapM isConfiguredForHardwareTriggering requiredDets >>= \hasTriggering ->
             if (or hasTriggering)
-            then executeFastDetectionLoop dets eqs (dName, dps) 1 startTime dataCounter messageChannel
+            then executeFastDetectionLoop dets eqs (dName, dps) 1 startTime messageChannel
             else setMovableComponents eqs (dpMovableComponents dps) >>
                  enableLightSources eqs (dpIrradiation dps) >>
                  mapConcurrently acquireData requiredDets >>= \acquiredData ->
                  disableLightSources eqs (dpIrradiation dps) >>
                  forM_ acquiredData (\acq ->
-                     readIORef dataCounter >>= \idx ->
-                     writeIORef dataCounter (idx + 1) >>
-                     (acq `deepseq` (addDataToChannel messageChannel startTime idx stagePos dName acq))))
+                     (acq `deepseq` (addDataToChannel messageChannel startTime stagePos dName acq))))
 
 setDetectorProperties :: Detector a => [a] -> [DetectorParams] -> IO ()
 setDetectorProperties dets dps =
@@ -343,11 +339,11 @@ setDetectorProperties dets dps =
         let [thisDet] = filter ((==) detName . detectorName) dets
         in  mapM_ (setDetectorOption thisDet) detOptions)
 
-executeFastDetectionLoop :: Detector a => [a] -> [EquipmentW] -> (Text, DetectionParams) -> Int -> TimeSpec -> IORef Word64 -> MessageChannel -> IO ()
-executeFastDetectionLoop dets eqs (detName, detParams) nTimesToPerform startTime dataCounter messageChannel =
+executeFastDetectionLoop :: Detector a => [a] -> [EquipmentW] -> (Text, DetectionParams) -> Int -> TimeSpec -> MessageChannel -> IO ()
+executeFastDetectionLoop dets eqs (detName, detParams) nTimesToPerform startTime messageChannel =
     setDetectorProperties dets (dpDetectors detParams) >>
     setMovableComponents eqs (dpMovableComponents detParams) >>
-    fastStreamingAcquisition requiredDets enableLightSourcesAction disableLightSourcesAction detName nTimesToPerform (getStagePositionSafe eqs) startTime dataCounter messageChannel
+    fastStreamingAcquisition requiredDets enableLightSourcesAction disableLightSourcesAction detName nTimesToPerform (getStagePositionSafe eqs) startTime messageChannel
     where
         requiredDetNames = map dtpDetectorName (dpDetectors detParams)
         requiredDets = filter (\d -> (detectorName d) `elem` requiredDetNames) dets
@@ -355,8 +351,8 @@ executeFastDetectionLoop dets eqs (detName, detParams) nTimesToPerform startTime
         enableLightSourcesAction = enableLightSources eqs (dpIrradiation detParams)
         disableLightSourcesAction = disableLightSources eqs (dpIrradiation detParams)
 
-fastStreamingAcquisition :: Detector a => [a] -> IO () -> IO () -> Text -> Int -> IO StagePosition -> TimeSpec -> IORef Word64 -> MessageChannel -> IO ()
-fastStreamingAcquisition requiredDets enableLightSourcesAction disableLightSourcesAction detName nTimesToPerform readStagePosFunc startTime dataCounter messageChannel =
+fastStreamingAcquisition :: Detector a => [a] -> IO () -> IO () -> Text -> Int -> IO StagePosition -> TimeSpec -> MessageChannel -> IO ()
+fastStreamingAcquisition requiredDets enableLightSourcesAction disableLightSourcesAction detName nTimesToPerform readStagePosFunc startTime messageChannel =
     newChan >>= \chan ->
     readStagePosFunc >>= newIORef >>= \stagePosRef ->
     withAsync (stagePositionWorker readStagePosFunc stagePosRef) (\stageAs ->
@@ -377,9 +373,7 @@ fastStreamingAcquisition requiredDets enableLightSourcesAction disableLightSourc
                       AsyncError    -> performMajorGC >> throwIO (userError "error during fast acquisition loop")
                       AsyncData r   -> when (nFetched `mod` 50 == 49) (performMajorGC) >>
                                        readIORef posRef >>= \pos ->
-                                       readIORef dataCounter >>= \idx ->
-                                       writeIORef dataCounter (idx + 1) >>
-                                       (r `deepseq` (addDataToChannel messageChannel startTime idx pos detName r)) >>
+                                       (r `deepseq` (addDataToChannel messageChannel startTime pos detName r)) >>
                                        fetchData posRef (nFetched + 1) nFinished as chan
         stagePositionWorker :: IO StagePosition -> IORef StagePosition -> IO ()
         stagePositionWorker readStagePosFunc positionRef =
@@ -457,11 +451,11 @@ updateStatusMessage env newMsg =
     where
         statusMVar = peStatusMVar env
 
-addDataToChannel :: MessageChannel -> TimeSpec -> Word64 -> StagePosition -> Text -> AcquiredData -> IO ()
-addDataToChannel messageChannel startTime idx stagePosition acqType d =
+addDataToChannel :: MessageChannel -> TimeSpec -> StagePosition -> Text -> AcquiredData -> IO ()
+addDataToChannel messageChannel startTime stagePosition acqType d =
     numMessagesInChannel messageChannel >>= \nMessages ->
     when (nMessages > 250) (throwIO (userError "too many async data stored")) >>
-    sendMessageToChannel messageChannel (AcquiredDataMessage idx metaData (adjustTime d))
+    sendMessageToChannel messageChannel (AcquiredDataMessage metaData (adjustTime d))
     where
         metaData = AcquisitionMetaData stagePosition acqType
         adjustTime :: AcquiredData -> AcquiredData

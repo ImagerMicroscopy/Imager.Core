@@ -37,7 +37,6 @@ data ProgramEnvironment a = ProgramEnvironment {
                                 peDetectors :: ![a]
                               , peStartTime :: !TimeSpec
                               , peEquipment :: ![EquipmentW]
-                              , peDataCounter :: !(IORef Word64)
                               , peMessageChannel :: !MessageChannel
                               , peStatusMVar :: !(MVar [Text])
                             }

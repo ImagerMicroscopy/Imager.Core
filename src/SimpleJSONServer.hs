@@ -103,8 +103,8 @@ handleMessage sock handler env settings =
                                 SL.sendAll sock response >> return newEnv
                            Right (ResponseBSList response, newEnv) ->
                                 when (debug) (putStrLn ("Sending: " ++ show response)) >>
-                                --writeFile "debugout.txt" (show (concat (map B.unpack response))) >>   -- provides debugging of binary data if needed
-                                --B.writeFile "debugbinary.bin" (mconcat response) >>
+                                writeFile "debugout.txt" (show (concat (map B.unpack response))) >>   -- provides debugging of binary data if needed
+                                B.writeFile "debugbinary.bin" (mconcat response) >>
                                 when (prependPacketSize) (sendAll sock (encodeInt32 ((sum (map B.length response)) + 4))) >>
                                 sendMany sock response >> return newEnv
                            Left (e :: SomeException) ->

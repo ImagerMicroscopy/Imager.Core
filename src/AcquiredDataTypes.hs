@@ -19,42 +19,54 @@ import System.Clock
 import Equipment.EquipmentTypes
 import Utils.MiscUtils
 
-data MessageChannel = MessageChannel (MVar [AsyncMeasurementMessage])
+data ChannelMessage = ChannelMessage {
+                          cmIdx :: !Word64,                 -- unique index of the message
+                          cmMsg :: !AsyncMeasurementMessage -- message itself
+                      }
+                      deriving (Show, Generic)
+
+instance MessagePack ChannelMessage where
+    toObject m@(ChannelMessage{}) =
+        toObject $ M.fromList [
+                    ("index" :: Text, toObject (fromIntegral m.cmIdx :: Int)),
+                    ("message", toObject m.cmMsg)]
+
+instance ToJSON ChannelMessage
+
+data MessageChannel = MessageChannel (MVar ([ChannelMessage], Word64))
+    -- the channel contains messages and an incrementing Word64 counter that will yield the index of the next package to be received
 
 newMessageChannel :: IO MessageChannel
-newMessageChannel = MessageChannel <$> newMVar []
+newMessageChannel = MessageChannel <$> newMVar ([], 0)
 
 sendMessageToChannel :: MessageChannel -> AsyncMeasurementMessage -> IO ()
 sendMessageToChannel (MessageChannel mvar) msg =
-    modifyMVar_ mvar (\msgs -> pure (msg : msgs))
+    modifyMVar_ mvar (\(msgs, currentIdx) ->
+        let nextIdx = currentIdx + 1
+        in  pure (((ChannelMessage currentIdx msg) : msgs), nextIdx))
 
-readChannelMessages :: MessageChannel -> IO [AsyncMeasurementMessage]
-readChannelMessages (MessageChannel mvar) = reverse <$> readMVar mvar
+readChannelMessages :: MessageChannel -> IO [ChannelMessage]
+readChannelMessages (MessageChannel mvar) = reverse . fst <$> readMVar mvar
 
 deleteChannelMessagesUpToIndex :: MessageChannel -> Word64 -> IO ()
 deleteChannelMessagesUpToIndex (MessageChannel mvar) idx =
-    modifyMVar_ mvar (\msgs ->
-        pure $ filter (\msg -> asyncMessageIndex msg > idx) msgs)
+    modifyMVar_ mvar (\(msgs, counter) ->
+        pure $ (filter (\msg -> cmIdx msg > idx) msgs, counter))
 
 numMessagesInChannel :: MessageChannel -> IO Int
 numMessagesInChannel (MessageChannel mvar) =
-    length <$> readMVar mvar
+    length . fst <$> readMVar mvar
 
 data AsyncMeasurementMessage = AcquiredDataMessage {
-                                   messageIdx :: Word64
-                                 , acquisitionMetaData :: AcquisitionMetaData
+                                   acquisitionMetaData :: AcquisitionMetaData
                                  , acquiredData :: AcquiredData
                                }
                              deriving (Show)
 
-asyncMessageIndex :: AsyncMeasurementMessage -> Word64
-asyncMessageIndex = messageIdx
-
 instance MessagePack AsyncMeasurementMessage where
     toObject m@(AcquiredDataMessage{}) =
         toObject $ M.fromList [
-                    ("index" :: Text, toObject (fromIntegral m.messageIdx :: Int)),
-                    ("metadata", toObject m.acquisitionMetaData),
+                    ("metadata" :: Text, toObject m.acquisitionMetaData),
                     ("data", toObject m.acquiredData),
                     ("type", toObject ("acquireddatamessage" :: Text))
                  ]

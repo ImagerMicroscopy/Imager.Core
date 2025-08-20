@@ -111,7 +111,7 @@ data ResponseMessage = StatusOK
                      | StatusError !String
                      | StatusNoNewAsyncData
                      | StatusNoNewAsyncDataComing
-                     | AcquiredDataResponse ![AsyncMeasurementMessage]
+                     | AcquiredDataResponse ![ChannelMessage]
                      | Wavelengths !AcquiredData
                      | AvailableEquipment ![EquipmentW]
                      | MotorizedStagePosition !StagePosition
@@ -119,7 +119,7 @@ data ResponseMessage = StatusOK
                      | AvailableDetectorsResponse ![Text]
                      | DetectorPropertiesResponse ![DetectorProperty] Double
                      | Pong
-                     | AsyncAcquiredData ![AsyncMeasurementMessage]
+                     | AsyncAcquiredData ![ChannelMessage]
                      | AsyncStatusMessages ![Text]
                      | AsyncAcquisitionIsRunning !Bool
                      deriving (Generic)

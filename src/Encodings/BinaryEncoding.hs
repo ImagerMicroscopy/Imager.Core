@@ -56,14 +56,15 @@ encodeInMessagePack (AsyncAcquiredData ds) = map (B.toStrict . pack) ds
 encodeInMessagePack (Wavelengths d) = error "TODO: encoding wavelengths is unsupported for now" --encodeAcquiredData [(AcquisitionMetaData 0 (StagePosition (-1.0) (-1.0) (-1.0) False 0) "DUMMY", d)]
 encodeInMessagePack _ = error "no binary encoding for this type"
 
-encodeAcquiredData :: [AsyncMeasurementMessage] -> [ByteString]
+encodeAcquiredData :: [ChannelMessage] -> [ByteString]
 encodeAcquiredData [] = error "Encoding empty data"
-encodeAcquiredData acqs = let header = encodeHeader messageLength indices stagePositions acqTypeNames detectorNames dataSizes numType timeStamps
+encodeAcquiredData cms = let header = encodeHeader messageLength indices stagePositions acqTypeNames detectorNames dataSizes numType timeStamps
                           in  header : acqBytes
   where
+      acqs = map cmMsg cms
       metadatas = map acquisitionMetaData acqs
       datas = map acquiredData acqs
-      indices = map messageIdx acqs
+      indices = map cmIdx cms
       messageLength = 11 + (length acqs) * (8 + 24 + 8 + 8) + lengthOfEncodedAcquisitionNames + lengthOfEncodedDetectorNames + sum (map B.length acqBytes)
       lengthOfEncodedAcquisitionNames = sum (map ((+) 1  . B.length) acqTypeNames)
       lengthOfEncodedDetectorNames = sum (map ((+) 1 . B.length) detectorNames)
