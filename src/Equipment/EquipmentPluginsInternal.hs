@@ -46,16 +46,16 @@ data EquipmentPlugin = EquipmentPlugin {
                          , epGetStagePositionFunc :: IO StagePosition
                          , epSetStagePositionFunc :: StagePosition -> IO ()
                          
-                         , epListConnectedCameras :: IO [Text]
+                         , epListConnectedCameras :: [Text]
                          , epGetCameraOptions :: Text -> IO [DetectorProperty]
                          , epSetCameraOption :: Text -> DetectorProperty -> IO ()
                          , epGetFrameRate :: Text -> IO Double
                          , epIsConfiguredForHardwareTriggering :: Text -> IO Bool
-                         , epSetCameraOrientation :: Text -> [OrientationOp] -> IO ()
+                         , epSetImageOrientation :: Text -> [OrientationOp] -> IO ()
                          , epAcquireSingleImage :: Text -> IO MeasuredImages
                          , epStartAsyncAcquisition :: Text -> IO ()
                          , epStartBoundedAsyncAcquisition :: Text -> Word64 -> IO ()
-                         , epGetNextAcquiredImage :: Text -> Word -> IO (Maybe MeasuredImages),
+                         , epGetOldestImageAsyncAcquired :: Text -> Word -> IO (Maybe MeasuredImages),
                          , epAbortAsyncAcquisition :: Text -> IO ()
                          , epGetLastSCCamError :: IO Text
                        }
@@ -96,7 +96,7 @@ type SupportedStageAxesFunc = Ptr CInt -> Ptr CInt -> Ptr CInt -> IO CInt
 type GetStagePositionFunc = Ptr CDouble -> Ptr CDouble -> Ptr CDouble -> Ptr CInt -> Ptr CInt -> IO CInt
 type SetStagePositionFunc = CDouble -> CDouble -> CDouble -> CInt -> CInt -> IO CInt
 
-type ListConnectedCameraNamesFunc :: Ptr CString -> CInt -> CInt -> Ptr CInt -> IO CInt
+type ListConnectedCameraNamesFunc :: StringListFunc
 type GetCameraOptionsFunc :: CString -> Ptr CString -> IO CInt
 type ReleaseOptionsDataFunc :: FunPtr (CString -> IO ())
 type SetCameraOptionFunc :: CString -> CString -> IO CInt
@@ -131,7 +131,7 @@ foreign import ccall "dynamic" mkSupportedStageAxesFunc :: FunPtr SupportedStage
 foreign import ccall "dynamic" mkGetStagePositionFunc :: FunPtr GetStagePositionFunc -> GetStagePositionFunc
 foreign import ccall "dynamic" mkSetStagePositionFunc :: FunPtr SetStagePositionFunc -> SetStagePositionFunc
 
-foreign import ccall "dynamic" mkListConnectedCameraNamesFunc :: FunPtr ListConnectedCameraNamesFunc -> ListConnectedCameraNamesFunc
+foreign import ccall "dynamic" mkListConnectedCameraNamesFunc :: FunPtr StringListFunc -> ListConnectedCameraNamesFunc
 foreign import ccall "dynamic" mkGetCameraOptionsFunc :: FunPtr GetCameraOptionsFunc -> GetCameraOptionsFunc
 foreign import ccall "dynamic" mkReleaseOptionsDataFunc :: FunPtr ReleaseOptionsDataFunc -> ReleaseOptionsDataFunc
 foreign import ccall "dynamic" mkSetCameraOptionFunc :: FunPtr SetCameraOptionFunc -> SetCameraOptionFunc
@@ -199,11 +199,24 @@ loadPlugin libName =
     ((/=) 0) <$> readSingleIntPtr hasStageF >>= \hasStage ->
     (if hasStage then (StageName <$> readIdentifier stageNameF) else (pure $ StageName "")) >>= \stageName ->
     (if hasStage then (readSupportedAxesFunc suppAxesF) else pure []) >>= \supportedAxes ->
+    listConnectedCameras listConnectedCameraNamesF >>= \connectedCameraNames ->
     EquipmentW <$> pure (EquipmentPlugin eqName shutdownF lightSources (handleActivateLightSource activateLightSourceF)
                                          (handleDeactivateLightSource deactivateLightSourceF)
                                          movableComps (handleSetMoveComponents setMovableComponentsF)
                                          hasStage stageName supportedAxes
-                                         (handleGetStagePosition getStagePosF) (handleSetStagePosition setStagePosF))
+                                         (handleGetStagePosition getStagePosF) (handleSetStagePosition setStagePosF)
+                                         connectedCameraNames
+                                         (getCameraOptions getCameraOptionsF releaseOptionsDataF)
+                                         (setCameraOption setCameraOptionF)
+                                         (getFrameRate getFrameRateF)
+                                         (isConfiguredForHardwareTriggering isConfiguredForHardwareTriggeringF)
+                                         (setImageOrientation setImageOrientationF)
+                                         (acquireSingleImage acquireSingleImageF)
+                                         (startAsyncAcquisition startAsyncAcquisitionF)
+                                         (startBoundedAsyncAcquisition startBoundedAsyncAcquisitionF)
+                                         (getOldestImageAsyncAcquired getOldestImageAsyncAcquiredF releaseImageDataF)
+                                         (abortAsyncAcquisition abortAsyncAcquisitionF)
+                                         (getLastSCCamError getLastSCCamErrorF))
     where
         verifyPluginVersion :: SingleIntPtrFunc -> IO ()
         verifyPluginVersion f = alloca $ \versionPtr ->
@@ -320,6 +333,142 @@ loadPlugin libName =
         handleSetStagePosition f =
             \(StagePosition x y z useAF afOffset) ->
                 checkError (f (CDouble x) (CDouble y) (CDouble z) (if (useAF) then 1 else 0) (fromIntegral afOffset))
+        
+        listConnectedCameras :: ListConnectedCameraNamesFunc -> IO [Text]
+        listConnectedCameras f = handleStringListFuncT f
+
+        getCameraOptions :: GetCameraOptionsFunc -> ReleaseOptionsDataFunc -> Text -> IO [DetectorProperty]
+        getCameraOptions getOptionsF releaseOptionsF camName =
+            withCString (T.unpack camName) $ \nameStr ->
+            alloca $ \strPtr ->
+            poke strPtr nullPtr >>
+            getOptionsF nameStr strPtr >>= \result ->
+            when (result /= 0) (
+                T.unpack <$> getLastSCCamError >>=
+                throwIO . userError) >>
+            peek strPtr >>= newForeignPtr releaseOptionsF >>= \fPtr ->
+            withForeignPtr fPtr (\dataPtr ->
+                decodeStrict' <$> B.unsafePackCString dataPtr >>= \decoded ->
+                when ((not . isJust) decoded) (print decoded) >>
+                (pure . fromCPList . fromJust) decoded)
+        
+        setCameraOption :: SetCameraOptionFunc -> Text -> DetectorProperty -> IO ()
+        setCameraOption f camName option =
+            withCString (T.unpack camName) $ \nameStr ->
+            B.useAsCString (LB.toStrict $ encode option) $ \optStr ->
+            f nameStr optStr >>= \result ->
+            when (result /= 0) (
+                T.unpack <$> getLastSCCamError >>=
+                throwIO . userError)
+        
+        getFrameRate :: GetFrameRateFunc -> Text -> IO Double
+        getFrameRate f camName =
+            withCString (T.unpack camName) $ \nameStr ->
+            alloca $ \frPtr ->
+            f nameStr frPtr >>= \result ->
+            when (result /= 0) (
+                    T.unpack <$> getLastSCCamError >>=
+                    throwIO . userError) >>
+            fromCDouble <$> peek frPtr
+        
+        isConfiguredForHardwareTriggering :: IsConfiguredForHardwareTriggeringFunc -> Text -> IO Bool
+        isConfiguredForHardwareTriggering f camName =
+            withCString (T.unpack camName) $ \nameStr ->
+            alloca $ \isConfPtr ->
+            f nameStr isConfPtr >>= \result ->
+            when (result /= 0) (
+                T.unpack <$> getLastSCCamError >>=
+                throwIO . userError) >>
+            peek isConfPtr >>= \isConf ->
+            if (isConf == 0)
+                then (pure False)
+                else (pure True)
+        
+        setImageOrientation :: SetImageOrientationFunc -> Text -> [OrientationOp] -> IO ()
+        setImageOrientation f camName ops =
+            withCString (T.unpack camName) $ \nameStr ->
+            withArray (map encodedOp ops) $ \opsPtr ->
+            f nameStr opsPtr (fromIntegral $ length ops) >>= \errorCode ->
+            when (errorCode /= 0) (
+                T.unpack <$> getLastSCCamError >>=
+                throwIO . userError)
+            where
+                encodedOp :: OrientationOp -> CInt
+                encodedOp RotateCWOp = 0
+                encodedOp RotateCCWOp = 1
+                encodedOp FlipHorizontalOp = 2
+                encodedOp FlipVerticalOp = 3
+        
+        acquireSingleImage :: AcquireSingleImageFunc -> Text -> IO MeasuredImages
+        acquireSingleImage f camName =
+            withCString (T.unpack camName) $ \nameStr ->
+            alloca $ \nRowsPtr ->
+            alloca $ \nColsPtr ->
+            alloca $ \imagePtrPtr ->
+            poke imagePtrPtr nullPtr >>
+            f nameStr imagePtrPtr nRowsPtr nColsPtr >>= \result ->
+            when (result /= 0) (
+                T.unpack <$> getLastSCCamError >>=
+                throwIO . userError) >>
+            peek imagePtrPtr >>= newForeignPtr cReleaseImageData >>= \fPtr ->
+            fromIntegral <$> peek nRowsPtr >>= \nRows ->
+            fromIntegral <$> peek nColsPtr >>= \nCols ->
+            pure (MeasuredImages nRows nCols 0.0 (V.unsafeFromForeignPtr0 fPtr (nRows * nCols)))
+
+        startAsyncAcquisition :: StartAsyncAcquisitionFunc -> Text -> IO ()
+        startAsyncAcquisition camName =
+            withCString (T.unpack camName) $ \nameStr ->
+            f nameStr >>= \result ->
+            when (result /= 0) (
+                T.unpack <$> getLastSCCamError >>=
+                throwIO . userError)
+        
+        startBoundedAsyncAcquisition :: StartBoundedAsyncAcquisitionFunc -> Text -> Word64 -> IO ()
+        startBoundedAsyncAcquisition f camName nImages =
+            withCString (T.unpack camName) $ \nameStr ->
+            f nameStr nImages >>= \result ->
+            when (result /= 0) (
+                T.unpack <$> getLastSCCamError >>=
+                throwIO . userError)
+
+        getOldestImageAsyncAcquired :: GetOldestImageAsyncAcquiredFunc -> ReleaseImageDataFunc -> Text -> Word -> IO (Maybe MeasuredImages)
+        getNextAcquiredImage getImageF releaseImageF camName timeoutMillis =
+            withCString (T.unpack camName) $ \nameStr ->
+            alloca $ \imagePtrPtr ->
+            alloca $ \nRowsPtr ->
+            alloca $ \nColsPtr ->
+            alloca $ \timeStampPtr ->
+            poke imagePtrPtr nullPtr >>
+            getImageF nameStr (fromIntegral timeoutMillis) imagePtrPtr nRowsPtr nColsPtr timeStampPtr >>= \result ->
+            when (result /= 0) (
+                T.unpack <$> getLastSCCamError >>=
+                throwIO . userError) >>
+            peek imagePtrPtr >>= \imgPtr ->
+            if (imgPtr == nullPtr)
+                then return Nothing
+                else
+                    newForeignPtr releaseImageF imgPtr >>= \fPtr ->
+                    fromIntegral <$> peek nRowsPtr >>= \nRows ->
+                    fromIntegral <$> peek nColsPtr >>= \nCols ->
+                    fromCDouble <$> peek timeStampPtr >>= \timeStamp ->
+                    pure (Just (MeasuredImages nRows nCols timeStamp (V.unsafeFromForeignPtr0 fPtr (nRows * nCols))))
+    
+        abortAsyncAcquisition :: AbortAsyncAcquisitionFunc -> Text -> IO ()
+        abortAsyncAcquisition f camName =
+            withCString (T.unpack camName) $ \nameStr ->
+            f nameStr >>= \result ->
+            when (result /= 0) (
+                T.unpack <$> getLastSCCamError >>=
+                throwIO . userError)
+        
+        getLastSCCamError :: GetLastSCCamErrorFunc -> IO Text
+        getLastSCCamError f =
+            allocaArray bufSize (\strPtr ->
+                f strPtr (fromIntegral bufSize) >>
+                T.decodeUtf8 <$> B.packCString strPtr)
+            where
+                bufSize = 512
+
 
 pluginPrinter :: Text -> CString -> IO ()
 pluginPrinter pluginName str = T.putStr pluginName >> T.putStr ": " >>
