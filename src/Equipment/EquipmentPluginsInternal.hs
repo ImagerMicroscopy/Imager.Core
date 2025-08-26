@@ -34,6 +34,7 @@ pluginAPIVersion = 1
 data EquipmentPlugin = EquipmentPlugin {
                            epEquipmentName :: !EqName
                          , epCloseDevice :: IO ()
+
                          , epAvailableLightSources :: ![LightSourceDescription]
                          , epActivateLightSource :: LSName -> [(LSChannelName, LSIlluminationPower)] -> IO ()
                          , epDeactivateLightSource :: IO ()
@@ -44,6 +45,19 @@ data EquipmentPlugin = EquipmentPlugin {
                          , epSupportedStageAxes :: ![StageAxis]
                          , epGetStagePositionFunc :: IO StagePosition
                          , epSetStagePositionFunc :: StagePosition -> IO ()
+                         
+                         , epListConnectedCameras :: IO [Text]
+                         , epGetCameraOptions :: Text -> IO [DetectorProperty]
+                         , epSetCameraOption :: Text -> DetectorProperty -> IO ()
+                         , epGetFrameRate :: Text -> IO Double
+                         , epIsConfiguredForHardwareTriggering :: Text -> IO Bool
+                         , epSetCameraOrientation :: Text -> [OrientationOp] -> IO ()
+                         , epAcquireSingleImage :: Text -> IO MeasuredImages
+                         , epStartAsyncAcquisition :: Text -> IO ()
+                         , epStartBoundedAsyncAcquisition :: Text -> Word64 -> IO ()
+                         , epGetNextAcquiredImage :: Text -> Word -> IO (Maybe MeasuredImages),
+                         , epAbortAsyncAcquisition :: Text -> IO ()
+                         , epGetLastSCCamError :: IO Text
                        }
 
 instance Equipment EquipmentPlugin where
@@ -82,6 +96,21 @@ type SupportedStageAxesFunc = Ptr CInt -> Ptr CInt -> Ptr CInt -> IO CInt
 type GetStagePositionFunc = Ptr CDouble -> Ptr CDouble -> Ptr CDouble -> Ptr CInt -> Ptr CInt -> IO CInt
 type SetStagePositionFunc = CDouble -> CDouble -> CDouble -> CInt -> CInt -> IO CInt
 
+type ListConnectedCameraNamesFunc :: Ptr CString -> CInt -> CInt -> Ptr CInt -> IO CInt
+type GetCameraOptionsFunc :: CString -> Ptr CString -> IO CInt
+type ReleaseOptionsDataFunc :: FunPtr (CString -> IO ())
+type SetCameraOptionFunc :: CString -> CString -> IO CInt
+type GetFrameRateFunc :: CString -> Ptr CDouble -> IO CInt
+type IsConfiguredForHardwareTriggeringFunc :: CString -> Ptr CInt -> IO CInt
+type SetImageOrientationFunc :: CString -> Ptr CInt -> CInt -> IO CInt
+type AcquireSingleImageFunc :: CString -> Ptr (Ptr Word16) -> Ptr CInt -> Ptr CInt -> IO CInt
+type StartAsyncAcquisitionFunc :: CString -> IO CInt
+type StartBoundedAsyncAcquisitionFunc :: CString -> Word64 -> IO CInt
+type GetOldestImageAsyncAcquiredFunc :: CString -> Word32 -> Ptr (Ptr Word16) -> Ptr CInt -> Ptr CInt -> Ptr CDouble -> IO CInt
+type ReleaseImageDataFunc :: FunPtr (Ptr Word16 -> IO ())
+type AbortAsyncAcquisitionFunc :: CString -> IO CInt
+type GetLastSCCamErrorFunc :: CString -> CSize -> IO ()
+
 foreign import ccall "dynamic" mkInitFunc :: FunPtr InitFunc -> InitFunc
 foreign import ccall "dynamic" mkShutdownFunc :: FunPtr ShutdownFunc -> ShutdownFunc
 foreign import ccall "dynamic" mkIdentifierFunc :: FunPtr IdentifierFunc -> IdentifierFunc
@@ -101,6 +130,21 @@ foreign import ccall "dynamic" mkSetMovableComponentsFunc :: FunPtr SetMovableCo
 foreign import ccall "dynamic" mkSupportedStageAxesFunc :: FunPtr SupportedStageAxesFunc -> SupportedStageAxesFunc
 foreign import ccall "dynamic" mkGetStagePositionFunc :: FunPtr GetStagePositionFunc -> GetStagePositionFunc
 foreign import ccall "dynamic" mkSetStagePositionFunc :: FunPtr SetStagePositionFunc -> SetStagePositionFunc
+
+foreign import ccall "dynamic" mkListConnectedCameraNamesFunc :: FunPtr ListConnectedCameraNamesFunc -> ListConnectedCameraNamesFunc
+foreign import ccall "dynamic" mkGetCameraOptionsFunc :: FunPtr GetCameraOptionsFunc -> GetCameraOptionsFunc
+foreign import ccall "dynamic" mkReleaseOptionsDataFunc :: FunPtr ReleaseOptionsDataFunc -> ReleaseOptionsDataFunc
+foreign import ccall "dynamic" mkSetCameraOptionFunc :: FunPtr SetCameraOptionFunc -> SetCameraOptionFunc
+foreign import ccall "dynamic" mkGetFrameRateFunc :: FunPtr GetFrameRateFunc -> GetFrameRateFunc
+foreign import ccall "dynamic" mkIsConfiguredForHardwareTriggeringFunc :: FunPtr IsConfiguredForHardwareTriggeringFunc -> IsConfiguredForHardwareTriggeringFunc
+foreign import ccall "dynamic" mkSetImageOrientationFunc :: FunPtr SetImageOrientationFunc -> SetImageOrientationFunc
+foreign import ccall "dynamic" mkAcquireSingleImageFunc :: FunPtr AcquireSingleImageFunc -> AcquireSingleImageFunc
+foreign import ccall "dynamic" mkStartAsyncAcquisitionFunc :: FunPtr StartAsyncAcquisitionFunc -> StartAsyncAcquisitionFunc
+foreign import ccall "dynamic" mkStartBoundedAsyncAcquisitionFunc :: FunPtr StartBoundedAsyncAcquisitionFunc -> StartBoundedAsyncAcquisitionFunc
+foreign import ccall "dynamic" mkGetOldestImageAsyncAcquiredFunc :: FunPtr GetOldestImageAsyncAcquiredFunc -> GetOldestImageAsyncAcquiredFunc
+foreign import ccall "dynamic" mkReleaseImageDataFunc :: FunPtr ReleaseImageDataFunc -> ReleaseImageDataFunc
+foreign import ccall "dynamic" mkAbortAsyncAcquisitionFunc :: FunPtr AbortAsyncAcquisitionFunc -> AbortAsyncAcquisitionFunc
+foreign import ccall "dynamic" mkGetLastSCCamErrorFunc :: FunPtr GetLastSCCamErrorFunc -> GetLastSCCamErrorFunc
 
 loadPlugin :: Text -> IO EquipmentW
 loadPlugin libName =
@@ -127,6 +171,22 @@ loadPlugin libName =
     loadFunc modu "SupportedStageAxes" mkSupportedStageAxesFunc >>= \suppAxesF ->
     loadFunc modu "GetStagePosition" mkGetStagePositionFunc >>= \getStagePosF ->
     loadFunc modu "SetStagePosition" mkSetStagePositionFunc >>= \setStagePosF ->
+
+    loadFunc modu "ListConnectedCameraNames" mkListConnectedCameraNamesFunc >>= \listConnectedCameraNamesF ->
+    loadFunc modu "GetCameraOptions" mkGetCameraOptionsFunc >>= \getCameraOptionsF ->
+    loadFunc modu "ReleaseOptionsData" mkReleaseOptionsDataFunc >>= \releaseOptionsDataF ->
+    loadFunc modu "SetCameraOption" mkSetCameraOptionFunc >>= \setCameraOptionF ->
+    loadFunc modu "GetFrameRate" mkGetFrameRateFunc >>= \getFrameRateF ->
+    loadFunc modu "IsConfiguredForHardwareTriggering" mkIsConfiguredForHardwareTriggeringFunc >>= \isConfiguredForHardwareTriggeringF ->
+    loadFunc modu "SetImageOrientation" mkSetImageOrientationFunc >>= \setImageOrientationF ->
+    loadFunc modu "AcquireSingleImage" mkAcquireSingleImageFunc >>= \acquireSingleImageF ->
+    loadFunc modu "StartAsyncAcquisition" mkStartAsyncAcquisitionFunc >>= \startAsyncAcquisitionF ->
+    loadFunc modu "StartBoundedAsyncAcquisition" mkStartBoundedAsyncAcquisitionFunc >>= \startBoundedAsyncAcquisitionF ->
+    loadFunc modu "GetOldestImageAsyncAcquired" mkGetOldestImageAsyncAcquiredFunc >>= \getOldestImageAsyncAcquiredF ->
+    loadFunc modu "ReleaseImageData" mkReleaseImageDataFunc >>= \releaseImageDataF ->
+    loadFunc modu "AbortAsyncAcquisition" mkAbortAsyncAcquisitionFunc >>= \abortAsyncAcquisitionF ->
+    loadFunc modu "GetLastSCCamError" mkGetLastSCCamErrorFunc >>= \getLastSCCamErrorF ->
+
 
     castFunPtrToPtr <$> mkCStringCallback (pluginPrinter libName) >>= \printFunc ->
     initF printFunc >>= \initResult ->
