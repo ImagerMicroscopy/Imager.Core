@@ -2,6 +2,7 @@
 
 module Equipment.EquipmentPluginsInternal (
     EquipmentPlugin
+  , PluginDetector
   , loadPlugin
   , addDirectoryToLoaderPath
 ) where
@@ -219,7 +220,7 @@ foreign import ccall "dynamic" mkReleaseImageDataFunc :: FunPtr ReleaseImageData
 foreign import ccall "dynamic" mkAbortAsyncAcquisitionFunc :: FunPtr AbortAsyncAcquisitionFunc -> AbortAsyncAcquisitionFunc
 foreign import ccall "dynamic" mkGetLastSCCamErrorFunc :: FunPtr GetLastSCCamErrorFunc -> GetLastSCCamErrorFunc
 
-loadPlugin :: Text -> IO EquipmentW
+loadPlugin :: Text -> IO (EquipmentW, [PluginDetector])
 loadPlugin libName =
     loadModule libName >>= \modu ->
     loadFunc modu "InitImagerPlugin" mkInitFunc >>= \initF ->
@@ -274,22 +275,23 @@ loadPlugin libName =
     (if hasStage then (readSupportedAxesFunc suppAxesF) else pure []) >>= \supportedAxes ->
     listConnectedCameras listConnectedCameraNamesF >>= \connectedCameraNames ->
     
-    EquipmentW <$> pure (EquipmentPlugin eqName shutdownF lightSources (handleActivateLightSource activateLightSourceF)
-                                         (handleDeactivateLightSource deactivateLightSourceF)
-                                         movableComps (handleSetMoveComponents setMovableComponentsF)
-                                         hasStage stageName supportedAxes
-                                         (handleGetStagePosition getStagePosF) (handleSetStagePosition setStagePosF)
-                                         connectedCameraNames
-                                         (getCameraOptions getLastSCCamErrorF getCameraOptionsF releaseOptionsDataF)
-                                         (setCameraOption getLastSCCamErrorF setCameraOptionF)
-                                         (getFrameRate getLastSCCamErrorF getFrameRateF)
-                                         (isConfiguredForHardwareTriggering getLastSCCamErrorF isConfiguredForHardwareTriggeringF)
-                                         (setImageOrientation getLastSCCamErrorF setImageOrientationF)
-                                         (acquireSingleImage getLastSCCamErrorF acquireSingleImageF releaseImageDataF)
-                                         (startAsyncAcquisition getLastSCCamErrorF startAsyncAcquisitionF)
-                                         (startBoundedAsyncAcquisition getLastSCCamErrorF startBoundedAsyncAcquisitionF)
-                                         (getOldestImageAsyncAcquired getLastSCCamErrorF getOldestImageAsyncAcquiredF releaseImageDataF)
-                                         (abortAsyncAcquisition getLastSCCamErrorF abortAsyncAcquisitionF))
+    let ep = EquipmentPlugin eqName shutdownF lightSources (handleActivateLightSource activateLightSourceF)
+                                (handleDeactivateLightSource deactivateLightSourceF)
+                                movableComps (handleSetMoveComponents setMovableComponentsF)
+                                hasStage stageName supportedAxes
+                                (handleGetStagePosition getStagePosF) (handleSetStagePosition setStagePosF)
+                                connectedCameraNames
+                                (getCameraOptions getLastSCCamErrorF getCameraOptionsF releaseOptionsDataF)
+                                (setCameraOption getLastSCCamErrorF setCameraOptionF)
+                                (getFrameRate getLastSCCamErrorF getFrameRateF)
+                                (isConfiguredForHardwareTriggering getLastSCCamErrorF isConfiguredForHardwareTriggeringF)
+                                (setImageOrientation getLastSCCamErrorF setImageOrientationF)
+                                (acquireSingleImage getLastSCCamErrorF acquireSingleImageF releaseImageDataF)
+                                (startAsyncAcquisition getLastSCCamErrorF startAsyncAcquisitionF)
+                                (startBoundedAsyncAcquisition getLastSCCamErrorF startBoundedAsyncAcquisitionF)
+                                (getOldestImageAsyncAcquired getLastSCCamErrorF getOldestImageAsyncAcquiredF releaseImageDataF)
+                                (abortAsyncAcquisition getLastSCCamErrorF abortAsyncAcquisitionF)
+    in  pure (EquipmentW ep, map (\camName -> PluginDetector camName ep) connectedCameraNames)
     where
         verifyPluginVersion :: SingleIntPtrFunc -> IO ()
         verifyPluginVersion f = alloca $ \versionPtr ->

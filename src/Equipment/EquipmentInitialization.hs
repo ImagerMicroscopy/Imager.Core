@@ -44,6 +44,7 @@ import Equipment.Devices.Thorlabs
 import Equipment.Devices.RemoteStage
 import Equipment.Devices.MultiModeLasers
 import Equipment.Devices.OxxiusLBX
+import Equipment.EquipmentPluginsInternal
 
 readAvailableEquipment :: IO [EquipmentDescription]
 readAvailableEquipment =
@@ -53,13 +54,15 @@ readAvailableEquipment =
     where
         confFilename = "equipment.txt"
 
-withEquipment :: [EquipmentDescription] -> ([EquipmentW] -> IO ()) -> IO ()
-withEquipment descs action =
+withEquipmentAndPluginCameras :: [EquipmentDescription] -> (([EquipmentW], [PluginDetector]) -> IO ()) -> IO ()
+withEquipmentAndPluginCameras descs action =
     bracket (initializeEquipment descs) closeEquipment (\eqs ->
-        bracket (loadPlugins) closeEquipment (\pluginEqs ->
-            let allEquipment = aggregateMotorizedStagesIfNeeded (eqs ++ pluginEqs)
+        bracket (loadPlugins) (closeEquipment . map fst) (\pluginEqDets ->
+            let pluginEqs = map fst pluginEqDets
+                pluginDets = concat $ map snd pluginEqDets
+                allEquipment = aggregateMotorizedStagesIfNeeded (eqs ++ pluginEqs)
             in  verifyEquipmentThrows allEquipment >>
-                installHandlers >> action allEquipment))
+                installHandlers >> action (allEquipment, pluginDets)))
     where
         installHandlers =
             myThreadId >>= \mainThreadID ->

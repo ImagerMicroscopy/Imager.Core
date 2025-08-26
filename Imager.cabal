@@ -55,7 +55,6 @@ executable Imager
                      , Measurements.MeasurementProgramVerification
                      , RCSerialPort
                      , Detectors.Detector
-                     , Detectors.AvailableDetector
                      , Utils.MiscUtils
                      , Utils.DLLUtils
                      , Equipment.Devices.Arduino

@@ -13,7 +13,7 @@ import System.FilePath
 import Equipment.Equipment
 import Equipment.EquipmentPluginsInternal
 
-loadPlugins :: IO [EquipmentW]
+loadPlugins :: IO [(EquipmentW, [PluginDetector])]
 loadPlugins =
     takeDirectory <$> getExecutablePath >>= \appPath ->
     pure (appPath </> "Plugins") >>= \pluginsDirPath ->

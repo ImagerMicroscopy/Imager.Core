@@ -31,7 +31,6 @@ import System.FilePath
 import AcquiredDataTypes
 import CuvettorTypes
 import Detectors.Detector
-import Detectors.AvailableDetector
 import Equipment.Equipment
 import Equipment.EquipmentTypes
 import Equipment.EquipmentInitialization
@@ -57,7 +56,7 @@ main :: IO ()
 main =
     getExecutablePath >>= \exePath ->
     DT.trace (show exePath)  readAvailableEquipment >>= \descs ->
-    withEquipment descs $ \availableEquipment ->
+    withEquipmentAndPluginCameras descs $ \(availableEquipment, availablePluginCams) ->
       read <$> readFile (takeDirectory exePath </> "cameraoptions.txt") >>= \imageOrientationOpss ->
 
       newMessageChannel >>= \asyncMessageChannel ->
@@ -65,15 +64,15 @@ main =
       async (return ()) >>= \asyncProgramWorker ->
       wait asyncProgramWorker >>
 
-      withAvailableDetectors (\dets ->
-          applyCameraOptions dets imageOrientationOpss >>
-          getDetectorWavelengths (head dets) >>= \wl ->
-          return (byteStringFromVector wl) >>= \encodedWl ->
-          putStrLn "ready to measure!" >>
-          putStrLn "HOLD CONTROL-C UNTIL YOU SEE \"USER INTERRUPT\" BEFORE CLOSING THIS WINDOW" >>
-          let env = Environment availableEquipment dets encodedWl
-                                asyncMessageChannel asyncStatusMessagesMVar asyncProgramWorker
-          in  wait =<< async (runServer 3200 messageHandler env serverSettings))
+      
+      applyCameraOptions availablePluginCams imageOrientationOpss >>
+      getDetectorWavelengths (head availablePluginCams) >>= \wl ->
+      return (byteStringFromVector wl) >>= \encodedWl ->
+      putStrLn "ready to measure!" >>
+      putStrLn "HOLD CONTROL-C UNTIL YOU SEE \"USER INTERRUPT\" BEFORE CLOSING THIS WINDOW" >>
+      let env = Environment availableEquipment availablePluginCams encodedWl
+                        asyncMessageChannel asyncStatusMessagesMVar asyncProgramWorker
+      in  wait =<< async (runServer 3200 messageHandler env serverSettings)
     where
         applyCameraOptions :: Detector a => [a] -> [(Text, [ImageOrientationOperation])] -> IO ()
         applyCameraOptions dets opts =
