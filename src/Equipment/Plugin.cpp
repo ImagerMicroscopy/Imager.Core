@@ -1,6 +1,6 @@
 #define COMPILING_IMAGERPLUGIN
 
-#include "PluginHeader.h"
+#include "Plugin.h"
 
 #include <cstdio>
 #include <functional>
@@ -125,7 +125,7 @@ int ListContinuouslyMovableComponents(char **namesPtr, int nNames, int maxNBytes
 
 int ListDiscreteMovableComponentSettings(char *discreteComponentName, char **namesPtr, int nNames,
                                          int maxNBytesPerName, int *nNamesReturned) {
-    return HandleExceptions([=]() {
+    return HandleExceptions([&]() {
         std::vector<std::string> settings; // = <a call to a function you created>
         *nNamesReturned = StoreStringListInBuffers(settings, namesPtr, nNames, maxNBytesPerName);
         if (*nNamesReturned != settings.size()) {
@@ -142,19 +142,19 @@ int ListContinuouslyMovableComponentRange(char *discreteComponentName, double *m
 
 int SetMovableComponents(int nDiscreteComponentNames, char **discreteComponentNames, char **discreteSettings,
                          int nContinuousComponentNames, char **continuousComponentNames, double *continuousSettings) {
-    return HandleExceptions([=]() {
+    return HandleExceptions([&]() {
         // adjust components as appropriate
     });
 }
 
 int HasMotorizedStage(int *hasIt) {
-    return HandleExceptions([=] {
+    return HandleExceptions([&] {
         *hasIt = 0;     // set to 1 as needed
     });
 }
 
 int MotorizedStageName(char *name, int maxNBytesPerName) {
-    return HandleExceptions([=] {
+    return HandleExceptions([&] {
         std::string stageName; // <fill in or get from a call to your function
         if (stageName.size() > maxNBytesPerName - 1) {
             throw std::runtime_error("Unable to fit stage name in buffer");
@@ -164,14 +164,14 @@ int MotorizedStageName(char *name, int maxNBytesPerName) {
 }
 
 int SupportedStageAxes(int *x, int *y, int *z) {
-    return HandleExceptions([=] {
+    return HandleExceptions([&] {
         *x = 0; *y = 0; *z = 0;
         // set these to 1 if the stage axis is supported
     });
 }
 
 int GetStagePosition(double *x, double *y, double *z, int *usingHardwareAF, int *afOffset) {
-    return HandleExceptions([=] {
+    return HandleExceptions([&] {
         // replace these values with those of your hardware
         *x = -1.0; *y = -1.0; *z = -1.0;
         *usingHardwareAF = 0;
@@ -180,9 +180,67 @@ int GetStagePosition(double *x, double *y, double *z, int *usingHardwareAF, int 
 }
 
 int SetStagePosition(double x, double y, double z, int usingHardwareAF, int afOffset) {
-    return HandleExceptions([=] {
+    return HandleExceptions([&] {
         // set your hardware to these parameters
     });
+}
+
+int ListConnectedCameraNames(char **namesPtr, int nNames, int maxNBytesPerName, int *nNamesReturned) {
+    return HandleExceptions([&]() {
+        *nNamesReturned = 0;
+    });
+}
+
+int GetCameraOptions(char* cameraName, char** encodedOptionsPtr) {
+    return HandleExceptions([&]() {
+        
+    });
+}
+
+void ReleaseOptionsData(char* data) {
+
+}
+
+int SetCameraOption(char* cameraName, char* encodedOption) {
+    return HandleExceptions([&]() {
+        
+    });
+}
+
+int GetFrameRate(char* cameraName, double* frameRate) {
+    return -1;
+}
+
+int IsConfiguredForHardwareTriggering(char* cameraName, int* isConfiguredForHardwareTriggering) {
+    return -1;
+}
+
+int SetImageOrientation(char* cameraName, int* orientationOps, int nOps) {
+    return -1;
+}
+
+int AcquireSingleImage(char* cameraName, uint16_t** imagePtr, int* nRows, int* nCols) {
+    return -1;
+}
+
+int StartAsyncAcquisition(char* cameraName) {
+    return -1;
+}
+
+int StartBoundedAsyncAcquisition(char* cameraName, uint64_t nImagesToAcquire) {
+    return -1;
+}
+
+int GetOldestImageAsyncAcquired(char* cameraName, uint32_t timeoutMillis, uint16_t** imagePtr, int* nRows, int* nCols, double* timeStamp) {
+    return -1;
+}
+
+void ReleaseImageData(uint16_t* imagePtr) {
+    
+}
+
+int AbortAsyncAcquisition(char* cameraName) {
+    return -1;
 }
 
 // A utility function to store a list of strings in buffers passed by Imager. Returns the number of items actually stored.
@@ -197,4 +255,8 @@ int StoreStringListInBuffers(const std::vector<std::string>& stringList, char** 
         snprintf(stringBuffers[i], maxNBytesPerName, "%s", item.c_str());
     }
     return nItemsToStore;
+}
+
+void GetLastSCCamError(char* msgBuf, size_t bufSize) {
+    msgBuf[0] = 0;
 }
