@@ -1,10 +1,13 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE BangPatterns, InstanceSigs #-}
+
 module Equipment.EquipmentPluginsInternal (
     EquipmentPlugin
   , loadPlugin
   , addDirectoryToLoaderPath
 ) where
 
+import Control.Concurrent.Chan
+import Control.DeepSeq
 import Control.Exception
 import Control.Monad
 import Data.Aeson hiding (withArray)
@@ -30,8 +33,11 @@ import Foreign.ForeignPtr
 import Foreign.Marshal.Alloc
 import Foreign.Marshal.Array
 import Foreign.Storable
+import System.Clock
 
+import AcquiredDataTypes
 import Camera.SCCameraTypes
+import Detectors.Detector
 import Equipment.Equipment
 import Equipment.EquipmentTypes
 import Utils.DLLUtils
@@ -82,6 +88,64 @@ instance Equipment EquipmentPlugin where
     supportedStageAxes = epSupportedStageAxes
     getStagePosition = epGetStagePositionFunc
     setStagePosition = epSetStagePositionFunc
+
+data PluginDetector = PluginDetector {
+                          pdCamName :: !Text
+                        , pdEquipmentPlugin :: EquipmentPlugin
+                      }
+
+instance Detector PluginDetector where
+    detectorName = pdCamName
+
+    acquireData :: PluginDetector -> IO AcquiredData
+    acquireData (PluginDetector camName eP@(EquipmentPlugin{})) =
+        eP.epAcquireSingleImage camName >>= \(MeasuredImages nRows nCols _ vec) ->
+        getTime Monotonic >>= \timeStamp ->
+        let bytes = byteStringFromVector vec
+            numType = UINT16
+        in return (AcquiredData nRows nCols timeStamp camName bytes numType)
+
+    acquireStreamingData :: PluginDetector -> NMeasurementsToPerform -> Signal -> Chan AsyncData -> IO ()
+    acquireStreamingData (PluginDetector camName ep@(EquipmentPlugin{})) nMeasurements hasStarted chan =
+        performAcq `onException` (ep.epAbortAsyncAcquisition camName >> writeChan chan AsyncError)
+        where
+            performAcq = getTime Monotonic >>= \acqStart ->
+                            ep.epStartBoundedAsyncAcquisition camName (fromIntegral nMeasurements) >>
+                            raiseSignal hasStarted >>
+                            fetchImages nMeasurements acqStart chan >>
+                            writeChan chan AsyncFinished
+            fetchImages :: Int -> TimeSpec -> Chan AsyncData -> IO ()
+            fetchImages nImagesRemaining acqStart chan
+                | nImagesRemaining == 0 = return ()
+                | otherwise =
+                    fetchNextImage >>= \(MeasuredImages nRows nCols timeStamp imageData) ->
+                    let shiftedTimeStamp = fromNanoSecs (toNanoSecs acqStart + round (timeStamp * 1.0e9))
+                        acqData = AcquiredData nRows nCols shiftedTimeStamp camName (byteStringFromVector imageData) UINT16
+                    in  acqData `deepseq` writeChan chan (AsyncData acqData) >>
+                        fetchImages (nImagesRemaining - 1) acqStart chan
+            fetchNextImage = ep.epGetOldestImageAsyncAcquired camName 500 >>= \maybeImg ->
+                                if (isJust maybeImg)
+                                    then return (fromJust maybeImg)
+                                    else fetchNextImage
+
+    getDetectorProperties :: PluginDetector -> IO [DetectorProperty]
+    getDetectorProperties (PluginDetector camName ep@(EquipmentPlugin{})) = ep.epGetCameraOptions camName
+    setDetectorOption :: PluginDetector -> DetectorProperty -> IO ()
+    setDetectorOption (PluginDetector camName ep@(EquipmentPlugin{})) opt = ep.epSetCameraOption camName opt
+    getDetectorFrameRate :: PluginDetector -> IO Double
+    getDetectorFrameRate (PluginDetector camName ep@(EquipmentPlugin{})) = ep.epGetFrameRate camName
+    isConfiguredForHardwareTriggering (PluginDetector camName ep@(EquipmentPlugin{})) = ep.epIsConfiguredForHardwareTriggering camName
+
+    setImageOrientation :: PluginDetector -> [ImageOrientationOperation] -> IO ()
+    setImageOrientation (PluginDetector camName ep@(EquipmentPlugin{})) ops =
+        ep.epSetImageOrientation camName (map toSC ops)
+        where
+            toSC :: ImageOrientationOperation -> OrientationOp
+            toSC IPORotateCW = RotateCWOp
+            toSC IPORotateCCW = RotateCCWOp
+            toSC IPOFlipHorizontal = FlipHorizontalOp
+            toSC IPOFlipVertical = FlipVerticalOp
+
 
 type InitFunc = Ptr () -> IO CInt
 type ShutdownFunc = IO ()
