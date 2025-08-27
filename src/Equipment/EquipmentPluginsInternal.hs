@@ -2,7 +2,7 @@
 
 module Equipment.EquipmentPluginsInternal (
     EquipmentPlugin
-  , PluginDetector
+  , PluginDetector(..)
   , loadPlugin
   , addDirectoryToLoaderPath
 ) where
@@ -207,7 +207,6 @@ foreign import ccall "dynamic" mkSetStagePositionFunc :: FunPtr SetStagePosition
 
 foreign import ccall "dynamic" mkListConnectedCameraNamesFunc :: FunPtr StringListFunc -> ListConnectedCameraNamesFunc
 foreign import ccall "dynamic" mkGetCameraOptionsFunc :: FunPtr GetCameraOptionsFunc -> GetCameraOptionsFunc
-foreign import ccall "dynamic" mkReleaseOptionsDataFunc :: FunPtr ReleaseOptionsDataFunc -> ReleaseOptionsDataFunc
 foreign import ccall "dynamic" mkSetCameraOptionFunc :: FunPtr SetCameraOptionFunc -> SetCameraOptionFunc
 foreign import ccall "dynamic" mkGetFrameRateFunc :: FunPtr GetFrameRateFunc -> GetFrameRateFunc
 foreign import ccall "dynamic" mkIsConfiguredForHardwareTriggeringFunc :: FunPtr IsConfiguredForHardwareTriggeringFunc -> IsConfiguredForHardwareTriggeringFunc
@@ -216,7 +215,6 @@ foreign import ccall "dynamic" mkAcquireSingleImageFunc :: FunPtr AcquireSingleI
 foreign import ccall "dynamic" mkStartAsyncAcquisitionFunc :: FunPtr StartAsyncAcquisitionFunc -> StartAsyncAcquisitionFunc
 foreign import ccall "dynamic" mkStartBoundedAsyncAcquisitionFunc :: FunPtr StartBoundedAsyncAcquisitionFunc -> StartBoundedAsyncAcquisitionFunc
 foreign import ccall "dynamic" mkGetOldestImageAsyncAcquiredFunc :: FunPtr GetOldestImageAsyncAcquiredFunc -> GetOldestImageAsyncAcquiredFunc
-foreign import ccall "dynamic" mkReleaseImageDataFunc :: FunPtr ReleaseImageDataFunc -> ReleaseImageDataFunc
 foreign import ccall "dynamic" mkAbortAsyncAcquisitionFunc :: FunPtr AbortAsyncAcquisitionFunc -> AbortAsyncAcquisitionFunc
 foreign import ccall "dynamic" mkGetLastSCCamErrorFunc :: FunPtr GetLastSCCamErrorFunc -> GetLastSCCamErrorFunc
 
@@ -248,7 +246,7 @@ loadPlugin libName =
 
     loadFunc modu "ListConnectedCameraNames" mkListConnectedCameraNamesFunc >>= \listConnectedCameraNamesF ->
     loadFunc modu "GetCameraOptions" mkGetCameraOptionsFunc >>= \getCameraOptionsF ->
-    loadFunc modu "ReleaseOptionsData" mkReleaseOptionsDataFunc >>= \releaseOptionsDataF ->
+    loadFuncPtr modu "ReleaseOptionsData" >>= \releaseOptionsDataF ->
     loadFunc modu "SetCameraOption" mkSetCameraOptionFunc >>= \setCameraOptionF ->
     loadFunc modu "GetFrameRate" mkGetFrameRateFunc >>= \getFrameRateF ->
     loadFunc modu "IsConfiguredForHardwareTriggering" mkIsConfiguredForHardwareTriggeringFunc >>= \isConfiguredForHardwareTriggeringF ->
@@ -257,7 +255,7 @@ loadPlugin libName =
     loadFunc modu "StartAsyncAcquisition" mkStartAsyncAcquisitionFunc >>= \startAsyncAcquisitionF ->
     loadFunc modu "StartBoundedAsyncAcquisition" mkStartBoundedAsyncAcquisitionFunc >>= \startBoundedAsyncAcquisitionF ->
     loadFunc modu "GetOldestImageAsyncAcquired" mkGetOldestImageAsyncAcquiredFunc >>= \getOldestImageAsyncAcquiredF ->
-    loadFunc modu "ReleaseImageData" mkReleaseImageDataFunc >>= \releaseImageDataF ->
+    loadFuncPtr modu "ReleaseImageData" >>= \releaseImageDataF ->
     loadFunc modu "AbortAsyncAcquisition" mkAbortAsyncAcquisitionFunc >>= \abortAsyncAcquisitionF ->
     loadFunc modu "GetLastSCCamError" mkGetLastSCCamErrorFunc >>= \getLastSCCamErrorF ->
 

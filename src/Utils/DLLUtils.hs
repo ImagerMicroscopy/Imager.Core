@@ -5,6 +5,7 @@ module Utils.DLLUtils (
   , addDirectoryToLoaderPath
   , loadModule
   , loadFunc
+  , loadFuncPtr
   , mkCStringCallback
 ) where
 
@@ -51,25 +52,29 @@ loadModule mName =
 
 loadFunc :: HMODULE -> Text -> (FunPtr a -> a) -> IO a
 loadFunc modu name mkFunc = (mkFunc . castFARPROC) <$> loadFunctionAddress modu name
-    where
-        loadFunctionAddress :: HMODULE -> Text -> IO FARPROC
-        loadFunctionAddress modu fName =
-#ifdef WINDOWS
-            B.useAsCString (T.encodeUtf8 fName) $ \nameStr ->
-            cGetProcAddress modu nameStr >>= \address ->
-            if (fromFARPROC address == nullPtr)
-            then cGetLastError >>= putStrLn . show >> error ("couldn't load " ++ T.unpack fName)
-            else pure address
-#else
-            B.useAsCString (T.encodeUtf8 fName) $ \nameStr ->
-            cdlsym modu nameStr >>= \address ->
-            if (fromFARPROC address == nullPtr)
-            then cdlerror >>= putStrLn . show >> error ("couldn't load " ++ T.unpack fName)
-            else pure address
-#endif
-        castFARPROC :: FARPROC -> FunPtr a
-        castFARPROC (FARPROC address) = castPtrToFunPtr address
 
+loadFuncPtr :: HMODULE -> Text -> IO (FunPtr a)
+loadFuncPtr modu name = loadFunctionAddress modu name >>= pure . castPtrToFunPtr . fromFARPROC
+
+
+loadFunctionAddress :: HMODULE -> Text -> IO FARPROC
+loadFunctionAddress modu fName =
+#ifdef WINDOWS
+    B.useAsCString (T.encodeUtf8 fName) $ \nameStr ->
+    cGetProcAddress modu nameStr >>= \address ->
+    if (fromFARPROC address == nullPtr)
+    then cGetLastError >>= putStrLn . show >> error ("couldn't load " ++ T.unpack fName)
+    else pure address
+#else
+    B.useAsCString (T.encodeUtf8 fName) $ \nameStr ->
+    cdlsym modu nameStr >>= \address ->
+    if (fromFARPROC address == nullPtr)
+    then cdlerror >>= putStrLn . show >> error ("couldn't load " ++ T.unpack fName)
+    else pure address
+#endif
+
+castFARPROC :: FARPROC -> FunPtr a
+castFARPROC (FARPROC address) = castPtrToFunPtr address
 
 foreign import ccall "wrapper" mkCStringCallback :: (CString -> IO ()) -> IO (FunPtr (CString -> IO ()))
 

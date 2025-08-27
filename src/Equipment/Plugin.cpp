@@ -38,6 +38,8 @@ int StoreStringListInBuffers(const std::vector<std::string>& stringList, char** 
 
 int InitImagerPlugin(void(*printer)(const char*)) {
     return HandleExceptions([&]() {
+        gPrinter = printer;
+
         // any initialization your plugin needs
 
         printf("Successfully initialized\n");
@@ -243,6 +245,10 @@ int AbortAsyncAcquisition(char* cameraName) {
     return -1;
 }
 
+void GetLastSCCamError(char* msgBuf, size_t bufSize) {
+    msgBuf[0] = 0;
+}
+
 // A utility function to store a list of strings in buffers passed by Imager. Returns the number of items actually stored.
 int StoreStringListInBuffers(const std::vector<std::string>& stringList, char** stringBuffers, int nBuffers, int maxNBytesPerName) {
     int nStrings = (int)stringList.size();
@@ -255,8 +261,4 @@ int StoreStringListInBuffers(const std::vector<std::string>& stringList, char** 
         snprintf(stringBuffers[i], maxNBytesPerName, "%s", item.c_str());
     }
     return nItemsToStore;
-}
-
-void GetLastSCCamError(char* msgBuf, size_t bufSize) {
-    msgBuf[0] = 0;
 }
