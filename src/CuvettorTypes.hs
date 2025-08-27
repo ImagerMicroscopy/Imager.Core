@@ -31,7 +31,6 @@ import Encodings.EquipmentEncoding
 import Equipment.EquipmentTypes
 import Measurements.MeasurementProgram
 import Measurements.MeasurementProgramTypes
-import Camera.SCCameraTypes
 
 data Environment a = Environment {
                       envEquipment :: ![EquipmentW]

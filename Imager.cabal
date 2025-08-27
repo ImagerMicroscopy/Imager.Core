@@ -71,9 +71,7 @@ executable Imager
                      , Equipment.Devices.Robottor
                      , Equipment.Devices.Sutter
                      , Equipment.Devices.RemoteStage
-                     , Camera.SCCamera
                      , Camera.SCCameraTypes
-                     , Detectors.SCCamDetector
                      , Equipment.Devices.Thorlabs
                      , Equipment.Devices.PWMLaserController
                      , Equipment.EquipmentPlugins
@@ -82,8 +80,7 @@ executable Imager
                      , Equipment.Devices.OxxiusLBX
                      , SimpleJSONServer
   default-extensions:  CPP, BangPatterns, OverloadedStrings, ScopedTypeVariables, OverloadedRecordDot
-  --extra-lib-dirs:      C:\hslibs
-  extra-libraries:     SCCamera
+  extra-libraries:     
   ghc-options:         -O2 -threaded -rtsopts -funbox-strict-fields
 
   if (os(windows))

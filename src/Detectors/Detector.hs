@@ -26,7 +26,6 @@ import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
 
 import AcquiredDataTypes
-import Camera.SCCamera hiding(isConfiguredForHardwareTriggering)
 import Camera.SCCameraTypes
 import Utils.MiscUtils
 

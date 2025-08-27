@@ -40,7 +40,6 @@ import Measurements.MeasurementProgramTypes
 import Measurements.MeasurementProgramVerification
 import Utils.MeasurementProgramUtils
 import Utils.MiscUtils
-import Detectors.SCCamDetector
 
 executeMeasurement :: Detector a => ProgramEnvironment a -> MeasurementElement -> DefinedDetections -> IO ()
 executeMeasurement env me ddets =
