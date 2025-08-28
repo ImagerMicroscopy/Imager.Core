@@ -36,7 +36,10 @@ int HandleExceptions(const std::function<void()>& func) {
 // A utility function to store a list of strings in buffers passed by Imager. Returns the number of items actually stored.
 int StoreStringListInBuffers(const std::vector<std::string>& stringList, char** stringBuffers, int nBuffers, int maxNBytesPerName);
 
-int InitImagerPlugin(void(*printer)(const char*)) {
+int InitImagerPlugin(char* configurationDirPath, void(*printer)(const char*)) {
+    // configurationDirPath is a path to a folder where you can read or write configuration data
+    // use the name of your plugin as the base name (without extension) of the config file.
+    // printer is a function pointer that you can use to print output in the main program window.
     return HandleExceptions([&]() {
         gPrinter = printer;
 

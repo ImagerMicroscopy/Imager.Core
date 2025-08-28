@@ -35,6 +35,7 @@ import Foreign.Marshal.Alloc
 import Foreign.Marshal.Array
 import Foreign.Storable
 import System.Clock
+import System.FilePath
 
 import AcquiredDataTypes
 import Camera.SCCameraTypes
@@ -45,7 +46,7 @@ import Utils.DLLUtils
 import Utils.MiscUtils
 
 pluginAPIVersion :: CInt
-pluginAPIVersion = 1
+pluginAPIVersion = 2
 
 data EquipmentPlugin = EquipmentPlugin {
                            epEquipmentName :: !EqName
@@ -148,7 +149,7 @@ instance Detector PluginDetector where
             toSC IPOFlipVertical = FlipVerticalOp
 
 
-type InitFunc = Ptr () -> IO CInt
+type InitFunc = CString -> Ptr () -> IO CInt
 type ShutdownFunc = IO ()
 type IdentifierFunc = CString -> CUInt -> IO CInt
 type StringListFunc = Ptr CString -> CInt -> CInt -> Ptr CInt -> IO CInt
@@ -218,8 +219,8 @@ foreign import ccall "dynamic" mkGetOldestImageAsyncAcquiredFunc :: FunPtr GetOl
 foreign import ccall "dynamic" mkAbortAsyncAcquisitionFunc :: FunPtr AbortAsyncAcquisitionFunc -> AbortAsyncAcquisitionFunc
 foreign import ccall "dynamic" mkGetLastSCCamErrorFunc :: FunPtr GetLastSCCamErrorFunc -> GetLastSCCamErrorFunc
 
-loadPlugin :: Text -> IO (EquipmentW, [PluginDetector])
-loadPlugin libName =
+loadPlugin :: FilePath -> Text -> IO (EquipmentW, [PluginDetector])
+loadPlugin pluginConfigDir libName =
     loadModule libName >>= \modu ->
     loadFunc modu "InitImagerPlugin" mkInitFunc >>= \initF ->
     loadFunc modu "ShutdownImagerPlugin" mkShutdownFunc >>= \shutdownF ->
@@ -260,11 +261,14 @@ loadPlugin libName =
     loadFunc modu "GetLastSCCamError" mkGetLastSCCamErrorFunc >>= \getLastSCCamErrorF ->
 
 
+    verifyPluginVersion apiVersionF >>  -- check if the plugin api matches
     castFunPtrToPtr <$> mkCStringCallback (pluginPrinter libName) >>= \printFunc ->
-    initF printFunc >>= \initResult ->
+    B.useAsCString (T.encodeUtf8 . T.pack $ pluginConfigDir) $ \confDirPtr ->
+    initF confDirPtr printFunc >>= \initResult ->
     when (initResult /= 0) (error "couldn't init plugin") >>
-    verifyPluginVersion apiVersionF >>
     EqName <$> readIdentifier eqNameF >>= \eqName ->
+    when ((fromEqName eqName) /= baseLibName) (
+        throwIO $ userError ("The name of the plugin (" ++ T.unpack baseLibName ++ ") must exactly match the name of the equipment it communicates to Imager (" ++ (T.unpack (fromEqName eqName)) ++ ")")) >>
     readAvailableLightSources (listLightSourcesF, listChannelsF) >>= \lightSources ->
     readAvailableMovableComponents (listDiscreteMovableComponentsF, listContinouslyMovableComponentsF, 
                                     listContinouslyMovableComponentSettingsF, listContinuouslyMovableComponentRangeF) >>= \movableComps ->
@@ -291,11 +295,16 @@ loadPlugin libName =
                                 (abortAsyncAcquisition getLastSCCamErrorF abortAsyncAcquisitionF)
     in  pure (EquipmentW ep, map (\camName -> PluginDetector camName ep) connectedCameraNames)
     where
+        baseLibName :: Text
+        baseLibName = T.pack . dropExtension . T.unpack $ libName
+
         verifyPluginVersion :: SingleIntPtrFunc -> IO ()
         verifyPluginVersion f = alloca $ \versionPtr ->
                                 checkError (f versionPtr) >>
                                 peek versionPtr >>= \version ->
-                                when (version /= pluginAPIVersion) (error "incorrect api version")
+                                when (version /= pluginAPIVersion) (
+                                    throwIO $ userError $ "Incorrect plugin api version. A different version of this plugin (" ++ T.unpack baseLibName ++ ") is required for this system.")
+
         readIdentifier :: IdentifierFunc -> IO Text
         readIdentifier f = allocaArray0 128 $ \nameArray ->
                            checkError (f nameArray 128) >>

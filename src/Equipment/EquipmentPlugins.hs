@@ -22,13 +22,15 @@ loadPlugins :: IO [(EquipmentW, [PluginDetector])]
 loadPlugins =
     takeDirectory <$> getExecutablePath >>= \appPath ->
     pure (appPath </> "Plugins") >>= \pluginsDirPath ->
+    pure (appPath </> "PluginConfigurations") >>= \pluginConfigDirPath ->
     createDirectoryIfMissing False pluginsDirPath >>
+    createDirectoryIfMissing False pluginConfigDirPath >>
     addDirectoryToLoaderPath (T.pack pluginsDirPath) >>
     map T.pack <$> listDirectory pluginsDirPath >>= \fileNames ->
     let pluginNames = filter (\fn -> takeExtension (T.unpack fn) == ".imagerplugin") fileNames
     in  forM pluginNames ( \pn ->
             putStrLn ("Loading plugin " ++ T.unpack pn ++ "...") >>
-            loadPlugin pn >>= \contents ->
+            loadPlugin (addTrailingPathSeparator  pluginConfigDirPath) pn >>= \contents ->
             T.putStr (describePluginContents contents) >> pure contents
     )
 

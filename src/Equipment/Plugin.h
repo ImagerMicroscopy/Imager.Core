@@ -19,13 +19,13 @@
     #endif
 #endif
 
-#define IMAGER_API_VERSION 1
+#define IMAGER_API_VERSION 2
 
 #ifdef __cplusplus
 extern "C" {
 #endif
     // Global settings
-    LIBSPEC int InitImagerPlugin(void(*printer)(const char*));
+    LIBSPEC int InitImagerPlugin(char* configurationDirPath, void(*printer)(const char*));
     LIBSPEC void ShutdownImagerPlugin();
 	LIBSPEC int ImagerPluginAPIVersion(int* version);
 	LIBSPEC int EquipmentName(char* name, int maxNBytesPerName);
