@@ -44,7 +44,7 @@ validateDefinedDetections dets ddets =
 -- should not inspect contained MeasurementElements
 -- empty list for no error
 validateMeasurementElement :: [EquipmentW] -> DefinedDetections -> MeasurementElement -> [String]
-validateMeasurementElement eqs ddets (MEDetection detNames)
+validateMeasurementElement eqs ddets (MEDetection detNames programIDs)
     | null detNames = ["no detection specified"]
     | any (\dn -> not (M.member dn ddets)) detNames = ["one or more detection names are undefined"]
     | otherwise = concat $ (map (validateDetection eqs) dets)

@@ -85,7 +85,7 @@ executeMeasurementElements :: Detector a => ProgramEnvironment a -> DefinedDetec
 executeMeasurementElements env ddets es = mapM_ (executeMeasurementElement env ddets) es
 
 executeMeasurementElement :: Detector a => ProgramEnvironment a -> DefinedDetections -> MeasurementElement -> IO ()
-executeMeasurementElement env ddets (MEDetection detNames) =
+executeMeasurementElement env ddets (MEDetection detNames _) =
     withStatusMessage env "Detection" (
         executeDetection detectors eqs (detNames, detParams) startTime messageChannel)
     where
@@ -307,7 +307,7 @@ getXYCoords xC yC = [ [xC!!n,yC!!n] | n <- [0..length(xC)-1] ]
 
 
 insertFastAcquisitionLoops :: DefinedDetections -> MeasurementElement -> MeasurementElement
-insertFastAcquisitionLoops ddets (MEDoTimes n [MEDetection [dName]]) = MEFastAcquisitionLoop n (dName, fromJust $ M.lookup dName ddets)
+insertFastAcquisitionLoops ddets (MEDoTimes n [MEDetection [dName] _]) = MEFastAcquisitionLoop n (dName, fromJust $ M.lookup dName ddets)
 insertFastAcquisitionLoops ddets (MEDoTimes n es) = MEDoTimes n (map (insertFastAcquisitionLoops ddets) es)
 insertFastAcquisitionLoops ddets (METimeLapse n dur es) = METimeLapse n dur (map (insertFastAcquisitionLoops ddets) es)
 insertFastAcquisitionLoops ddets (MEStageLoop n pos es) = MEStageLoop n pos (map (insertFastAcquisitionLoops ddets) es)
@@ -413,7 +413,7 @@ eqNamesUsedAsLightSourceIn :: DefinedDetections -> MeasurementElement -> [EqName
 eqNamesUsedAsLightSourceIn ddets me = S.toList (eqNamesUsedAsLightSourceIn' S.empty me)
     where
         eqNamesUsedAsLightSourceIn' :: Set EqName -> MeasurementElement -> Set EqName
-        eqNamesUsedAsLightSourceIn' s (MEDetection dnNames) =
+        eqNamesUsedAsLightSourceIn' s (MEDetection dnNames _) =
             let dps = map (\dn -> fromJust $ M.lookup dn ddets) dnNames
             in  s <> (S.fromList . concat $ map (map ipEquipmentName . dpIrradiation) dps)
         eqNamesUsedAsLightSourceIn' s (MEIrradiation _ ips) = s <> ((S.fromList . map ipEquipmentName) ips)

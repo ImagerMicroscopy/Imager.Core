@@ -31,7 +31,7 @@ newtype WaitDuration = WaitDuration {fromWaitDuration :: Double}
 newtype NumIterationsTotal = NumIterationsTotal {fromNumIterationsTotal :: Int}
                             deriving (Show, Eq, Generic, Ord, NFData, FromJSON, ToJSON, ToJSONKey, FromJSONKey)
 
-data MeasurementElement = MEDetection ![AcquisitionTypeName]
+data MeasurementElement = MEDetection ![AcquisitionTypeName] ![SmartProgramID]
                         | MEIrradiation !LSIlluminationDuration ![IrradiationParams]
                         | MEWait !WaitDuration
                         | MEExecuteRobotProgram !RobotName !RobotProgramName !Bool
@@ -96,7 +96,7 @@ instance FromJSON MeasurementElement where
     parseJSON (Object v) =
         v .: "elementtype" >>= \(typ :: Text) ->
         case typ of
-          "detection"   -> MEDetection <$> v .: "detectionnames"
+          "detection"   -> MEDetection <$> v .: "detectionnames" <*> v .: "smartprogramids"
           "irradiation" -> MEIrradiation <$> v .: "duration" <*> v .: "irradiation"
           "wait"        -> MEWait <$> v .: "duration"
           "executerobotprogram" -> MEExecuteRobotProgram <$> v .: "robotname" <*> v .: "programname" <*> v .: "waitforcompletion"
@@ -108,7 +108,7 @@ instance FromJSON MeasurementElement where
           _             -> fail "can't decode measurement element type"
     parseJSON _ = fail "can't decode measurement element"
 instance ToJSON MeasurementElement where
-  toEncoding (MEDetection dets) = pairs ("elementtype" .= ("detection" :: Text) <> "detectionnames" .= dets)
+  toEncoding (MEDetection dets maybeProgramIDs) = pairs ("elementtype" .= ("detection" :: Text) <> "detectionnames" .= dets <> "smartprogramids" .= maybeProgramIDs)
   toEncoding (MEIrradiation dur ip) = pairs ("elementtype" .= ("irradiation" :: Text) <> "duration" .= dur <> "irradiation" .= ip)
   toEncoding (MEWait d) = pairs ("elementtype" .= ("wait" :: Text) <> "duration" .= d)
   toEncoding (MEExecuteRobotProgram n p w) = pairs ("elementtype" .= ("executerobotprogram" :: Text) <> "robotname" .= n <> "programname" .= p <> "waitforcompletion" .= w)
@@ -307,6 +307,7 @@ instance FromJSON SmartProgramCode
 instance ToJSON SmartProgramCode
 
 newtype SmartProgramID = SmartProgramID {fromSmartProgramID :: Text}
+                        deriving (Show, Generic, FromJSON, ToJSON)
 
 newtype SmartProgramDoTimesDecision = SmartProgramDoTimesDecision Int
 data SmartProgramStageLoopDecision = SmartProgramStageLoopDecision StageName [PositionNameAndCoords]
