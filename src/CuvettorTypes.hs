@@ -23,7 +23,6 @@ import Foreign
 import System.Clock
 import System.IO.Unsafe
 
-import AcquiredDataTypes
 import Utils.MiscUtils
 import Detectors.Detector
 import Equipment.Equipment
@@ -56,6 +55,7 @@ data RequestMessage = AcquireData !DetectionParams
                     | ExecuteMeasurementProgram {
                           execMeasurementProgram :: !MeasurementElement
                         , execMeasurementDetections :: !DefinedDetections
+                        , execMeasurementSmartProgramCode :: !(Maybe SmartProgramCode)
                       }
                     | FetchAsyncData
                     | AcknowledgeDataReceipt !Word64
@@ -75,7 +75,11 @@ instance ToJSON RequestMessage where
     toEncoding (GetDetectorProperties detName) = pairs ("action" .= ("getdetectorproperties" :: Text) <> "detectorname" .= detName)
     toEncoding (SetDetectorProperty detName prop) = pairs ("action" .= ("setdetectorproperty" :: Text) <> "detectorname" .= detName <> "property" .= prop)
     toEncoding Ping = pairs ("action" .= ("ping" :: Text))
-    toEncoding (ExecuteMeasurementProgram prog dets) = pairs ("action" .= ("executemeasurementprogram" :: Text) <> "program" .= prog <> "defineddetections" .= dets)
+    toEncoding (ExecuteMeasurementProgram prog dets smartprog) = pairs (
+        "action" .= ("executemeasurementprogram" :: Text) <>
+        "program" .= prog <>
+        "defineddetections" .= dets <>
+        "smartprogramcode" .= (fromSmartProgramCode <$> smartprog))
     toEncoding FetchAsyncData = pairs ("action" .= ("fetchasyncspectra" :: Text))
     toEncoding (AcknowledgeDataReceipt upToIdx) = pairs ("action" .= ("acknowledgedatareceipt" :: Text) <> "uptoandincluding" .= upToIdx)
     toEncoding FetchAsyncStatusMessages = pairs ("action" .= ("fetchasyncstatusmessages" :: Text))
@@ -96,7 +100,7 @@ instance FromJSON RequestMessage where
             "getdetectorproperties" -> GetDetectorProperties <$> v .: "detectorname"
             "setdetectorproperty" -> SetDetectorProperty <$> v .: "detectorname" <*> v .: "property"
             "ping"      -> return Ping
-            "executemeasurementprogram" -> ExecuteMeasurementProgram <$> v .: "program" <*> v .: "defineddetections"
+            "executemeasurementprogram" -> ExecuteMeasurementProgram <$> v .: "program" <*> v .: "defineddetections" <*> v .:? "smartprogramcode"
             "fetchasyncspectra" -> return FetchAsyncData
             "acknowledgedatareceipt" -> AcknowledgeDataReceipt <$> v .: "uptoandincluding"
             "fetchasyncstatusmessages" -> return FetchAsyncStatusMessages

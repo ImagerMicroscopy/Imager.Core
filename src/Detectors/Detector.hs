@@ -25,8 +25,8 @@ import System.Clock
 import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
 
-import AcquiredDataTypes
 import Camera.SCCameraTypes
+import Measurements.MeasurementProgramTypes
 import Utils.MiscUtils
 
 type ExposureTime = Double

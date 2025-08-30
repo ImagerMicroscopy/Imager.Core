@@ -28,7 +28,6 @@ import System.Clock
 import System.Environment
 import System.FilePath
 
-import AcquiredDataTypes
 import CuvettorTypes
 import Detectors.Detector
 import Equipment.Equipment
@@ -94,8 +93,8 @@ messageHandler msg env =
 
 performAction :: Detector a => Environment a -> RequestMessage -> IO (ResponseMessage, Environment a)
 performAction env (AcquireData params) =
-    let detElem = MEDetection ["Default"]
-        ddets = M.fromList [("Default", params)]
+    let detElem = MEDetection [AcquisitionTypeName "Default"]
+        ddets = M.fromList [(AcquisitionTypeName "Default", params)]
     in  startAsyncAcquisition env ddets detElem >>= \(asyncWorker, messageChannel, statusMVar) ->
         wait asyncWorker >>
         readChannelMessages messageChannel >>= \acquiredData ->
@@ -163,7 +162,7 @@ performAction env (SetDetectorProperty detName prop) =
 
 performAction env Ping = return (Pong, env)
 
-performAction env (ExecuteMeasurementProgram me ddets) =
+performAction env (ExecuteMeasurementProgram me ddets _) =
     startAsyncAcquisition env ddets me >>= \(asyncWorker, spectraMVar, statusMVar) ->
     let newEnv = env {envAsyncDataChannel = spectraMVar, envAsyncStatusMessagesMVar = statusMVar, envAsyncProgramWorker = asyncWorker}
     in  return (StatusOK, newEnv)

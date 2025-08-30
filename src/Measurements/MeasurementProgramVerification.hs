@@ -53,18 +53,18 @@ validateMeasurementElement eqs ddets (MEDetection detNames)
 validateMeasurementElement eqs _ (MEIrradiation dur ips)
     | (fromLSIlluminationDuration dur < 0.0) || (fromLSIlluminationDuration dur > 60) = ["invalid irradiation duration: " ++ show dur]
     | otherwise = concat $ (map (validateIrradiation eqs) ips)
-validateMeasurementElement eqs _ (MEWait dur)
+validateMeasurementElement eqs _ (MEWait (WaitDuration dur))
     | (dur < 0.0) || (dur > 3600) = ["invalid wait duration: " ++ show dur]
     | otherwise = []
 validateMeasurementElement eqs _ (MEExecuteRobotProgram rName pName _) = []
-validateMeasurementElement eqs _ (MEDoTimes n es)
+validateMeasurementElement eqs _ (MEDoTimes (NumIterationsTotal n) es)
     | (n < 0) || (n > (floor 10e6)) = ["invalid number of times to repeat: " ++ show n]
     | null es = ["do times loop but no actions"]
     | otherwise = []
-validateMeasurementElement eqs _ (MEFastAcquisitionLoop n (detName, detParams))
+validateMeasurementElement eqs _ (MEFastAcquisitionLoop (NumIterationsTotal n) (detName, detParams))
     | (n < 0) || (n > (floor 10e6)) = ["invalid number of times to repeat: " ++ show n]
     | otherwise = validateDetection eqs detParams
-validateMeasurementElement eqs _ (METimeLapse n dur es)
+validateMeasurementElement eqs _ (METimeLapse (NumIterationsTotal n) (WaitDuration dur) es)
     | (n < 0) || (n > (floor 10e6)) = ["invalid number of times to repeat: " ++ show n]
     | (dur < 0.0) || (dur > 3600 * 2) = ["invalid time lapse duration: " ++ show dur]
     | null es = ["timelapse loop but no elements"]

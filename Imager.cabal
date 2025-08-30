@@ -38,8 +38,7 @@ executable Imager
                      , parallel
                      , vector
                      , filepath
-  other-modules:       AcquiredDataTypes
-                     , AggregateMotorizedStage
+  other-modules:       AggregateMotorizedStage
                      , CuvettorTypes
                      , Encodings.BinaryEncoding
                      , Equipment.Devices.BlueBoxOptics
@@ -53,6 +52,7 @@ executable Imager
                      , Measurements.MeasurementProgramTypes
                      , Utils.MeasurementProgramUtils
                      , Measurements.MeasurementProgramVerification
+                     , Measurements.SmartProgram
                      , RCSerialPort
                      , Detectors.Detector
                      , Utils.MiscUtils

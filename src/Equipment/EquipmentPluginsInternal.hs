@@ -37,7 +37,6 @@ import Foreign.Storable
 import System.Clock
 import System.FilePath
 
-import AcquiredDataTypes
 import Camera.SCCameraTypes
 import Detectors.Detector
 import Equipment.Equipment

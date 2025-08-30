@@ -11,10 +11,11 @@ import Data.Serialize
 import qualified Data.Text.Encoding as T
 import Data.Word
 import Debug.Trace
-import AcquiredDataTypes
+
 import CuvettorTypes
 import Detectors.Detector
 import Equipment.EquipmentTypes
+import Measurements.MeasurementProgramTypes
 import Utils.MiscUtils
 
 {-
@@ -70,7 +71,7 @@ encodeAcquiredData cms = let header = encodeHeader messageLength indices stagePo
       lengthOfEncodedDetectorNames = sum (map ((+) 1 . B.length) detectorNames)
       timeStamps = map (timeSpecAsSeconds . acqTimeStamp) datas
       stagePositions = map amdStagePosition metadatas
-      acqTypeNames = map (B.take 255 . T.encodeUtf8 . amdAcquisitionTypename) metadatas
+      acqTypeNames = map (B.take 255 . T.encodeUtf8 . fromAcqName . amdAcquisitionTypename) metadatas
       detectorNames = map (B.take 255 . T.encodeUtf8 . acqDetectorName) datas
       dataSizes = map ((\a -> (acqNRows a, acqNCols a))) datas
       numType = encodedNumType $ acqNumType (head datas)
