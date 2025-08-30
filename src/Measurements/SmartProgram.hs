@@ -2,13 +2,29 @@ module Measurements.SmartProgram where
 
 import Data.Aeson
 import Data.Aeson.Types
+import qualified Data.ByteString.Lazy as LB
+import Data.Foldable
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
-import qualified Data.ByteString.Lazy as LB
+import qualified Data.Set as S
 import qualified Data.Vector as V
 
 import Measurements.MeasurementProgramTypes
+
+getAllSmartProgramIDsUsedInMeasurement :: MeasurementElement -> [SmartProgramID]
+getAllSmartProgramIDsUsedInMeasurement me = S.toList (searchWorker S.empty me)
+    where
+        searchWorker :: S.Set SmartProgramID -> MeasurementElement -> S.Set SmartProgramID
+        searchWorker s (MEDetection _ ids) = foldl' (flip S.insert) s ids
+        searchWorker s (MEIrradiation _ _) = s
+        searchWorker s (MEWait _) = s
+        searchWorker s (MEFastAcquisitionLoop _ _ ) = s
+        searchWorker s (MEExecuteRobotProgram _ _ _) = s
+        searchWorker s (MEDoTimes _ es) = mconcat (map (searchWorker s) es)
+        searchWorker s (METimeLapse _ _ es) = mconcat (map (searchWorker s) es)
+        searchWorker s (MEStageLoop _ _ es) = mconcat (map (searchWorker s) es)
+        searchWorker s (MERelativeStageLoop _ _ es) = mconcat (map (searchWorker s) es)
 
 getSmartProgramDoTimesDecision :: SmartProgramID -> SmartProgramDoTimesDecision
 getSmartProgramDoTimesDecision = undefined

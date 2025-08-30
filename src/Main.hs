@@ -218,7 +218,7 @@ startAsyncAcquisition env ddets me =
     newMessageChannel >>= \messageChannel ->
     newMVar [] >>= \statusMVar ->
     getTime Monotonic >>= \startTime ->
-    async (executeMeasurement (ProgramEnvironment detectors startTime (envEquipment env) messageChannel statusMVar) me ddets >>
+    async (executeMeasurement (ProgramEnvironment detectors startTime (envEquipment env) [] messageChannel statusMVar) me ddets >>
            return ()) >>= \asyncWorker ->
     return (asyncWorker, messageChannel, statusMVar)
     where

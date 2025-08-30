@@ -48,6 +48,7 @@ data ProgramEnvironment a = ProgramEnvironment {
                                 peDetectors :: ![a]
                               , peStartTime :: !TimeSpec
                               , peEquipment :: ![EquipmentW]
+                              , peKnownSmartProgramIDs :: ![SmartProgramID]
                               , peMessageChannel :: !MessageChannel
                               , peStatusMVar :: !(MVar [Text])
                             }
@@ -307,7 +308,7 @@ instance FromJSON SmartProgramCode
 instance ToJSON SmartProgramCode
 
 newtype SmartProgramID = SmartProgramID {fromSmartProgramID :: Text}
-                        deriving (Show, Generic, FromJSON, ToJSON)
+                        deriving (Show, Generic, FromJSON, ToJSON, Ord, Eq)
 
 newtype SmartProgramDoTimesDecision = SmartProgramDoTimesDecision Int
 data SmartProgramStageLoopDecision = SmartProgramStageLoopDecision StageName [PositionNameAndCoords]

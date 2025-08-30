@@ -81,7 +81,7 @@ executable Imager
                      , SimpleJSONServer
   default-extensions:  CPP, BangPatterns, OverloadedStrings, ScopedTypeVariables, OverloadedRecordDot
   extra-libraries:     
-  ghc-options:         -O2 -threaded -rtsopts -funbox-strict-fields
+  ghc-options:         -O2 -threaded -rtsopts -funbox-strict-fields -Wall
 
   if (os(windows))
       cpp-options:     -DWINDOWS
