@@ -2,6 +2,7 @@
 
 module Measurements.SmartProgram where
 
+import Control.Concurrent.STM
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Aeson
@@ -61,8 +62,8 @@ parseSmartProgramIDsFromProgramCode code =
 data SendResponse = ResponseOK
                 deriving (Generic, FromJSON)
 
-sendDetectedImagesToSmartPrograms :: [(AcquisitionMetaData, AcquiredData)] -> [SmartProgramID] -> IO SendResponse
-sendDetectedImagesToSmartPrograms dat ids =
+sendDetectedImagesToSmartProgramServer :: [(AcquisitionMetaData, AcquiredData)] -> [SmartProgramID] -> IO SendResponse
+sendDetectedImagesToSmartProgramServer dat ids =
     let acqMessages = map (\(md, d) -> AcquiredDataMessage md d) dat
         channelMessages = map (ChannelMessage 0) acqMessages
         asMsgPack = mconcat (map pack channelMessages)

@@ -39,7 +39,7 @@ executable Imager
                      , vector
                      , filepath
                      , req
-                     , BoundedChan
+                     , stm
   other-modules:       AggregateMotorizedStage
                      , CuvettorTypes
                      , Encodings.BinaryEncoding

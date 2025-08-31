@@ -3,7 +3,7 @@
 module Measurements.MeasurementProgramTypes where
 
 import Control.Concurrent
-import Control.Concurrent.BoundedChan
+import Control.Concurrent.STM
 import Control.DeepSeq
 import Data.Aeson
 import Data.ByteString (ByteString)
@@ -52,7 +52,7 @@ data ProgramEnvironment a = ProgramEnvironment {
                               , peKnownSmartProgramIDs :: ![SmartProgramID]
                               , peMessageChannel :: !MessageChannel
                               , peStatusMVar :: !(MVar [Text])
-                              , peSmartProgramSendChan :: !(BoundedChan (AcquisitionMetaData, AcquiredData))
+                              , peSmartProgramSendChan :: !SendToSmartProgramsChannel
                             }
 
 data DetectionParams = DetectionParams {
@@ -311,6 +311,37 @@ instance ToJSON SmartProgramCode
 
 newtype SmartProgramID = SmartProgramID {fromSmartProgramID :: Text}
                         deriving (Show, Generic, FromJSON, ToJSON, Ord, Eq)
+
+data SendToSmartProgramsChannel = SendToSmartProgramsChannel {
+                                      sspChan :: TChan (([SmartProgramID], [(AcquisitionMetaData, AcquiredData)]))
+                                    , sspNumImageSetsInFlight :: TVar Int    -- incremented when a dataset is submitted to the channel, decremented only once the image has been sent
+                                                                             -- (not when it is removed from the queue!)
+                                  }
+
+newSmartProgramsChannel :: IO SendToSmartProgramsChannel
+newSmartProgramsChannel = SendToSmartProgramsChannel <$> newTChanIO <*> newTVarIO 0
+
+submitDetectedImagesToSmartPrograms :: SendToSmartProgramsChannel -> [(AcquisitionMetaData, AcquiredData)] -> [SmartProgramID] -> IO ()
+submitDetectedImagesToSmartPrograms chan ims ids =
+    atomically $
+        writeTChan (sspChan chan) (ids, ims) >>
+        modifyTVar' (sspNumImageSetsInFlight chan) (+1)
+
+readNextImagesToSendToSmartPrograms :: SendToSmartProgramsChannel -> IO ([SmartProgramID], [(AcquisitionMetaData, AcquiredData)])
+readNextImagesToSendToSmartPrograms chan =
+    atomically $ readTChan (sspChan chan)
+
+markImageSetSuccessfullySentToSmartPrograms :: SendToSmartProgramsChannel -> IO ()
+markImageSetSuccessfullySentToSmartPrograms chan =
+    atomically $ modifyTVar (sspNumImageSetsInFlight chan) (\n -> n - 1)
+
+waitUntilAllImageSetsHaveBeenSentToSmartPrograms :: SendToSmartProgramsChannel -> IO ()
+waitUntilAllImageSetsHaveBeenSentToSmartPrograms chan =
+    atomically $
+        readTVar (sspNumImageSetsInFlight chan) >>= \numImageSetsInFlight ->
+        if (numImageSetsInFlight == 0)
+            then pure ()
+            else retry  -- block until the TVar (or channel) is next modified, after which this function will be run again
 
 newtype SmartProgramDoTimesDecision = SmartProgramDoTimesDecision Int
 data SmartProgramStageLoopDecision = SmartProgramStageLoopDecision StageName [PositionNameAndCoords]
