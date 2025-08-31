@@ -6,6 +6,7 @@ module Main (
 
 import Control.Concurrent
 import Control.Concurrent.Async
+import Control.Concurrent.BoundedChan
 import Control.DeepSeq
 import Control.Exception
 import Control.Monad
@@ -217,8 +218,9 @@ startAsyncAcquisition env ddets me =
     validateMeasurementElementThrows (envDetectors env) (envEquipment env) me ddets >>
     newMessageChannel >>= \messageChannel ->
     newMVar [] >>= \statusMVar ->
+    newBoundedChan 1000 >>= \smartProgramSendChan ->
     getTime Monotonic >>= \startTime ->
-    async (executeMeasurement (ProgramEnvironment detectors startTime (envEquipment env) [] messageChannel statusMVar) me ddets >>
+    async (executeMeasurement (ProgramEnvironment detectors startTime (envEquipment env) [] messageChannel statusMVar smartProgramSendChan) me ddets >>
            return ()) >>= \asyncWorker ->
     return (asyncWorker, messageChannel, statusMVar)
     where

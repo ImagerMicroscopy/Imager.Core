@@ -3,6 +3,7 @@
 module Measurements.MeasurementProgramTypes where
 
 import Control.Concurrent
+import Control.Concurrent.BoundedChan
 import Control.DeepSeq
 import Data.Aeson
 import Data.ByteString (ByteString)
@@ -51,6 +52,7 @@ data ProgramEnvironment a = ProgramEnvironment {
                               , peKnownSmartProgramIDs :: ![SmartProgramID]
                               , peMessageChannel :: !MessageChannel
                               , peStatusMVar :: !(MVar [Text])
+                              , peSmartProgramSendChan :: !(BoundedChan (AcquisitionMetaData, AcquiredData))
                             }
 
 data DetectionParams = DetectionParams {
