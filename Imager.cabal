@@ -42,7 +42,6 @@ executable Imager
                      , stm
   other-modules:       AggregateMotorizedStage
                      , CuvettorTypes
-                     , Encodings.BinaryEncoding
                      , Equipment.Devices.BlueBoxOptics
                      , Equipment.Equipment
                      , Equipment.EquipmentTypes

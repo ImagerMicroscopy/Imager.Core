@@ -3,6 +3,7 @@
 module Measurements.MeasurementProgramTypes where
 
 import Control.Concurrent
+import Control.Concurrent.Async
 import Control.Concurrent.STM
 import Control.DeepSeq
 import Data.Aeson

@@ -37,12 +37,14 @@ import Equipment.Equipment
 import Equipment.EquipmentTypes
 import Measurements.MeasurementProgramTypes
 import Measurements.MeasurementProgramVerification
+import Measurements.SmartProgram
 import Utils.MeasurementProgramUtils
 import Utils.MiscUtils
 
 executeMeasurement :: Detector a => ProgramEnvironment a -> MeasurementElement -> DefinedDetections -> IO ()
 executeMeasurement env me ddets =
     withAsync (forever $ resetSystemSleepTimer >> threadDelay (round 60.0e6)) (\_ ->
+    withAsync (sendDetectedImagesToSmartProgram_Worker (peSmartProgramSendChan env)) (\_ ->
         forM_ eqs (flushSerialPorts) >>
         forM_ (M.toList commonDetectorProperties) (\(detName, opts) ->
             mapM_ (setDetectorOption (namedDetector detName)) opts) >>
@@ -50,7 +52,7 @@ executeMeasurement env me ddets =
         `catch` (\e -> deactivateUsedLightSources >>
                        mapM_ abortRobotProgramExecution usedRobots >>
                        putStrLn (displayException e) >>
-                       throwIO (e :: SomeException)))
+                       throwIO (e :: SomeException))))
     where
         detectors = peDetectors env
         namedDetector n = head (filter ((==) n . detectorName) detectors)

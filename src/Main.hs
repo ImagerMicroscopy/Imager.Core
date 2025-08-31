@@ -39,7 +39,6 @@ import Measurements.MeasurementProgramTypes
 import Utils.MeasurementProgramUtils
 import Measurements.MeasurementProgramVerification
 import Utils.MiscUtils
-import Encodings.BinaryEncoding
 
 import Debug.Trace as DT
 

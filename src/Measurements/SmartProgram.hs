@@ -18,7 +18,6 @@ import qualified Data.Vector as V
 import GHC.Generics
 import Network.HTTP.Req
 
-import Encodings.BinaryEncoding
 import Measurements.MeasurementProgramTypes
 
 getAllSmartProgramIDsUsedInMeasurement :: MeasurementElement -> [SmartProgramID]
@@ -61,6 +60,12 @@ parseSmartProgramIDsFromProgramCode code =
 
 data SendResponse = ResponseOK
                 deriving (Generic, FromJSON)
+
+sendDetectedImagesToSmartProgram_Worker :: SendToSmartProgramsChannel -> IO ()
+sendDetectedImagesToSmartProgram_Worker chan =
+    readNextImagesToSendToSmartPrograms chan >>= \(smartProgramIds, images) ->
+    sendDetectedImagesToSmartProgramServer images smartProgramIds >>
+    markImageSetSuccessfullySentToSmartPrograms chan
 
 sendDetectedImagesToSmartProgramServer :: [(AcquisitionMetaData, AcquiredData)] -> [SmartProgramID] -> IO SendResponse
 sendDetectedImagesToSmartProgramServer dat ids =
