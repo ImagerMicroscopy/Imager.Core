@@ -38,6 +38,7 @@ executable Imager
                      , parallel
                      , vector
                      , filepath
+                     , req
   other-modules:       AggregateMotorizedStage
                      , CuvettorTypes
                      , Encodings.BinaryEncoding

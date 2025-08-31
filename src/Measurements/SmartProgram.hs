@@ -1,15 +1,23 @@
+{-# LANGUAGE DeriveGeneric, DeriveAnyClass #-}
+
 module Measurements.SmartProgram where
 
+import Control.Monad
+import Control.Monad.IO.Class
 import Data.Aeson
 import Data.Aeson.Types
 import qualified Data.ByteString.Lazy as LB
 import Data.Foldable
+import Data.MessagePack
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Set as S
 import qualified Data.Vector as V
+import GHC.Generics
+import Network.HTTP.Req
 
+import Encodings.BinaryEncoding
 import Measurements.MeasurementProgramTypes
 
 getAllSmartProgramIDsUsedInMeasurement :: MeasurementElement -> [SmartProgramID]
@@ -37,10 +45,6 @@ getSmartProgramRelativeStageLoopDecision = undefined
 
 getSmartProgramTimeLapseDecision :: SmartProgramID -> SmartProgramTimeLapseDecision
 getSmartProgramTimeLapseDecision = undefined
-    
-sendDetectedImagesToSmartProgram :: AsyncMeasurementMessage -> SmartProgramID -> IO ()
-sendDetectedImagesToSmartProgram = undefined
-
 
 parseSmartProgramIDsFromProgramCode :: SmartProgramCode -> [SmartProgramID]
 parseSmartProgramIDsFromProgramCode code =
@@ -54,4 +58,23 @@ parseSmartProgramIDsFromProgramCode code =
                                 Nothing -> error "Could not parse smart program id"
         findID _          = error "did not find object encoding the smart program id"
 
+data SendResponse = ResponseOK
+                deriving (Generic, FromJSON)
 
+sendDetectedImagesToSmartPrograms :: [(AcquisitionMetaData, AcquiredData)] -> [SmartProgramID] -> IO SendResponse
+sendDetectedImagesToSmartPrograms dat ids =
+    let acqMessages = map (\(md, d) -> AcquiredDataMessage md d) dat
+        channelMessages = map (ChannelMessage 0) acqMessages
+        asMsgPack = mconcat (map pack channelMessages)
+        serverPort = 8100
+        url = http "localhost" /: "data"
+        queryParams = mconcat [ "id" =: (fromSmartProgramID id) | id <- ids ]
+        body = ReqBodyLbs asMsgPack
+    in  runReq defaultHttpConfig $ 
+            req
+                POST                    -- HTTP method
+                url                     -- URL
+                body                    -- Request body
+                jsonResponse            -- Response type
+                (port serverPort <> queryParams) >>= -- Options (port and query parameter)
+            liftIO . pure . responseBody
