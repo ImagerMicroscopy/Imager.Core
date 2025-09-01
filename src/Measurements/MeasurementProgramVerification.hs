@@ -61,7 +61,7 @@ validateMeasurementElement eqs _ (MEDoTimes (NumIterationsTotal n) es)
     | (n < 0) || (n > (floor 10e6)) = ["invalid number of times to repeat: " ++ show n]
     | null es = ["do times loop but no actions"]
     | otherwise = []
-validateMeasurementElement eqs _ (MEFastAcquisitionLoop (NumIterationsTotal n) (detName, detParams))
+validateMeasurementElement eqs _ (MEFastAcquisitionLoop (NumIterationsTotal n) (detName, detParams) programIDs)
     | (n < 0) || (n > (floor 10e6)) = ["invalid number of times to repeat: " ++ show n]
     | otherwise = validateDetection eqs detParams
 validateMeasurementElement eqs _ (METimeLapse (NumIterationsTotal n) (WaitDuration dur) es)

@@ -39,6 +39,7 @@ import Equipment.Equipment
 import Equipment.EquipmentTypes
 import Measurements.MeasurementProgramTypes
 import Measurements.MeasurementProgramVerification
+import Measurements.SmartProgram
 import Camera.SCCameraTypes
 import Measurements.SmartProgram
 import Utils.MeasurementProgramUtils
@@ -47,7 +48,7 @@ import Utils.MiscUtils
 executeMeasurement :: Detector a => ProgramEnvironment a -> MeasurementElement -> DefinedDetections -> IO ()
 executeMeasurement env me ddets =
     withAsync (forever $ resetSystemSleepTimer >> threadDelay (round 60.0e6)) (\_ ->
-    withAsync (sendDetectedImagesToSmartProgram_Worker (peSmartProgramSendChan env)) (\_ ->
+    withAsync (sendDetectedImageToSmartPrograms_Worker (peSmartProgramSendChan env)) (\_ ->
         when (isJust (peSmartProgramCode env)) (
             startSmartPrograms (fromJust (peSmartProgramCode env))) >>
         forM_ eqs (flushSerialPorts) >>
@@ -104,6 +105,7 @@ executeMeasurementElement env ddets (MEDetection detNames smartProgramIDs) =
       startTime = peStartTime env
       detParams = map (\dn -> fromJust $ M.lookup dn ddets) detNames
       sendToSmartProgramsChannel = peSmartProgramSendChan env
+
 executeMeasurementElement env _ (MEIrradiation dur ips) =
     withStatusMessage env (T.format "irradiating {} s" (T.Only (fromLSIlluminationDuration dur))) (
         executeIrradiation eqs ips dur)
@@ -127,16 +129,17 @@ executeMeasurementElement env ddets (MEDoTimes (NumIterationsTotal n) es) =
             executeMeasurementElements env ddets ses
         ))
 
-executeMeasurementElement env ddets (MEFastAcquisitionLoop n (detName, detParams)) =
+executeMeasurementElement env ddets (MEFastAcquisitionLoop n (detName, detParams) programIDs) =
     withStatusMessage env (T.format "fast acquisition ({} images)" (T.Only (fromNumIterationsTotal n))) (
         readIORef (peDetectionIndexRef env) >>= \detectionIndex ->
-        executeFastDetectionLoop detectors eqs (detName, detParams) n startTime detectionIndex messageChannel) >>
-        modifyIORef (peDetectionIndexRef env) (DetectionIndex . ((+) (fromNumIterationsTotal n)) . fromDetectionIndex)
+        executeFastDetectionLoop detectors eqs (detName, detParams) n startTime detectionIndex messageChannel (sendToSmartProgramsChannel, programIDs) >>
+        modifyIORef (peDetectionIndexRef env) (DetectionIndex . ((+) (fromNumIterationsTotal n)) . fromDetectionIndex))
     where
       eqs = peEquipment env
       messageChannel = peMessageChannel env
       startTime = peStartTime env
       detectors = peDetectors env
+      sendToSmartProgramsChannel = peSmartProgramSendChan env
 
 executeMeasurementElement env ddets (METimeLapse (NumIterationsTotal n) (WaitDuration dur) es) =
     futureTimes >>= \fts ->
@@ -319,14 +322,15 @@ getXYCoords xC yC = [ [xC!!n,yC!!n] | n <- [0..length(xC)-1] ]
 
 
 insertFastAcquisitionLoops :: DefinedDetections -> MeasurementElement -> MeasurementElement
-insertFastAcquisitionLoops ddets (MEDoTimes n [MEDetection [dName] _]) = MEFastAcquisitionLoop n (dName, fromJust $ M.lookup dName ddets)
+insertFastAcquisitionLoops ddets (MEDoTimes n [MEDetection [dName] smartIDs]) = MEFastAcquisitionLoop n (dName, fromJust $ M.lookup dName ddets) smartIDs
 insertFastAcquisitionLoops ddets (MEDoTimes n es) = MEDoTimes n (map (insertFastAcquisitionLoops ddets) es)
 insertFastAcquisitionLoops ddets (METimeLapse n dur es) = METimeLapse n dur (map (insertFastAcquisitionLoops ddets) es)
 insertFastAcquisitionLoops ddets (MEStageLoop n pos es) = MEStageLoop n pos (map (insertFastAcquisitionLoops ddets) es)
 insertFastAcquisitionLoops ddets (MERelativeStageLoop n ps es) = MERelativeStageLoop n ps (map (insertFastAcquisitionLoops ddets) es)
 insertFastAcquisitionLoops d m = m
 
-executeDetection :: Detector a => [a] -> [EquipmentW] -> ([AcquisitionTypeName], [DetectionParams]) -> TimeAtStartOfExperiment -> DetectionIndex -> MessageChannel -> (SendToSmartProgramsChannel, [SmartProgramID]) -> IO ()
+executeDetection :: Detector a => [a] -> [EquipmentW] -> ([AcquisitionTypeName], [DetectionParams]) -> TimeAtStartOfExperiment -> 
+                                  DetectionIndex -> MessageChannel -> (SendToSmartProgramsChannel, [SmartProgramID]) -> IO ()
 executeDetection dets eqs (acqTypeNames, detParams) expStartTime detectionIndex messageChannel (smartProgramsChannel, smartProgramIDs) =
     getStagePositionSafe eqs >>= \stagePos ->
     forM_ (zip acqTypeNames detParams) (\(acqTypeName, dps) ->
@@ -335,7 +339,7 @@ executeDetection dets eqs (acqTypeNames, detParams) expStartTime detectionIndex 
             requiredDets = filter (\d -> (detectorName d) `elem` requiredDetNames) dets
         in  mapM isConfiguredForHardwareTriggering requiredDets >>= \hasTriggering ->
             if (or hasTriggering)
-            then executeFastDetectionLoop dets eqs (acqTypeName, dps) (NumIterationsTotal 1) expStartTime detectionIndex messageChannel
+            then executeFastDetectionLoop dets eqs (acqTypeName, dps) (NumIterationsTotal 1) expStartTime detectionIndex messageChannel (smartProgramsChannel, smartProgramIDs)
             else setMovableComponents eqs (dpMovableComponents dps) >>
                  enableLightSources eqs (dpIrradiation dps) >>
                  TimeAtStartOfDetection <$> getTime Monotonic >>= \detStartTime ->
@@ -344,19 +348,11 @@ executeDetection dets eqs (acqTypeNames, detParams) expStartTime detectionIndex 
                  forM_ (zip measuredImages (map detectorName requiredDets)) (\(measuredImage, detName) ->
                      let acquiredData = measuredImageAsAcquiredData measuredImage detName expStartTime detStartTime
                          metadata = AcquisitionMetaData stagePos acqTypeName detectionIndex nImagesMeasuredInThisDetection
-                     in  (acquiredData `deepseq` (addDataToChannel messageChannel (AcquiredDataMessage metadata acquiredData)))))
+                     in  (acquiredData `deepseq` (addDataToChannel messageChannel (AcquiredDataMessage metadata acquiredData))) >>
+                         submitDetectedImageToSmartProgramsIfNeeded smartProgramsChannel smartProgramIDs (metadata, acquiredData)))
     where
         nImagesMeasuredInThisDetection :: NumImagesInDetection
         nImagesMeasuredInThisDetection = NumImagesInDetection $ foldl' (\idx detParam -> idx + length (dpDetectors detParam)) 0 detParams
-        sendAcquiredImagesToSmartProgramIfNeeded :: [(AcquisitionMetaData, AcquiredData)] -> [SmartProgramID] -> IO ()
-        sendAcquiredImagesToSmartProgramIfNeeded images smartProgramIDs
-            | null smartProgramIDs = pure ()
-            | otherwise            = undefined 
-        submitDetectedImagesToSmartPrograms :: SendToSmartProgramsChannel -> [(AcquisitionMetaData, AcquiredData)] -> [SmartProgramID] -> IO ()
-        submitDetectedImagesToSmartPrograms chan ims ids =
-            atomically $
-                writeTChan (sspChan chan) (ids, ims) >>
-                modifyTVar' (sspNumImageSetsInFlight chan) (+1)
 
 setDetectorProperties :: Detector a => [a] -> [DetectorParams] -> IO ()
 setDetectorProperties dets dps =
@@ -364,11 +360,13 @@ setDetectorProperties dets dps =
         let [thisDet] = filter ((==) detName . detectorName) dets
         in  mapM_ (setDetectorOption thisDet) detOptions)
 
-executeFastDetectionLoop :: Detector a => [a] -> [EquipmentW] -> (AcquisitionTypeName, DetectionParams) -> NumIterationsTotal -> TimeAtStartOfExperiment -> DetectionIndex -> MessageChannel -> IO ()
-executeFastDetectionLoop dets eqs (detName, detParams) nTimesToPerform expStartTime detectionIndex messageChannel =
+executeFastDetectionLoop :: Detector a => [a] -> [EquipmentW] -> (AcquisitionTypeName, DetectionParams) -> NumIterationsTotal -> 
+                                                 TimeAtStartOfExperiment -> DetectionIndex -> MessageChannel -> (SendToSmartProgramsChannel, [SmartProgramID]) -> IO ()
+executeFastDetectionLoop dets eqs (detName, detParams) nTimesToPerform expStartTime detectionIndex messageChannel smartProgsIDs =
     setDetectorProperties dets (dpDetectors detParams) >>
     setMovableComponents eqs (dpMovableComponents detParams) >>
-    fastStreamingAcquisition requiredDets enableLightSourcesAction disableLightSourcesAction detName nTimesToPerform (getStagePositionSafe eqs) expStartTime detectionIndex messageChannel
+    fastStreamingAcquisition requiredDets enableLightSourcesAction disableLightSourcesAction detName nTimesToPerform (getStagePositionSafe eqs) 
+                             expStartTime detectionIndex messageChannel smartProgsIDs
     where
         requiredDetNames = map dtpDetectorName (dpDetectors detParams)
         requiredDets = filter (\d -> (detectorName d) `elem` requiredDetNames) dets
@@ -376,9 +374,10 @@ executeFastDetectionLoop dets eqs (detName, detParams) nTimesToPerform expStartT
         enableLightSourcesAction = enableLightSources eqs (dpIrradiation detParams)
         disableLightSourcesAction = disableLightSources eqs (dpIrradiation detParams)
 
-fastStreamingAcquisition :: Detector a => [a] -> IO () -> IO () -> AcquisitionTypeName -> NumIterationsTotal -> IO StagePosition -> TimeAtStartOfExperiment -> DetectionIndex -> MessageChannel -> IO ()
+fastStreamingAcquisition :: Detector a => [a] -> IO () -> IO () -> AcquisitionTypeName -> NumIterationsTotal -> IO StagePosition -> 
+                                          TimeAtStartOfExperiment -> DetectionIndex -> MessageChannel -> (SendToSmartProgramsChannel, [SmartProgramID]) -> IO ()
 fastStreamingAcquisition requiredDets enableLightSourcesAction disableLightSourcesAction acqName (NumIterationsTotal nTimesToPerform)
-                         readStagePosFunc expStartTime (DetectionIndex detectionIndex) messageChannel =
+                         readStagePosFunc expStartTime (DetectionIndex detectionIndex) messageChannel (smartProgramsChannel, smartProgramIDs) =
     newChan >>= \chan ->
     readStagePosFunc >>= newIORef >>= \stagePosRef ->
     withAsync (stagePositionWorker readStagePosFunc stagePosRef) (\stageAs ->
@@ -391,7 +390,7 @@ fastStreamingAcquisition requiredDets enableLightSourcesAction disableLightSourc
         nRequiredDets = length requiredDets
         numImagesPerDetectionIndex = NumImagesInDetection nRequiredDets
         numImagesAcquiredMap :: Map DetectorName Int
-        numImagesAcquiredMap = M.fromList (zip (map detectorName requiredDets) (repeat 0))
+        numImagesAcquiredMap = M.fromList (zip (map detectorName requiredDets) (repeat 0))  -- keeps track of how many images have been acquired for each detector
         fetchData :: TimeAtStartOfDetection -> IORef StagePosition -> Map DetectorName Int -> Int -> Async () -> Chan AsyncData -> IO ()
         fetchData detStartTime posRef numImagesAcquiredMap nDetectorsFinished async chan
             | nDetectorsFinished == nRequiredDets = wait async
@@ -410,6 +409,7 @@ fastStreamingAcquisition requiredDets enableLightSourcesAction disableLightSourc
                                            metadata = AcquisitionMetaData pos acqName (DetectionIndex thisDetIdx) numImagesPerDetectionIndex
                                        in  when (nImagesAcquiredTotal `mod` 50 == 49) (performMajorGC) >>
                                            (acquiredData `deepseq` (addDataToChannel messageChannel (AcquiredDataMessage metadata acquiredData))) >>
+                                           submitDetectedImageToSmartProgramsIfNeeded smartProgramsChannel smartProgramIDs (metadata, acquiredData) >>
                                            fetchData detStartTime posRef newMap nDetectorsFinished async chan
         stagePositionWorker :: IO StagePosition -> IORef StagePosition -> IO ()
         stagePositionWorker readStagePosFunc positionRef =
@@ -456,7 +456,7 @@ eqNamesUsedAsLightSourceIn ddets me = S.toList (eqNamesUsedAsLightSourceIn' S.em
             in  s <> (S.fromList . concat $ map (map ipEquipmentName . dpIrradiation) dps)
         eqNamesUsedAsLightSourceIn' s (MEIrradiation _ ips) = s <> ((S.fromList . map ipEquipmentName) ips)
         eqNamesUsedAsLightSourceIn' s (MEDoTimes _ mes) = s <> mconcat (map (eqNamesUsedAsLightSourceIn' S.empty) mes)
-        eqNamesUsedAsLightSourceIn' s (MEFastAcquisitionLoop _ (_, dp)) = s <> S.fromList (map ipEquipmentName . dpIrradiation $ dp)
+        eqNamesUsedAsLightSourceIn' s (MEFastAcquisitionLoop _ (_, dp) _) = s <> S.fromList (map ipEquipmentName . dpIrradiation $ dp)
         eqNamesUsedAsLightSourceIn' s (METimeLapse _ _ mes) = s <> mconcat (map (eqNamesUsedAsLightSourceIn' S.empty) mes)
         eqNamesUsedAsLightSourceIn' s (MEStageLoop _ _ mes) = s <> mconcat (map (eqNamesUsedAsLightSourceIn' S.empty) mes)
         eqNamesUsedAsLightSourceIn' s (MERelativeStageLoop _ _ mes) = s <> mconcat (map (eqNamesUsedAsLightSourceIn' S.empty) mes)

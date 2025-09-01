@@ -6,6 +6,7 @@ import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Concurrent.STM
 import Control.DeepSeq
+import Control.Monad
 import Data.Aeson
 import Data.Aeson.Types
 import Data.ByteString (ByteString)
@@ -44,7 +45,7 @@ data MeasurementElement = MEDetection ![AcquisitionTypeName] ![SmartProgramID]
                         | MEWait !WaitDuration
                         | MEExecuteRobotProgram !RobotName !RobotProgramName !Bool
                         | MEDoTimes !NumIterationsTotal !Prog
-                        | MEFastAcquisitionLoop !NumIterationsTotal !(AcquisitionTypeName, DetectionParams)
+                        | MEFastAcquisitionLoop !NumIterationsTotal !(AcquisitionTypeName, DetectionParams) ![SmartProgramID]
                         | METimeLapse !NumIterationsTotal !WaitDuration !Prog
                         | MEStageLoop !StageName ![PositionNameAndCoords] !Prog
                         | MERelativeStageLoop !StageName !RelativeStageLoopParams !Prog
@@ -120,13 +121,13 @@ instance FromJSON MeasurementElement where
           _             -> fail "can't decode measurement element type"
     parseJSON _ = fail "can't decode measurement element"
 instance ToJSON MeasurementElement where
-  toEncoding (MEDetection dets maybeProgramIDs) = pairs ("elementtype" .= ("detection" :: Text) <> "detectionnames" .= dets <> "smartprogramids" .= maybeProgramIDs)
+  toEncoding (MEDetection dets programIDs) = pairs ("elementtype" .= ("detection" :: Text) <> "detectionnames" .= dets <> "smartprogramids" .= programIDs)
   toEncoding (MEIrradiation dur ip) = pairs ("elementtype" .= ("irradiation" :: Text) <> "duration" .= dur <> "irradiation" .= ip)
   toEncoding (MEWait d) = pairs ("elementtype" .= ("wait" :: Text) <> "duration" .= d)
   toEncoding (MEExecuteRobotProgram n p w) = pairs ("elementtype" .= ("executerobotprogram" :: Text) <> "robotname" .= n <> "programname" .= p <> "waitforcompletion" .= w)
   toEncoding (MEDoTimes n es) = pairs ("elementtype" .= ("dotimes" :: Text) <> "ntotal" .= n <> "elements" .= es)
   toEncoding (METimeLapse n td es) = pairs ("elementtype" .= ("timelapse" :: Text) <> "ntotal" .= n <> "timedelta" .= td <> "elements" .= es)
-  toEncoding (MEFastAcquisitionLoop n det) = pairs ("elementtype" .= ("fastacquisitionloop" :: Text) <> "ntotal" .= n <> "detection" .= det)
+  toEncoding (MEFastAcquisitionLoop n det programIDs) = pairs ("elementtype" .= ("fastacquisitionloop" :: Text) <> "ntotal" .= n <> "detection" .= det <> "smartprogramids" .= programIDs)
   toEncoding (MEStageLoop n pos es) = pairs ("elementtype" .= ("stageloop" :: Text) <> "stagename" .= n <> "positions" .= pos <> "elements" .= es)
   toEncoding (MERelativeStageLoop n ps es) = pairs ("elementtype" .= ("relativestageloop" :: Text) <> "stagename" .= n <> "params" .= ps <> "elements" .= es)
   toJSON _ = error "no toJSON"
@@ -361,7 +362,7 @@ newtype SmartProgramID = SmartProgramID {fromSmartProgramID :: Text}
                         deriving (Show, Generic, FromJSON, ToJSON, Ord, Eq)
 
 data SendToSmartProgramsChannel = SendToSmartProgramsChannel {
-                                      sspChan :: TChan (([SmartProgramID], [(AcquisitionMetaData, AcquiredData)]))
+                                      sspChan :: TChan (([SmartProgramID], (AcquisitionMetaData, AcquiredData)))
                                     , sspNumImageSetsInFlight :: TVar Int    -- incremented when a dataset is submitted to the channel, decremented only once the image has been sent
                                                                              -- (not when it is removed from the queue!)
                                   }
@@ -369,22 +370,23 @@ data SendToSmartProgramsChannel = SendToSmartProgramsChannel {
 newSmartProgramsChannel :: IO SendToSmartProgramsChannel
 newSmartProgramsChannel = SendToSmartProgramsChannel <$> newTChanIO <*> newTVarIO 0
 
-submitDetectedImagesToSmartPrograms :: SendToSmartProgramsChannel -> [(AcquisitionMetaData, AcquiredData)] -> [SmartProgramID] -> IO ()
-submitDetectedImagesToSmartPrograms chan ims ids =
-    atomically $
-        writeTChan (sspChan chan) (ids, ims) >>
-        modifyTVar' (sspNumImageSetsInFlight chan) (+1)
+submitDetectedImageToSmartProgramsIfNeeded :: SendToSmartProgramsChannel -> [SmartProgramID] -> (AcquisitionMetaData, AcquiredData) -> IO ()
+submitDetectedImageToSmartProgramsIfNeeded chan ids im =
+    when (not $ null ids) (
+        atomically $
+            writeTChan (sspChan chan) (ids, im) >>
+            modifyTVar' (sspNumImageSetsInFlight chan) (+1)
+    )
 
-readNextImagesToSendToSmartPrograms :: SendToSmartProgramsChannel -> IO ([SmartProgramID], [(AcquisitionMetaData, AcquiredData)])
-readNextImagesToSendToSmartPrograms chan =
-    atomically $ readTChan (sspChan chan)
+readNextImageToSendToSmartPrograms :: SendToSmartProgramsChannel -> IO ([SmartProgramID], (AcquisitionMetaData, AcquiredData))
+readNextImageToSendToSmartPrograms chan = atomically $ readTChan (sspChan chan)
 
-markImageSetSuccessfullySentToSmartPrograms :: SendToSmartProgramsChannel -> IO ()
-markImageSetSuccessfullySentToSmartPrograms chan =
+markImageSentSuccessfullyToSmartPrograms :: SendToSmartProgramsChannel -> IO ()
+markImageSentSuccessfullyToSmartPrograms chan =
     atomically $ modifyTVar (sspNumImageSetsInFlight chan) (\n -> n - 1)
 
-waitUntilAllImageSetsHaveBeenSentToSmartPrograms :: SendToSmartProgramsChannel -> IO ()
-waitUntilAllImageSetsHaveBeenSentToSmartPrograms chan =
+waitUntilAllImagesHaveBeenSentToSmartPrograms :: SendToSmartProgramsChannel -> IO ()
+waitUntilAllImagesHaveBeenSentToSmartPrograms chan =
     atomically $
         readTVar (sspNumImageSetsInFlight chan) >>= \numImageSetsInFlight ->
         if (numImageSetsInFlight == 0)

@@ -30,7 +30,7 @@ getAllSmartProgramIDsUsedInMeasurement me = S.toList (searchWorker S.empty me)
         searchWorker s (MEDetection _ ids) = foldl' (flip S.insert) s ids
         searchWorker s (MEIrradiation _ _) = s
         searchWorker s (MEWait _) = s
-        searchWorker s (MEFastAcquisitionLoop _ _ ) = s
+        searchWorker s (MEFastAcquisitionLoop _ _ ids) = foldl' (flip S.insert) s ids
         searchWorker s (MEExecuteRobotProgram _ _ _) = s
         searchWorker s (MEDoTimes _ es) = mconcat (map (searchWorker s) es)
         searchWorker s (METimeLapse _ _ es) = mconcat (map (searchWorker s) es)
@@ -64,17 +64,17 @@ parseSmartProgramIDsFromProgramCode code =
 data SendResponse = ResponseOK
                 deriving (Generic, FromJSON)
 
-sendDetectedImagesToSmartProgram_Worker :: SendToSmartProgramsChannel -> IO ()
-sendDetectedImagesToSmartProgram_Worker chan =
-    readNextImagesToSendToSmartPrograms chan >>= \(smartProgramIds, images) ->
-    sendDetectedImagesToSmartProgramServer images smartProgramIds >>
-    markImageSetSuccessfullySentToSmartPrograms chan
+sendDetectedImageToSmartPrograms_Worker :: SendToSmartProgramsChannel -> IO ()
+sendDetectedImageToSmartPrograms_Worker chan =
+    readNextImageToSendToSmartPrograms chan >>= \(smartProgramIds, image) ->
+    sendImageToSmartProgramServer image smartProgramIds >>
+    markImageSentSuccessfullyToSmartPrograms chan
 
-sendDetectedImagesToSmartProgramServer :: [(AcquisitionMetaData, AcquiredData)] -> [SmartProgramID] -> IO SendResponse
-sendDetectedImagesToSmartProgramServer dat ids =
-    let acqMessages = map (\(md, d) -> AcquiredDataMessage md d) dat
-        channelMessages = map (ChannelMessage 0) acqMessages
-        asMsgPack = mconcat (map pack channelMessages)
+sendImageToSmartProgramServer :: (AcquisitionMetaData, AcquiredData) -> [SmartProgramID] -> IO SendResponse
+sendImageToSmartProgramServer (metaData, acqData) ids =
+    let acqMessage = AcquiredDataMessage metaData acqData
+        channelMessage = ChannelMessage 0 acqMessage
+        asMsgPack = pack channelMessage
         serverPort = 8100
         url = http "localhost" /: "data"
         queryParams = mconcat [ "id" =: (fromSmartProgramID id) | id <- ids ]
