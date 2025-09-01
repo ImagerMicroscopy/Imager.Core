@@ -34,6 +34,10 @@ newtype WaitDuration = WaitDuration {fromWaitDuration :: Double}
                             deriving (Show, Eq, Generic, Ord, NFData)
 newtype NumIterationsTotal = NumIterationsTotal {fromNumIterationsTotal :: Int}
                             deriving (Show, Eq, Generic, Ord, NFData)
+newtype DetectionIndex = DetectionIndex {fromDetectionIndex :: Int}
+                            deriving (Show, Eq, Generic, Ord, NFData)
+newtype NumImagesInDetection = NumImagesInDetection {fromNumImagesInDetection :: Int}
+                            deriving (Show, Eq, Generic, Ord, NFData)
 
 data MeasurementElement = MEDetection ![AcquisitionTypeName] ![SmartProgramID]
                         | MEIrradiation !LSIlluminationDuration ![IrradiationParams]
@@ -52,6 +56,7 @@ data ProgramEnvironment a = ProgramEnvironment {
                                 peDetectors :: ![a]
                               , peStartTime :: !TimeAtStartOfExperiment
                               , peEquipment :: ![EquipmentW]
+                              , peDetectionIndexRef :: !(IORef DetectionIndex)
                               , peKnownSmartProgramIDs :: ![SmartProgramID]
                               , peSmartProgramCode :: Maybe SmartProgramCode
                               , peMessageChannel :: !MessageChannel
@@ -208,11 +213,18 @@ instance ToJSON WaitDuration where
     toJSON (WaitDuration n) = toJSON n
 instance FromJSON WaitDuration where
     parseJSON = fmap WaitDuration . parseJSON
-
 instance ToJSON NumIterationsTotal where
     toJSON (NumIterationsTotal n) = toJSON n
 instance FromJSON NumIterationsTotal where
     parseJSON = fmap NumIterationsTotal . parseJSON 
+instance ToJSON DetectionIndex where
+    toJSON (DetectionIndex n) = toJSON n
+instance FromJSON DetectionIndex where
+    parseJSON = fmap DetectionIndex . parseJSON
+instance ToJSON NumImagesInDetection where
+    toJSON (NumImagesInDetection n) = toJSON n
+instance FromJSON NumImagesInDetection where
+    parseJSON = fmap NumImagesInDetection . parseJSON
 
 data ChannelMessage = ChannelMessage {
                           cmIdx :: !Word64,                 -- unique index of the message
@@ -302,16 +314,21 @@ measuredImageAsAcquiredData (MeasuredImage nRows nCols (SecondsSinceStartOfDetec
 data AcquisitionMetaData = AcquisitionMetaData {
                                amdStagePosition :: !StagePosition
                              , amdAcquisitionTypename :: !AcquisitionTypeName
+                             , amdDetectionIndex :: !DetectionIndex     -- The detection that this image logically belongs to.
+                                                                        -- All images acquired in the same MEDetection will have the same detectionIndex.
+                             , amdNImagesWithDetectionIndex :: !NumImagesInDetection     -- How many images there with this detectionIndex
                            } deriving (Show, Generic, NFData)
 
 instance ToJSON AcquisitionMetaData
 instance FromJSON AcquisitionMetaData
 
 instance MessagePack AcquisitionMetaData where
-    toObject (AcquisitionMetaData position typename) =
+    toObject (AcquisitionMetaData position typename detIdx nImagesInDetection) =
       toObject $ M.fromList [
                  ("stageposition" :: Text, toObject position),
-                 ("acquisitiontype", toObject (fromAcqName typename))
+                 ("acquisitiontype", toObject (fromAcqName typename)),
+                 ("detectionindex", toObject (fromDetectionIndex detIdx)),
+                 ("nimageswithdetectionindex", toObject (fromNumImagesInDetection nImagesInDetection))
                ]
     fromObject _ = error "no fromObject for AcquisitionMetaData"
 
