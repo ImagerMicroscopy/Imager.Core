@@ -215,10 +215,11 @@ startAsyncAcquisition :: Detector a => Environment a -> DefinedDetections -> Mea
 startAsyncAcquisition env ddets me =
     ensureAsyncAcquisitionNotRunning env >>
     validateMeasurementElementThrows (envDetectors env) (envEquipment env) me ddets >>
+    newIORef (DetectionIndex 0) >>= \detectionIdxRef ->
     newMessageChannel >>= \messageChannel ->
     newMVar [] >>= \statusMVar ->
     TimeAtStartOfExperiment <$> getTime Monotonic >>= \startTime ->
-    async (executeMeasurement (ProgramEnvironment detectors startTime (envEquipment env) messageChannel statusMVar) me ddets >>
+    async (executeMeasurement (ProgramEnvironment detectors startTime (envEquipment env) detectionIdxRef messageChannel statusMVar) me ddets >>
            return ()) >>= \asyncWorker ->
     return (asyncWorker, messageChannel, statusMVar)
     where
