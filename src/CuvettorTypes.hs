@@ -23,6 +23,7 @@ import Foreign
 import System.Clock
 import System.IO.Unsafe
 
+import Camera.SCCameraTypes
 import Utils.MiscUtils
 import Detectors.Detector
 import Equipment.Equipment
@@ -49,8 +50,8 @@ data RequestMessage = AcquireData !DetectionParams
                     | SetMotorizedStagePosition !StageName !StagePosition
                     | ListRobotPrograms !RobotName
                     | ListAvailableDetectors
-                    | GetDetectorProperties !Text
-                    | SetDetectorProperty !Text !DetectorProperty
+                    | GetDetectorProperties !DetectorName
+                    | SetDetectorProperty !DetectorName !DetectorProperty
                     | Ping
                     | ExecuteMeasurementProgram {
                           execMeasurementProgram :: !MeasurementElement
@@ -119,7 +120,7 @@ data ResponseMessage = StatusOK
                      | AvailableEquipment ![EquipmentW]
                      | MotorizedStagePosition !StagePosition
                      | RobotProgramsResponse ![RobotProgramName]
-                     | AvailableDetectorsResponse ![Text]
+                     | AvailableDetectorsResponse ![DetectorName]
                      | DetectorPropertiesResponse ![DetectorProperty] Double
                      | Pong
                      | AsyncAcquiredData ![ChannelMessage]

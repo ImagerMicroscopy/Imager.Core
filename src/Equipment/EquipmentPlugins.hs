@@ -13,6 +13,7 @@ import System.Directory
 import System.Environment
 import System.FilePath
 
+import Camera.SCCameraTypes
 import Equipment.Equipment
 import Equipment.EquipmentPluginsInternal
 import Equipment.EquipmentTypes
@@ -41,7 +42,7 @@ describePluginContents (eq, cams) =
         movableComponentsStr = mconcat . intersperse ", " . map componentName $ availableMovableComponents eq
         stageStr = if (hasMotorizedStage eq) then "Motorized stage with " <> axisStr else "No motorized stage"
         axisStr = mconcat . intersperse " " . map (T.pack . show) $ supportedStageAxes eq
-        cameraNamesStr = mconcat . intersperse ", " .  map pdCamName $ cams
+        cameraNamesStr = mconcat . intersperse ", " .  map (fromDetectorName . pdCamName) $ cams
     in  (mconcat . intersperse "\n") [
             formatT "Found equipment \"{}\"" (T.Only eqName),
             formatT "\tLight sources: {}" (T.Only lightSourcesStr),

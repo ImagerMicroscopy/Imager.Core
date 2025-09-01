@@ -73,7 +73,7 @@ encodeAcquiredData cms = let header = encodeHeader messageLength indices stagePo
       timeStamps = map (sseAsSeconds . acqTimeStamp) datas
       stagePositions = map amdStagePosition metadatas
       acqTypeNames = map (B.take 255 . T.encodeUtf8 . fromAcqName . amdAcquisitionTypename) metadatas
-      detectorNames = map (B.take 255 . T.encodeUtf8 . acqDetectorName) datas
+      detectorNames = map (B.take 255 . T.encodeUtf8 . fromDetectorName . acqDetectorName) datas
       dataSizes = map ((\a -> (acqNRows a, acqNCols a))) datas
       numType = encodedNumType $ acqNumType (head datas)
       acqBytes = map acqData datas

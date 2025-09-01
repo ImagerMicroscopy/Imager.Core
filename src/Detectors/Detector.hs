@@ -35,7 +35,7 @@ type Temperature = Double
 type NMeasurementsToAverage = Int
 type NMeasurementsToPerform = Int
 
-data AsyncData = AsyncData !(Text, MeasuredImage)   -- (detectorName, image)
+data AsyncData = AsyncData !(DetectorName, MeasuredImage)   -- (detectorName, image)
                | AsyncFinished
                | AsyncError
 
@@ -46,7 +46,7 @@ data ImageOrientationOperation = IPORotateCW
                                deriving (Read, Show)
 
 class Detector a where
-    detectorName :: a -> Text
+    detectorName :: a -> DetectorName
     acquireData :: a -> IO MeasuredImage
     acquireStreamingData :: a -> NMeasurementsToPerform -> Signal -> Chan AsyncData -> IO ()
     acquireStreamingData det nMeasurements hasStarted chan =    -- default implementation that can be overwritten

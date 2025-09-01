@@ -18,13 +18,14 @@ import Data.Word
 import GHC.Generics
 import System.Clock
 
---import Detectors.Detector
+import Camera.SCCameraTypes
 import Equipment.Equipment
 import Equipment.EquipmentTypes
 import Camera.SCCameraTypes
 import Utils.MiscUtils
 
 type Prog = [MeasurementElement]
+
 newtype AcquisitionTypeName = AcquisitionTypeName {fromAcqName :: Text} 
                             deriving (Show, Eq, Generic, Ord, NFData)
 newtype WaitDuration = WaitDuration {fromWaitDuration :: Double}
@@ -61,7 +62,7 @@ data DetectionParams = DetectionParams {
                        deriving (Show)
 
 data DetectorParams = DetectorParams {
-                          dtpDetectorName :: !Text
+                          dtpDetectorName :: !DetectorName
                         , dtpDetectorProperties :: ![DetectorProperty]
                       }
                       deriving (Show)
@@ -264,7 +265,7 @@ data AcquiredData = AcquiredData {
                         acqNRows :: !Int
                       , acqNCols :: !Int
                       , acqTimeStamp :: !SecondsSinceStartOfExperiment
-                      , acqDetectorName :: !Text
+                      , acqDetectorName :: !DetectorName
                       , acqData :: !ByteString
                       , acqNumType :: !NumberType
                   } deriving (Show, Generic, NFData)
@@ -286,7 +287,7 @@ instance MessagePack AcquiredData where
                           ]
     fromObject _ = error "no fromObject for AcquiredData"
 
-measuredImageAsAcquiredData :: MeasuredImage -> Text -> TimeAtStartOfExperiment -> TimeAtStartOfDetection -> AcquiredData
+measuredImageAsAcquiredData :: MeasuredImage -> DetectorName -> TimeAtStartOfExperiment -> TimeAtStartOfDetection -> AcquiredData
 measuredImageAsAcquiredData (MeasuredImage nRows nCols (SecondsSinceStartOfDetection secsSinceDetStart) vecData) cameraName startOfExperiment startOfDetection =
     AcquiredData nRows nCols (SecondsSinceStartOfExperiment timeStamp) cameraName (byteStringFromVector vecData) UINT16
     where

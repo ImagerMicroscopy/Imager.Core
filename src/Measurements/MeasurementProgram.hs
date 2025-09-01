@@ -62,14 +62,14 @@ executeMeasurement env me ddets =
                      in  filter (\e -> (robotName e) `elem` usedRobotEqNames) eqs
         (ddetsWithoutCommon, commonDetectorProperties) =  removeCommonDetectorProperties ddets
 
-removeCommonDetectorProperties :: DefinedDetections -> (DefinedDetections, Map Text [DetectorProperty])
+removeCommonDetectorProperties :: DefinedDetections -> (DefinedDetections, Map DetectorName [DetectorProperty])
 removeCommonDetectorProperties ddets = (ddetsWithoutCommon, commonDetectorProperties)
     where
         allDetectorParams :: [DetectorParams]
         allDetectorParams = mconcat (map dpDetectors (M.elems ddets))
-        allDetectorProperties :: Map Text [[DetectorProperty]]
+        allDetectorProperties :: Map DetectorName [[DetectorProperty]]
         allDetectorProperties = foldr (\dp accum -> M.insertWith (++) (dtpDetectorName dp) [(dtpDetectorProperties dp)] accum) M.empty allDetectorParams
-        commonDetectorProperties :: Map Text [DetectorProperty]
+        commonDetectorProperties :: Map DetectorName [DetectorProperty]
         commonDetectorProperties = M.map extractCommonDetectorProperties allDetectorProperties
             where
               extractCommonDetectorProperties :: [[DetectorProperty]] -> [DetectorProperty]
@@ -78,7 +78,7 @@ removeCommonDetectorProperties ddets = (ddetsWithoutCommon, commonDetectorProper
                       commonProperties = filter (\prop -> all (prop `elem`) pss) uniqueProperties
                   in  commonProperties
         ddetsWithoutCommon = M.map (\detParams -> detParams {dpDetectors = removeCommon commonDetectorProperties (dpDetectors detParams)}) ddets
-        removeCommon :: Map Text [DetectorProperty] -> [DetectorParams] -> [DetectorParams]
+        removeCommon :: Map DetectorName [DetectorProperty] -> [DetectorParams] -> [DetectorParams]
         removeCommon commonmap dtorparams =
             map (\(DetectorParams name opts) -> DetectorParams name (filter (`notElem` (fromJust $ M.lookup name commonmap)) opts)) dtorparams
 
