@@ -46,7 +46,7 @@ type DefinedDetections = Map AcquisitionTypeName DetectionParams
 
 data ProgramEnvironment a = ProgramEnvironment {
                                 peDetectors :: ![a]
-                              , peStartTime :: !TimeSpec
+                              , peStartTime :: !TimeAtStartOfExperiment
                               , peEquipment :: ![EquipmentW]
                               , peMessageChannel :: !MessageChannel
                               , peStatusMVar :: !(MVar [Text])
@@ -242,28 +242,35 @@ instance MessagePack AsyncMeasurementMessage where
 data AcquiredData = AcquiredData {
                         acqNRows :: !Int
                       , acqNCols :: !Int
-                      , acqTimeStamp :: !TimeSpec
+                      , acqTimeStamp :: !SecondsSinceStartOfExperiment
                       , acqDetectorName :: !Text
                       , acqData :: !ByteString
                       , acqNumType :: !NumberType
                   } deriving (Show, Generic, NFData)
 
 instance ToJSON AcquiredData where
-    toJSON (AcquiredData nRows nCols timeStamp camName bytes numType) =
-        object ["nrows" .= nRows, "ncols" .= nCols, "timestamp" .= (timeSpecAsSeconds timeStamp), "detectorname" .= camName, "data" .= (show bytes), "numtype" .= (show numType)]
-    toEncoding (AcquiredData nRows nCols timeStamp camName bytes numType) =
-        pairs ("nrows" .= nRows <> "ncols" .= nCols <> "timestamp" .= (timeSpecAsSeconds timeStamp) <> "detectorname" .= camName <> "data" .= (show bytes) <> "numtype" .= (show numType))
+    toJSON (AcquiredData nRows nCols (SecondsSinceStartOfExperiment timeStamp) camName bytes numType) =
+        object ["nrows" .= nRows, "ncols" .= nCols, "timestamp" .= timeStamp, "detectorname" .= camName, "data" .= (show bytes), "numtype" .= (show numType)]
+    toEncoding (AcquiredData nRows nCols (SecondsSinceStartOfExperiment timeStamp) camName bytes numType) =
+        pairs ("nrows" .= nRows <> "ncols" .= nCols <> "timestamp" .= timeStamp <> "detectorname" .= camName <> "data" .= (show bytes) <> "numtype" .= (show numType))
 
 instance MessagePack AcquiredData where
     toObject d = toObject $ M.fromList [
                              ("nrows" :: Text, toObject d.acqNRows),
                              ("ncols", toObject d.acqNCols),
-                             ("timestamp", toObject (timeSpecAsSeconds d.acqTimeStamp)),
+                             ("timestamp", toObject (sseAsSeconds d.acqTimeStamp)),
                              ("detectorname", toObject d.acqDetectorName),
                              ("imagedata", toObject d.acqData),
                              ("numtype", toObject (encodedNumType d.acqNumType))
                           ]
     fromObject _ = error "no fromObject for AcquiredData"
+
+measuredImageAsAcquiredData :: MeasuredImage -> Text -> TimeAtStartOfExperiment -> TimeAtStartOfDetection -> AcquiredData
+measuredImageAsAcquiredData (MeasuredImage nRows nCols (SecondsSinceStartOfDetection secsSinceDetStart) vecData) cameraName startOfExperiment startOfDetection =
+    AcquiredData nRows nCols (SecondsSinceStartOfExperiment timeStamp) cameraName (byteStringFromVector vecData) UINT16
+    where
+        secondsBetweenStartOfDetAndStartOfExp = timeSpecAsSeconds (diffTimeSpec (tasdAsTimeSpec startOfDetection) (taseAsTimeSpec startOfExperiment))
+        timeStamp = secondsBetweenStartOfDetAndStartOfExp + secsSinceDetStart
 
 data AcquisitionMetaData = AcquisitionMetaData {
                                amdStagePosition :: !StagePosition

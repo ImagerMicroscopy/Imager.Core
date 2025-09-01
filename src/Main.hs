@@ -28,6 +28,7 @@ import System.Clock
 import System.Environment
 import System.FilePath
 
+import Camera.SCCameraTypes
 import CuvettorTypes
 import Detectors.Detector
 import Equipment.Equipment
@@ -101,8 +102,7 @@ performAction env (AcquireData params) =
         return (AcquiredDataResponse acquiredData, env)
 
 performAction env ListWavelengths =
-    getTime Monotonic >>= \timeStamp ->
-    return (Wavelengths (AcquiredData nWavelengths 1 timeStamp "" wavelengths numType), env)
+    return (Wavelengths (AcquiredData nWavelengths 1 (SecondsSinceStartOfExperiment 0) "" wavelengths numType), env)
     where
         wavelengths = envEncodedSpectrometerWavelengths env
         nWavelengths = SB.length wavelengths `div` 8
@@ -217,7 +217,7 @@ startAsyncAcquisition env ddets me =
     validateMeasurementElementThrows (envDetectors env) (envEquipment env) me ddets >>
     newMessageChannel >>= \messageChannel ->
     newMVar [] >>= \statusMVar ->
-    getTime Monotonic >>= \startTime ->
+    TimeAtStartOfExperiment <$> getTime Monotonic >>= \startTime ->
     async (executeMeasurement (ProgramEnvironment detectors startTime (envEquipment env) messageChannel statusMVar) me ddets >>
            return ()) >>= \asyncWorker ->
     return (asyncWorker, messageChannel, statusMVar)

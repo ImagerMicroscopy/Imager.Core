@@ -68,10 +68,10 @@ data EquipmentPlugin = EquipmentPlugin {
                          , epGetFrameRate :: Text -> IO Double
                          , epIsConfiguredForHardwareTriggering :: Text -> IO Bool
                          , epSetImageOrientation :: Text -> [OrientationOp] -> IO ()
-                         , epAcquireSingleImage :: Text -> IO MeasuredImages
+                         , epAcquireSingleImage :: Text -> IO MeasuredImage
                          , epStartAsyncAcquisition :: Text -> IO ()
                          , epStartBoundedAsyncAcquisition :: Text -> Word64 -> IO ()
-                         , epGetOldestImageAsyncAcquired :: Text -> Word -> IO (Maybe MeasuredImages)
+                         , epGetOldestImageAsyncAcquired :: Text -> Word -> IO (Maybe MeasuredImage)
                          , epAbortAsyncAcquisition :: Text -> IO ()
                        }
 
@@ -98,32 +98,25 @@ data PluginDetector = PluginDetector {
 instance Detector PluginDetector where
     detectorName = pdCamName
 
-    acquireData :: PluginDetector -> IO AcquiredData
+    acquireData :: PluginDetector -> IO MeasuredImage
     acquireData (PluginDetector camName eP@(EquipmentPlugin{})) =
-        eP.epAcquireSingleImage camName >>= \(MeasuredImages nRows nCols _ vec) ->
-        getTime Monotonic >>= \timeStamp ->
-        let bytes = byteStringFromVector vec
-            numType = UINT16
-        in return (AcquiredData nRows nCols timeStamp camName bytes numType)
+        eP.epAcquireSingleImage camName
 
     acquireStreamingData :: PluginDetector -> NMeasurementsToPerform -> Signal -> Chan AsyncData -> IO ()
     acquireStreamingData (PluginDetector camName ep@(EquipmentPlugin{})) nMeasurements hasStarted chan =
         performAcq `onException` (ep.epAbortAsyncAcquisition camName >> writeChan chan AsyncError)
         where
-            performAcq = getTime Monotonic >>= \acqStart ->
-                            ep.epStartBoundedAsyncAcquisition camName (fromIntegral nMeasurements) >>
-                            raiseSignal hasStarted >>
-                            fetchImages nMeasurements acqStart chan >>
-                            writeChan chan AsyncFinished
-            fetchImages :: Int -> TimeSpec -> Chan AsyncData -> IO ()
-            fetchImages nImagesRemaining acqStart chan
+            performAcq = ep.epStartBoundedAsyncAcquisition camName (fromIntegral nMeasurements) >>
+                         raiseSignal hasStarted >>
+                         fetchImages nMeasurements chan >>
+                         writeChan chan AsyncFinished
+            fetchImages :: Int -> Chan AsyncData -> IO ()
+            fetchImages nImagesRemaining chan
                 | nImagesRemaining == 0 = return ()
                 | otherwise =
-                    fetchNextImage >>= \(MeasuredImages nRows nCols timeStamp imageData) ->
-                    let shiftedTimeStamp = fromNanoSecs (toNanoSecs acqStart + round (timeStamp * 1.0e9))
-                        acqData = AcquiredData nRows nCols shiftedTimeStamp camName (byteStringFromVector imageData) UINT16
-                    in  acqData `deepseq` writeChan chan (AsyncData acqData) >>
-                        fetchImages (nImagesRemaining - 1) acqStart chan
+                    fetchNextImage >>= \measuredImage ->
+                    writeChan chan (AsyncData (camName, measuredImage)) >>
+                    fetchImages (nImagesRemaining - 1) chan
             fetchNextImage = ep.epGetOldestImageAsyncAcquired camName 500 >>= \maybeImg ->
                                 if (isJust maybeImg)
                                     then return (fromJust maybeImg)
@@ -465,7 +458,7 @@ loadPlugin pluginConfigDir libName =
                 encodedOp FlipHorizontalOp = 2
                 encodedOp FlipVerticalOp = 3
         
-        acquireSingleImage :: GetLastErrorFunc -> AcquireSingleImageFunc -> ReleaseImageDataFunc -> Text -> IO MeasuredImages
+        acquireSingleImage :: GetLastErrorFunc -> AcquireSingleImageFunc -> ReleaseImageDataFunc -> Text -> IO MeasuredImage
         acquireSingleImage errF acqF releaseF camName =
             withCString (T.unpack camName) $ \nameStr ->
             alloca $ \nRowsPtr ->
@@ -476,7 +469,7 @@ loadPlugin pluginConfigDir libName =
             peek imagePtrPtr >>= newForeignPtr releaseF >>= \fPtr ->
             fromIntegral <$> peek nRowsPtr >>= \nRows ->
             fromIntegral <$> peek nColsPtr >>= \nCols ->
-            pure (MeasuredImages nRows nCols 0.0 (V.unsafeFromForeignPtr0 fPtr (nRows * nCols)))
+            pure (MeasuredImage nRows nCols (SecondsSinceStartOfDetection 0.0) (V.unsafeFromForeignPtr0 fPtr (nRows * nCols)))
 
         startAsyncAcquisition :: GetLastErrorFunc -> StartAsyncAcquisitionFunc -> Text -> IO ()
         startAsyncAcquisition errF f camName =
@@ -488,7 +481,7 @@ loadPlugin pluginConfigDir libName =
             withCString (T.unpack camName) $ \nameStr ->
             checkErrorWithCallback errF (f nameStr nImages)
 
-        getOldestImageAsyncAcquired :: GetLastErrorFunc -> GetOldestImageAsyncAcquiredFunc -> ReleaseImageDataFunc -> Text -> Word -> IO (Maybe MeasuredImages)
+        getOldestImageAsyncAcquired :: GetLastErrorFunc -> GetOldestImageAsyncAcquiredFunc -> ReleaseImageDataFunc -> Text -> Word -> IO (Maybe MeasuredImage)
         getOldestImageAsyncAcquired errF getImageF releaseImageF camName timeoutMillis =
             withCString (T.unpack camName) $ \nameStr ->
             alloca $ \imagePtrPtr ->
@@ -505,7 +498,7 @@ loadPlugin pluginConfigDir libName =
                     fromIntegral <$> peek nRowsPtr >>= \nRows ->
                     fromIntegral <$> peek nColsPtr >>= \nCols ->
                     fromCDouble <$> peek timeStampPtr >>= \timeStamp ->
-                    pure (Just (MeasuredImages nRows nCols timeStamp (V.unsafeFromForeignPtr0 fPtr (nRows * nCols))))
+                    pure (Just (MeasuredImage nRows nCols (SecondsSinceStartOfDetection timeStamp) (V.unsafeFromForeignPtr0 fPtr (nRows * nCols))))
     
         abortAsyncAcquisition :: GetLastErrorFunc -> AbortAsyncAcquisitionFunc -> Text -> IO ()
         abortAsyncAcquisition errF f camName =

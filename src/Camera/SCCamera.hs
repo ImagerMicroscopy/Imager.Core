@@ -112,7 +112,7 @@ setCameraOrientation camName ops =
         encodedOp FlipHorizontalOp = 2
         encodedOp FlipVerticalOp = 3
 
-acquireSingleImage :: Text -> IO MeasuredImages
+acquireSingleImage :: Text -> IO MeasuredImage
 acquireSingleImage camName =
     withCString (T.unpack camName) $ \nameStr ->
     alloca $ \nRowsPtr ->
@@ -126,7 +126,7 @@ acquireSingleImage camName =
     peek imagePtrPtr >>= newForeignPtr cReleaseImageData >>= \fPtr ->
     fromIntegral <$> peek nRowsPtr >>= \nRows ->
     fromIntegral <$> peek nColsPtr >>= \nCols ->
-    pure (MeasuredImages nRows nCols 0.0 (V.unsafeFromForeignPtr0 fPtr (nRows * nCols)))
+    pure (MeasuredImage nRows nCols 0.0 (V.unsafeFromForeignPtr0 fPtr (nRows * nCols)))
 
 startAsyncAcquisition :: Text -> IO ()
 startAsyncAcquisition camName =
@@ -144,7 +144,7 @@ startBoundedAsyncAcquisition camName nImages =
         T.unpack <$> getLastSCCamError >>=
         throwIO . userError)
 
-getNextAcquiredImage :: Text -> Word -> IO (Maybe MeasuredImages)
+getNextAcquiredImage :: Text -> Word -> IO (Maybe MeasuredImage)
 getNextAcquiredImage camName timeoutMillis =
     withCString (T.unpack camName) $ \nameStr ->
     alloca $ \imagePtrPtr ->
@@ -164,7 +164,7 @@ getNextAcquiredImage camName timeoutMillis =
             fromIntegral <$> peek nRowsPtr >>= \nRows ->
             fromIntegral <$> peek nColsPtr >>= \nCols ->
             fromCDouble <$> peek timeStampPtr >>= \timeStamp ->
-            pure (Just (MeasuredImages nRows nCols timeStamp (V.unsafeFromForeignPtr0 fPtr (nRows * nCols))))
+            pure (Just (MeasuredImage nRows nCols timeStamp (V.unsafeFromForeignPtr0 fPtr (nRows * nCols))))
 
 abortAsyncAcquisition :: Text -> IO ()
 abortAsyncAcquisition camName =

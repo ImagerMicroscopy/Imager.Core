@@ -1,3 +1,5 @@
+{-# LANGUAGE DeriveGeneric, DeriveAnyClass #-}
+
 module Camera.SCCameraTypes where
 
 import Control.DeepSeq
@@ -7,6 +9,7 @@ import qualified Data.Text as T
 import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
 import Data.Word
+import System.Clock
 
 data DetectorProperty = NumericProperty {
                           npID :: !Int
@@ -28,12 +31,22 @@ instance Eq DetectorProperty where
 data DetectorPropertyList = DetectorPropertyList {fromCPList :: ![DetectorProperty]}
                           deriving (Show)
 
-data MeasuredImages = MeasuredImages {
+data MeasuredImage = MeasuredImage {
                           miNRows :: !Int
                         , miNCols :: !Int
-                        , miTimeStamp :: !Double    -- seconds since beginning of acquisition
+                        , miTimeStamp :: !SecondsSinceStartOfDetection
                         , miData :: !(V.Vector Word16)
                       }
+
+newtype TimeAtStartOfDetection = TimeAtStartOfDetection {tasdAsTimeSpec :: TimeSpec} deriving (Show)
+newtype TimeAtStartOfExperiment = TimeAtStartOfExperiment {taseAsTimeSpec :: TimeSpec} deriving (Show)
+newtype SecondsSinceStartOfExperiment = SecondsSinceStartOfExperiment {sseAsSeconds :: Double} deriving (Show)
+newtype SecondsSinceStartOfDetection = SecondsSinceStartOfDetection {ssdAsSeconds :: Double} deriving (Show)
+
+instance NFData SecondsSinceStartOfExperiment where
+    rnf _ = ()
+instance NFData SecondsSinceStartOfDetection where
+    rnf _ = ()
 
 data OrientationOp = RotateCWOp
                    | RotateCCWOp

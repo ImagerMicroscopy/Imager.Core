@@ -12,6 +12,7 @@ import qualified Data.Text.Encoding as T
 import Data.Word
 import Debug.Trace
 
+import Camera.SCCameraTypes
 import CuvettorTypes
 import Detectors.Detector
 import Equipment.EquipmentTypes
@@ -69,7 +70,7 @@ encodeAcquiredData cms = let header = encodeHeader messageLength indices stagePo
       messageLength = 11 + (length acqs) * (8 + 24 + 8 + 8) + lengthOfEncodedAcquisitionNames + lengthOfEncodedDetectorNames + sum (map B.length acqBytes)
       lengthOfEncodedAcquisitionNames = sum (map ((+) 1  . B.length) acqTypeNames)
       lengthOfEncodedDetectorNames = sum (map ((+) 1 . B.length) detectorNames)
-      timeStamps = map (timeSpecAsSeconds . acqTimeStamp) datas
+      timeStamps = map (sseAsSeconds . acqTimeStamp) datas
       stagePositions = map amdStagePosition metadatas
       acqTypeNames = map (B.take 255 . T.encodeUtf8 . fromAcqName . amdAcquisitionTypename) metadatas
       detectorNames = map (B.take 255 . T.encodeUtf8 . acqDetectorName) datas
