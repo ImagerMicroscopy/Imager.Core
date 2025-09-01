@@ -7,6 +7,7 @@ import Control.Concurrent.Async
 import Control.Concurrent.STM
 import Control.DeepSeq
 import Data.Aeson
+import Data.Aeson.Types
 import Data.ByteString (ByteString)
 import Data.Either
 import Data.IORef
@@ -19,19 +20,20 @@ import Data.Word
 import GHC.Generics
 import System.Clock
 
---import Detectors.Detector
+import Camera.SCCameraTypes
 import Equipment.Equipment
 import Equipment.EquipmentTypes
 import Camera.SCCameraTypes
 import Utils.MiscUtils
 
 type Prog = [MeasurementElement]
+
 newtype AcquisitionTypeName = AcquisitionTypeName {fromAcqName :: Text} 
-                            deriving (Show, Eq, Generic, Ord, NFData, FromJSON, ToJSON, ToJSONKey, FromJSONKey)
+                            deriving (Show, Eq, Generic, Ord, NFData)
 newtype WaitDuration = WaitDuration {fromWaitDuration :: Double}
-                            deriving (Show, Eq, Generic, Ord, NFData, FromJSON, ToJSON, ToJSONKey, FromJSONKey)
+                            deriving (Show, Eq, Generic, Ord, NFData)
 newtype NumIterationsTotal = NumIterationsTotal {fromNumIterationsTotal :: Int}
-                            deriving (Show, Eq, Generic, Ord, NFData, FromJSON, ToJSON, ToJSONKey, FromJSONKey)
+                            deriving (Show, Eq, Generic, Ord, NFData)
 
 data MeasurementElement = MEDetection ![AcquisitionTypeName] ![SmartProgramID]
                         | MEIrradiation !LSIlluminationDuration ![IrradiationParams]
@@ -48,7 +50,7 @@ type DefinedDetections = Map AcquisitionTypeName DetectionParams
 
 data ProgramEnvironment a = ProgramEnvironment {
                                 peDetectors :: ![a]
-                              , peStartTime :: !TimeSpec
+                              , peStartTime :: !TimeAtStartOfExperiment
                               , peEquipment :: ![EquipmentW]
                               , peKnownSmartProgramIDs :: ![SmartProgramID]
                               , peSmartProgramCode :: Maybe SmartProgramCode
@@ -65,7 +67,7 @@ data DetectionParams = DetectionParams {
                        deriving (Show)
 
 data DetectorParams = DetectorParams {
-                          dtpDetectorName :: !Text
+                          dtpDetectorName :: !DetectorName
                         , dtpDetectorProperties :: ![DetectorProperty]
                       }
                       deriving (Show)
@@ -192,6 +194,26 @@ instance ToJSON RelativeStageLoopParams where
                "additionalplanesx" .= px <> "additionalplanesy" .= py <> "additionalplanesz" .= pz <> "returntostartingposition" .= ret)
     toJSON _ = error "no toJSON"
 
+instance ToJSON AcquisitionTypeName where
+    toJSON (AcquisitionTypeName n) = toJSON n
+instance FromJSON AcquisitionTypeName where
+    parseJSON = fmap AcquisitionTypeName . parseJSON
+instance ToJSONKey AcquisitionTypeName where
+    toJSONKey = toJSONKeyText fromAcqName
+instance FromJSONKey AcquisitionTypeName where
+    fromJSONKey = FromJSONKeyText AcquisitionTypeName
+
+
+instance ToJSON WaitDuration where
+    toJSON (WaitDuration n) = toJSON n
+instance FromJSON WaitDuration where
+    parseJSON = fmap WaitDuration . parseJSON
+
+instance ToJSON NumIterationsTotal where
+    toJSON (NumIterationsTotal n) = toJSON n
+instance FromJSON NumIterationsTotal where
+    parseJSON = fmap NumIterationsTotal . parseJSON 
+
 data ChannelMessage = ChannelMessage {
                           cmIdx :: !Word64,                 -- unique index of the message
                           cmMsg :: !AsyncMeasurementMessage -- message itself
@@ -247,28 +269,35 @@ instance MessagePack AsyncMeasurementMessage where
 data AcquiredData = AcquiredData {
                         acqNRows :: !Int
                       , acqNCols :: !Int
-                      , acqTimeStamp :: !TimeSpec
-                      , acqDetectorName :: !Text
+                      , acqTimeStamp :: !SecondsSinceStartOfExperiment
+                      , acqDetectorName :: !DetectorName
                       , acqData :: !ByteString
                       , acqNumType :: !NumberType
                   } deriving (Show, Generic, NFData)
 
 instance ToJSON AcquiredData where
-    toJSON (AcquiredData nRows nCols timeStamp camName bytes numType) =
-        object ["nrows" .= nRows, "ncols" .= nCols, "timestamp" .= (timeSpecAsSeconds timeStamp), "detectorname" .= camName, "data" .= (show bytes), "numtype" .= (show numType)]
-    toEncoding (AcquiredData nRows nCols timeStamp camName bytes numType) =
-        pairs ("nrows" .= nRows <> "ncols" .= nCols <> "timestamp" .= (timeSpecAsSeconds timeStamp) <> "detectorname" .= camName <> "data" .= (show bytes) <> "numtype" .= (show numType))
+    toJSON (AcquiredData nRows nCols (SecondsSinceStartOfExperiment timeStamp) camName bytes numType) =
+        object ["nrows" .= nRows, "ncols" .= nCols, "timestamp" .= timeStamp, "detectorname" .= camName, "data" .= (show bytes), "numtype" .= (show numType)]
+    toEncoding (AcquiredData nRows nCols (SecondsSinceStartOfExperiment timeStamp) camName bytes numType) =
+        pairs ("nrows" .= nRows <> "ncols" .= nCols <> "timestamp" .= timeStamp <> "detectorname" .= camName <> "data" .= (show bytes) <> "numtype" .= (show numType))
 
 instance MessagePack AcquiredData where
     toObject d = toObject $ M.fromList [
                              ("nrows" :: Text, toObject d.acqNRows),
                              ("ncols", toObject d.acqNCols),
-                             ("timestamp", toObject (timeSpecAsSeconds d.acqTimeStamp)),
+                             ("timestamp", toObject (sseAsSeconds d.acqTimeStamp)),
                              ("detectorname", toObject d.acqDetectorName),
                              ("imagedata", toObject d.acqData),
                              ("numtype", toObject (encodedNumType d.acqNumType))
                           ]
     fromObject _ = error "no fromObject for AcquiredData"
+
+measuredImageAsAcquiredData :: MeasuredImage -> DetectorName -> TimeAtStartOfExperiment -> TimeAtStartOfDetection -> AcquiredData
+measuredImageAsAcquiredData (MeasuredImage nRows nCols (SecondsSinceStartOfDetection secsSinceDetStart) vecData) cameraName startOfExperiment startOfDetection =
+    AcquiredData nRows nCols (SecondsSinceStartOfExperiment timeStamp) cameraName (byteStringFromVector vecData) UINT16
+    where
+        secondsBetweenStartOfDetAndStartOfExp = timeSpecAsSeconds (diffTimeSpec (tasdAsTimeSpec startOfDetection) (taseAsTimeSpec startOfExperiment))
+        timeStamp = secondsBetweenStartOfDetAndStartOfExp + secsSinceDetStart
 
 data AcquisitionMetaData = AcquisitionMetaData {
                                amdStagePosition :: !StagePosition

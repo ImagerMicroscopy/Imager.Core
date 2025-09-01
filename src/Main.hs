@@ -28,6 +28,7 @@ import System.Clock
 import System.Environment
 import System.FilePath
 
+import Camera.SCCameraTypes
 import CuvettorTypes
 import Detectors.Detector
 import Equipment.Equipment
@@ -72,12 +73,12 @@ main =
                         asyncMessageChannel asyncStatusMessagesMVar asyncProgramWorker
       in  wait =<< async (runServer 3200 messageHandler env serverSettings)
     where
-        applyCameraOptions :: Detector a => [a] -> [(Text, [ImageOrientationOperation])] -> IO ()
+        applyCameraOptions :: Detector a => [a] -> [(DetectorName, [ImageOrientationOperation])] -> IO ()
         applyCameraOptions dets opts =
             forM_ dets (\det ->
                 case lookup (detectorName det) opts of
                     Just operations -> setImageOrientation det operations
-                    Nothing         -> putStrLn ("No image orientation options found for " ++ T.unpack (detectorName det)))
+                    Nothing         -> putStrLn ("No image orientation options found for " ++ T.unpack (fromDetectorName $ detectorName det)))
 
 messageHandler :: Detector a => MessageHandler (Environment a)
 messageHandler msg env =
@@ -100,8 +101,7 @@ performAction env (AcquireData params) =
         return (AcquiredDataResponse acquiredData, env)
 
 performAction env ListWavelengths =
-    getTime Monotonic >>= \timeStamp ->
-    return (Wavelengths (AcquiredData nWavelengths 1 timeStamp "" wavelengths numType), env)
+    return (Wavelengths (AcquiredData nWavelengths 1 (SecondsSinceStartOfExperiment 0) (DetectorName "") wavelengths numType), env)
     where
         wavelengths = envEncodedSpectrometerWavelengths env
         nWavelengths = SB.length wavelengths `div` 8
@@ -217,7 +217,7 @@ startAsyncAcquisition env ddets me =
     newMessageChannel >>= \messageChannel ->
     newMVar [] >>= \statusMVar ->
     newSmartProgramsChannel >>= \smartProgramSendChan ->
-    getTime Monotonic >>= \startTime ->
+    TimeAtStartOfExperiment <$> getTime Monotonic >>= \startTime ->
     async (executeMeasurement (ProgramEnvironment detectors startTime (envEquipment env) [] Nothing messageChannel statusMVar smartProgramSendChan) me ddets >>
            return ()) >>= \asyncWorker ->
     return (asyncWorker, messageChannel, statusMVar)

@@ -62,17 +62,17 @@ data EquipmentPlugin = EquipmentPlugin {
                          , epGetStagePositionFunc :: IO StagePosition
                          , epSetStagePositionFunc :: StagePosition -> IO ()
                          
-                         , epListConnectedCameras :: [Text]
-                         , epGetCameraOptions :: Text -> IO [DetectorProperty]
-                         , epSetCameraOption :: Text -> DetectorProperty -> IO ()
-                         , epGetFrameRate :: Text -> IO Double
-                         , epIsConfiguredForHardwareTriggering :: Text -> IO Bool
-                         , epSetImageOrientation :: Text -> [OrientationOp] -> IO ()
-                         , epAcquireSingleImage :: Text -> IO MeasuredImages
-                         , epStartAsyncAcquisition :: Text -> IO ()
-                         , epStartBoundedAsyncAcquisition :: Text -> Word64 -> IO ()
-                         , epGetOldestImageAsyncAcquired :: Text -> Word -> IO (Maybe MeasuredImages)
-                         , epAbortAsyncAcquisition :: Text -> IO ()
+                         , epListConnectedCameras :: [DetectorName]
+                         , epGetCameraOptions :: DetectorName -> IO [DetectorProperty]
+                         , epSetCameraOption :: DetectorName -> DetectorProperty -> IO ()
+                         , epGetFrameRate :: DetectorName -> IO Double
+                         , epIsConfiguredForHardwareTriggering :: DetectorName -> IO Bool
+                         , epSetImageOrientation :: DetectorName -> [OrientationOp] -> IO ()
+                         , epAcquireSingleImage :: DetectorName -> IO MeasuredImage
+                         , epStartAsyncAcquisition :: DetectorName -> IO ()
+                         , epStartBoundedAsyncAcquisition :: DetectorName -> Word64 -> IO ()
+                         , epGetOldestImageAsyncAcquired :: DetectorName -> Word -> IO (Maybe MeasuredImage)
+                         , epAbortAsyncAcquisition :: DetectorName -> IO ()
                        }
 
 instance Equipment EquipmentPlugin where
@@ -91,39 +91,32 @@ instance Equipment EquipmentPlugin where
     setStagePosition = epSetStagePositionFunc
 
 data PluginDetector = PluginDetector {
-                          pdCamName :: !Text
+                          pdCamName :: !DetectorName
                         , pdEquipmentPlugin :: EquipmentPlugin
                       }
 
 instance Detector PluginDetector where
     detectorName = pdCamName
 
-    acquireData :: PluginDetector -> IO AcquiredData
+    acquireData :: PluginDetector -> IO MeasuredImage
     acquireData (PluginDetector camName eP@(EquipmentPlugin{})) =
-        eP.epAcquireSingleImage camName >>= \(MeasuredImages nRows nCols _ vec) ->
-        getTime Monotonic >>= \timeStamp ->
-        let bytes = byteStringFromVector vec
-            numType = UINT16
-        in return (AcquiredData nRows nCols timeStamp camName bytes numType)
+        eP.epAcquireSingleImage camName
 
     acquireStreamingData :: PluginDetector -> NMeasurementsToPerform -> Signal -> Chan AsyncData -> IO ()
     acquireStreamingData (PluginDetector camName ep@(EquipmentPlugin{})) nMeasurements hasStarted chan =
         performAcq `onException` (ep.epAbortAsyncAcquisition camName >> writeChan chan AsyncError)
         where
-            performAcq = getTime Monotonic >>= \acqStart ->
-                            ep.epStartBoundedAsyncAcquisition camName (fromIntegral nMeasurements) >>
-                            raiseSignal hasStarted >>
-                            fetchImages nMeasurements acqStart chan >>
-                            writeChan chan AsyncFinished
-            fetchImages :: Int -> TimeSpec -> Chan AsyncData -> IO ()
-            fetchImages nImagesRemaining acqStart chan
+            performAcq = ep.epStartBoundedAsyncAcquisition camName (fromIntegral nMeasurements) >>
+                         raiseSignal hasStarted >>
+                         fetchImages nMeasurements chan >>
+                         writeChan chan AsyncFinished
+            fetchImages :: Int -> Chan AsyncData -> IO ()
+            fetchImages nImagesRemaining chan
                 | nImagesRemaining == 0 = return ()
                 | otherwise =
-                    fetchNextImage >>= \(MeasuredImages nRows nCols timeStamp imageData) ->
-                    let shiftedTimeStamp = fromNanoSecs (toNanoSecs acqStart + round (timeStamp * 1.0e9))
-                        acqData = AcquiredData nRows nCols shiftedTimeStamp camName (byteStringFromVector imageData) UINT16
-                    in  acqData `deepseq` writeChan chan (AsyncData acqData) >>
-                        fetchImages (nImagesRemaining - 1) acqStart chan
+                    fetchNextImage >>= \measuredImage ->
+                    writeChan chan (AsyncData (camName, measuredImage)) >>
+                    fetchImages (nImagesRemaining - 1) chan
             fetchNextImage = ep.epGetOldestImageAsyncAcquired camName 500 >>= \maybeImg ->
                                 if (isJust maybeImg)
                                     then return (fromJust maybeImg)
@@ -415,11 +408,11 @@ loadPlugin pluginConfigDir libName =
             \(StagePosition x y z useAF afOffset) ->
                 checkError (f (CDouble x) (CDouble y) (CDouble z) (if (useAF) then 1 else 0) (fromIntegral afOffset))
         
-        listConnectedCameras ::  ListConnectedCameraNamesFunc -> IO [Text]
-        listConnectedCameras f = handleStringListFuncT f
+        listConnectedCameras ::  ListConnectedCameraNamesFunc -> IO [DetectorName]
+        listConnectedCameras f = map DetectorName <$> (handleStringListFuncT f)
 
-        getCameraOptions :: GetLastErrorFunc -> GetCameraOptionsFunc -> ReleaseOptionsDataFunc -> Text -> IO [DetectorProperty]
-        getCameraOptions errF getOptionsF releaseOptionsF camName =
+        getCameraOptions :: GetLastErrorFunc -> GetCameraOptionsFunc -> ReleaseOptionsDataFunc -> DetectorName -> IO [DetectorProperty]
+        getCameraOptions errF getOptionsF releaseOptionsF (DetectorName camName) =
             withCString (T.unpack camName) $ \nameStr ->
             alloca $ \strPtr ->
             poke strPtr nullPtr >>
@@ -430,21 +423,21 @@ loadPlugin pluginConfigDir libName =
                 when ((not . isJust) decoded) (print decoded) >>
                 (pure . fromCPList . fromJust) decoded)
         
-        setCameraOption :: GetLastErrorFunc -> SetCameraOptionFunc -> Text -> DetectorProperty -> IO ()
-        setCameraOption errF f camName option =
+        setCameraOption :: GetLastErrorFunc -> SetCameraOptionFunc -> DetectorName -> DetectorProperty -> IO ()
+        setCameraOption errF f (DetectorName camName) option =
             withCString (T.unpack camName) $ \nameStr ->
             B.useAsCString (LB.toStrict $ encode option) $ \optStr ->
             checkErrorWithCallback errF (f nameStr optStr)
         
-        getFrameRate :: GetLastErrorFunc -> GetFrameRateFunc -> Text -> IO Double
-        getFrameRate errF f camName =
+        getFrameRate :: GetLastErrorFunc -> GetFrameRateFunc -> DetectorName -> IO Double
+        getFrameRate errF f (DetectorName camName) =
             withCString (T.unpack camName) $ \nameStr ->
             alloca $ \frPtr ->
             checkErrorWithCallback errF (f nameStr frPtr) >>
             fromCDouble <$> peek frPtr
         
-        isConfiguredForHardwareTriggering :: GetLastErrorFunc -> IsConfiguredForHardwareTriggeringFunc -> Text -> IO Bool
-        isConfiguredForHardwareTriggering errF f camName =
+        isConfiguredForHardwareTriggering :: GetLastErrorFunc -> IsConfiguredForHardwareTriggeringFunc -> DetectorName -> IO Bool
+        isConfiguredForHardwareTriggering errF f (DetectorName camName) =
             withCString (T.unpack camName) $ \nameStr ->
             alloca $ \isConfPtr ->
             checkErrorWithCallback errF (f nameStr isConfPtr) >>
@@ -453,8 +446,8 @@ loadPlugin pluginConfigDir libName =
                 then (pure False)
                 else (pure True)
         
-        setImageOrientation :: GetLastErrorFunc -> SetImageOrientationFunc -> Text -> [OrientationOp] -> IO ()
-        setImageOrientation errF f camName ops =
+        setImageOrientation :: GetLastErrorFunc -> SetImageOrientationFunc -> DetectorName -> [OrientationOp] -> IO ()
+        setImageOrientation errF f (DetectorName camName) ops =
             withCString (T.unpack camName) $ \nameStr ->
             withArray (map encodedOp ops) $ \opsPtr ->
             checkErrorWithCallback errF (f nameStr opsPtr (fromIntegral $ length ops))
@@ -465,8 +458,8 @@ loadPlugin pluginConfigDir libName =
                 encodedOp FlipHorizontalOp = 2
                 encodedOp FlipVerticalOp = 3
         
-        acquireSingleImage :: GetLastErrorFunc -> AcquireSingleImageFunc -> ReleaseImageDataFunc -> Text -> IO MeasuredImages
-        acquireSingleImage errF acqF releaseF camName =
+        acquireSingleImage :: GetLastErrorFunc -> AcquireSingleImageFunc -> ReleaseImageDataFunc -> DetectorName -> IO MeasuredImage
+        acquireSingleImage errF acqF releaseF (DetectorName camName) =
             withCString (T.unpack camName) $ \nameStr ->
             alloca $ \nRowsPtr ->
             alloca $ \nColsPtr ->
@@ -476,20 +469,20 @@ loadPlugin pluginConfigDir libName =
             peek imagePtrPtr >>= newForeignPtr releaseF >>= \fPtr ->
             fromIntegral <$> peek nRowsPtr >>= \nRows ->
             fromIntegral <$> peek nColsPtr >>= \nCols ->
-            pure (MeasuredImages nRows nCols 0.0 (V.unsafeFromForeignPtr0 fPtr (nRows * nCols)))
+            pure (MeasuredImage nRows nCols (SecondsSinceStartOfDetection 0.0) (V.unsafeFromForeignPtr0 fPtr (nRows * nCols)))
 
-        startAsyncAcquisition :: GetLastErrorFunc -> StartAsyncAcquisitionFunc -> Text -> IO ()
-        startAsyncAcquisition errF f camName =
+        startAsyncAcquisition :: GetLastErrorFunc -> StartAsyncAcquisitionFunc -> DetectorName -> IO ()
+        startAsyncAcquisition errF f (DetectorName camName) =
             withCString (T.unpack camName) $ \nameStr ->
             checkErrorWithCallback errF (f nameStr)
         
-        startBoundedAsyncAcquisition :: GetLastErrorFunc -> StartBoundedAsyncAcquisitionFunc -> Text -> Word64 -> IO ()
-        startBoundedAsyncAcquisition errF f camName nImages =
+        startBoundedAsyncAcquisition :: GetLastErrorFunc -> StartBoundedAsyncAcquisitionFunc -> DetectorName -> Word64 -> IO ()
+        startBoundedAsyncAcquisition errF f (DetectorName camName) nImages =
             withCString (T.unpack camName) $ \nameStr ->
             checkErrorWithCallback errF (f nameStr nImages)
 
-        getOldestImageAsyncAcquired :: GetLastErrorFunc -> GetOldestImageAsyncAcquiredFunc -> ReleaseImageDataFunc -> Text -> Word -> IO (Maybe MeasuredImages)
-        getOldestImageAsyncAcquired errF getImageF releaseImageF camName timeoutMillis =
+        getOldestImageAsyncAcquired :: GetLastErrorFunc -> GetOldestImageAsyncAcquiredFunc -> ReleaseImageDataFunc -> DetectorName -> Word -> IO (Maybe MeasuredImage)
+        getOldestImageAsyncAcquired errF getImageF releaseImageF (DetectorName camName) timeoutMillis =
             withCString (T.unpack camName) $ \nameStr ->
             alloca $ \imagePtrPtr ->
             alloca $ \nRowsPtr ->
@@ -505,10 +498,10 @@ loadPlugin pluginConfigDir libName =
                     fromIntegral <$> peek nRowsPtr >>= \nRows ->
                     fromIntegral <$> peek nColsPtr >>= \nCols ->
                     fromCDouble <$> peek timeStampPtr >>= \timeStamp ->
-                    pure (Just (MeasuredImages nRows nCols timeStamp (V.unsafeFromForeignPtr0 fPtr (nRows * nCols))))
+                    pure (Just (MeasuredImage nRows nCols (SecondsSinceStartOfDetection timeStamp) (V.unsafeFromForeignPtr0 fPtr (nRows * nCols))))
     
-        abortAsyncAcquisition :: GetLastErrorFunc -> AbortAsyncAcquisitionFunc -> Text -> IO ()
-        abortAsyncAcquisition errF f camName =
+        abortAsyncAcquisition :: GetLastErrorFunc -> AbortAsyncAcquisitionFunc -> DetectorName -> IO ()
+        abortAsyncAcquisition errF f (DetectorName camName) =
             withCString (T.unpack camName) $ \nameStr ->
             checkErrorWithCallback errF (f nameStr)
 

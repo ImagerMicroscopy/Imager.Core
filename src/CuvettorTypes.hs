@@ -27,6 +27,7 @@ import Foreign
 import System.Clock
 import System.IO.Unsafe
 
+import Camera.SCCameraTypes
 import Utils.MiscUtils
 import Detectors.Detector
 import Equipment.Equipment
@@ -53,8 +54,8 @@ data RequestMessage = AcquireData !DetectionParams
                     | SetMotorizedStagePosition !StageName !StagePosition
                     | ListRobotPrograms !RobotName
                     | ListAvailableDetectors
-                    | GetDetectorProperties !Text
-                    | SetDetectorProperty !Text !DetectorProperty
+                    | GetDetectorProperties !DetectorName
+                    | SetDetectorProperty !DetectorName !DetectorProperty
                     | Ping
                     | ExecuteMeasurementProgram {
                           execMeasurementProgram :: !MeasurementElement
@@ -123,7 +124,7 @@ data ResponseMessage = StatusOK
                      | AvailableEquipment ![EquipmentW]
                      | MotorizedStagePosition !StagePosition
                      | RobotProgramsResponse ![RobotProgramName]
-                     | AvailableDetectorsResponse ![Text]
+                     | AvailableDetectorsResponse ![DetectorName]
                      | DetectorPropertiesResponse ![DetectorProperty] Double
                      | Pong
                      | AsyncAcquiredData ![ChannelMessage]
@@ -193,8 +194,8 @@ binaryEncode (Wavelengths d) = error "TODO: encoding wavelengths is unsupported 
 binaryEncode _ = error "no binary encoding for this type"
 
 encodeInMessagePack :: ResponseMessage -> [ByteString]
-encodeInMessagePack (AcquiredDataResponse ds) = map (LB.toStrict . pack) ds
-encodeInMessagePack (AsyncAcquiredData ds) = map (LB.toStrict . pack) ds
+encodeInMessagePack (AcquiredDataResponse ds) = map (B.toStrict . pack) ds
+encodeInMessagePack (AsyncAcquiredData ds) = map (B.toStrict . pack) ds
 encodeInMessagePack (Wavelengths d) = error "TODO: encoding wavelengths is unsupported for now" --encodeAcquiredData [(AcquisitionMetaData 0 (StagePosition (-1.0) (-1.0) (-1.0) False 0) "DUMMY", d)]
 encodeInMessagePack _ = error "no binary encoding for this type"
 
@@ -207,13 +208,13 @@ encodeAcquiredData cms = let header = encodeHeader messageLength indices stagePo
       metadatas = map acquisitionMetaData acqs
       datas = map acquiredData acqs
       indices = map cmIdx cms
-      messageLength = 11 + (length acqs) * (8 + 24 + 8 + 8) + lengthOfEncodedAcquisitionNames + lengthOfEncodedDetectorNames + sum (map SB.length acqBytes)
-      lengthOfEncodedAcquisitionNames = sum (map ((+) 1  . SB.length) acqTypeNames)
-      lengthOfEncodedDetectorNames = sum (map ((+) 1 . SB.length) detectorNames)
-      timeStamps = map (timeSpecAsSeconds . acqTimeStamp) datas
+      messageLength = 11 + (length acqs) * (8 + 24 + 8 + 8) + lengthOfEncodedAcquisitionNames + lengthOfEncodedDetectorNames + sum (map B.length acqBytes)
+      lengthOfEncodedAcquisitionNames = sum (map ((+) 1  . B.length) acqTypeNames)
+      lengthOfEncodedDetectorNames = sum (map ((+) 1 . B.length) detectorNames)
+      timeStamps = map (sseAsSeconds . acqTimeStamp) datas
       stagePositions = map amdStagePosition metadatas
-      acqTypeNames = map (SB.take 255 . T.encodeUtf8 . fromAcqName . amdAcquisitionTypename) metadatas
-      detectorNames = map (SB.take 255 . T.encodeUtf8 . acqDetectorName) datas
+      acqTypeNames = map (B.take 255 . T.encodeUtf8 . fromAcqName . amdAcquisitionTypename) metadatas
+      detectorNames = map (B.take 255 . T.encodeUtf8 . fromDetectorName . acqDetectorName) datas
       dataSizes = map ((\a -> (acqNRows a, acqNCols a))) datas
       numType = encodedNumType $ acqNumType (head datas)
       acqBytes = map acqData datas
@@ -227,8 +228,8 @@ encodeHeader messageLength indices stagePoss acqTypeNames detectorNames dataDims
         putWord32le (fromIntegral $ length timeStamps) >>
         mapM_ putWord64le indices >>
         forM_ stagePoss (\(StagePosition x y z _ _) -> putFloat64le x >> putFloat64le y >> putFloat64le z) >>
-        forM_ acqTypeNames (\n -> putWord8 (fromIntegral $ SB.length n) >> putByteString n) >>
-        forM_ detectorNames (\n -> putWord8 (fromIntegral $ SB.length n) >> putByteString n) >>
+        forM_ acqTypeNames (\n -> putWord8 (fromIntegral $ B.length n) >> putByteString n) >>
+        forM_ detectorNames (\n -> putWord8 (fromIntegral $ B.length n) >> putByteString n) >>
         forM_ dataDims (\(nRows, nCols) ->
             putWord32le (fromIntegral nRows) >> putWord32le (fromIntegral nCols)) >>
         mapM_ putFloat64le timeStamps

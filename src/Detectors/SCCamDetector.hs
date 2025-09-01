@@ -36,7 +36,7 @@ instance Detector SCCamDetector where
     detectorName = sccCamName
     acquireData :: SCCamDetector -> IO AcquiredData
     acquireData (SCCamDetector camName) =
-        SC.acquireSingleImage camName >>= \(SC.MeasuredImages nRows nCols _ vec) ->
+        SC.acquireSingleImage camName >>= \(SC.MeasuredImage nRows nCols _ vec) ->
         getTime Monotonic >>= \timeStamp ->
         let bytes = byteStringFromVector vec
             numType = UINT16
@@ -55,7 +55,7 @@ instance Detector SCCamDetector where
             fetchImages nImagesRemaining acqStart chan
                 | nImagesRemaining == 0 = return ()
                 | otherwise =
-                    fetchNextImage >>= \(SC.MeasuredImages nRows nCols timeStamp imageData) ->
+                    fetchNextImage >>= \(SC.MeasuredImage nRows nCols timeStamp imageData) ->
                     let shiftedTimeStamp = fromNanoSecs (toNanoSecs acqStart + round (timeStamp * 1.0e9))
                         acqData = AcquiredData nRows nCols shiftedTimeStamp camName (byteStringFromVector imageData) UINT16
                     in  acqData `deepseq` writeChan chan (AsyncData acqData) >>
