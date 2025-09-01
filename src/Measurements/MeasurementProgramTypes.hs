@@ -5,6 +5,7 @@ module Measurements.MeasurementProgramTypes where
 import Control.Concurrent
 import Control.DeepSeq
 import Data.Aeson
+import Data.Aeson.Types
 import Data.ByteString (ByteString)
 import Data.Either
 import Data.IORef
@@ -25,11 +26,11 @@ import Utils.MiscUtils
 
 type Prog = [MeasurementElement]
 newtype AcquisitionTypeName = AcquisitionTypeName {fromAcqName :: Text} 
-                            deriving (Show, Eq, Generic, Ord, NFData, FromJSON, ToJSON, ToJSONKey, FromJSONKey)
+                            deriving (Show, Eq, Generic, Ord, NFData)
 newtype WaitDuration = WaitDuration {fromWaitDuration :: Double}
-                            deriving (Show, Eq, Generic, Ord, NFData, FromJSON, ToJSON, ToJSONKey, FromJSONKey)
+                            deriving (Show, Eq, Generic, Ord, NFData)
 newtype NumIterationsTotal = NumIterationsTotal {fromNumIterationsTotal :: Int}
-                            deriving (Show, Eq, Generic, Ord, NFData, FromJSON, ToJSON, ToJSONKey, FromJSONKey)
+                            deriving (Show, Eq, Generic, Ord, NFData)
 
 data MeasurementElement = MEDetection ![AcquisitionTypeName]
                         | MEIrradiation !LSIlluminationDuration ![IrradiationParams]
@@ -186,6 +187,26 @@ instance ToJSON RelativeStageLoopParams where
         pairs ("deltax" .= dx <> "deltay" .= dy <> "deltaz" .= dz <>
                "additionalplanesx" .= px <> "additionalplanesy" .= py <> "additionalplanesz" .= pz <> "returntostartingposition" .= ret)
     toJSON _ = error "no toJSON"
+
+instance ToJSON AcquisitionTypeName where
+    toJSON (AcquisitionTypeName n) = toJSON n
+instance FromJSON AcquisitionTypeName where
+    parseJSON = fmap AcquisitionTypeName . parseJSON
+instance ToJSONKey AcquisitionTypeName where
+    toJSONKey = toJSONKeyText fromAcqName
+instance FromJSONKey AcquisitionTypeName where
+    fromJSONKey = FromJSONKeyText AcquisitionTypeName
+
+
+instance ToJSON WaitDuration where
+    toJSON (WaitDuration n) = toJSON n
+instance FromJSON WaitDuration where
+    parseJSON = fmap WaitDuration . parseJSON
+
+instance ToJSON NumIterationsTotal where
+    toJSON (NumIterationsTotal n) = toJSON n
+instance FromJSON NumIterationsTotal where
+    parseJSON = fmap NumIterationsTotal . parseJSON 
 
 data ChannelMessage = ChannelMessage {
                           cmIdx :: !Word64,                 -- unique index of the message
