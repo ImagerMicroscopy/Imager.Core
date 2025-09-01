@@ -20,6 +20,9 @@ import Network.HTTP.Req
 
 import Measurements.MeasurementProgramTypes
 
+startSmartPrograms :: SmartProgramCode -> IO ()
+startSmartPrograms code = undefined
+
 getAllSmartProgramIDsUsedInMeasurement :: MeasurementElement -> [SmartProgramID]
 getAllSmartProgramIDsUsedInMeasurement me = S.toList (searchWorker S.empty me)
     where

@@ -45,6 +45,8 @@ executeMeasurement :: Detector a => ProgramEnvironment a -> MeasurementElement -
 executeMeasurement env me ddets =
     withAsync (forever $ resetSystemSleepTimer >> threadDelay (round 60.0e6)) (\_ ->
     withAsync (sendDetectedImagesToSmartProgram_Worker (peSmartProgramSendChan env)) (\_ ->
+        when (isJust (peSmartProgramCode env)) (
+            startSmartPrograms (fromJust (peSmartProgramCode env))) >>
         forM_ eqs (flushSerialPorts) >>
         forM_ (M.toList commonDetectorProperties) (\(detName, opts) ->
             mapM_ (setDetectorOption (namedDetector detName)) opts) >>
@@ -87,7 +89,7 @@ executeMeasurementElements :: Detector a => ProgramEnvironment a -> DefinedDetec
 executeMeasurementElements env ddets es = mapM_ (executeMeasurementElement env ddets) es
 
 executeMeasurementElement :: Detector a => ProgramEnvironment a -> DefinedDetections -> MeasurementElement -> IO ()
-executeMeasurementElement env ddets (MEDetection detNames _) =
+executeMeasurementElement env ddets (MEDetection detNames smartProgramIDs) =
     withStatusMessage env "Detection" (
         executeDetection detectors eqs (detNames, detParams) startTime messageChannel)
     where
@@ -316,7 +318,7 @@ insertFastAcquisitionLoops ddets (MEStageLoop n pos es) = MEStageLoop n pos (map
 insertFastAcquisitionLoops ddets (MERelativeStageLoop n ps es) = MERelativeStageLoop n ps (map (insertFastAcquisitionLoops ddets) es)
 insertFastAcquisitionLoops d m = m
 
-executeDetection :: Detector a => [a] -> [EquipmentW] -> ([AcquisitionTypeName], [DetectionParams]) -> TimeSpec -> MessageChannel -> IO ()
+executeDetection :: Detector a => [a] -> [EquipmentW] -> ([AcquisitionTypeName], [DetectionParams]) -> [SmartProgramID] -> TimeSpec -> MessageChannel -> IO ()
 executeDetection dets eqs (detNames, detParams) startTime messageChannel =
     getStagePositionSafe eqs >>= \stagePos ->
     forM_ (zip detNames detParams) (\(dName, dps) ->
@@ -332,6 +334,22 @@ executeDetection dets eqs (detNames, detParams) startTime messageChannel =
                  disableLightSources eqs (dpIrradiation dps) >>
                  forM_ acquiredData (\acq ->
                      (acq `deepseq` (addDataToChannel messageChannel startTime stagePos dName acq))))
+    where
+        addDataToChannel :: MessageChannel -> TimeSpec -> StagePosition -> AcquisitionTypeName -> AcquiredData -> IO ()
+        addDataToChannel messageChannel startTime stagePosition acqType d =
+            numMessagesInChannel messageChannel >>= \nMessages ->
+            when (nMessages > 250) (throwIO (userError "too many async data stored")) >>
+            sendMessageToChannel messageChannel (AcquiredDataMessage metaData (adjustTime d))
+            where
+                metaData = AcquisitionMetaData stagePosition acqType
+                adjustTime :: AcquiredData -> AcquiredData
+                adjustTime acqDat = let t = acqTimeStamp acqDat
+                                in acqDat {acqTimeStamp = diffTimeSpec t startTime}
+                           
+        sendAcquiredImagesToSmartProgramIfNeeded :: [(AcquisitionMetaData, AcquiredData)] -> [SmartProgramID] -> IO ()
+        sendAcquiredImagesToSmartProgramIfNeeded data smartProgramIDs
+            | null smartProgramIDs = pure ()
+            | otherwise            = 
 
 setDetectorProperties :: Detector a => [a] -> [DetectorParams] -> IO ()
 setDetectorProperties dets dps =

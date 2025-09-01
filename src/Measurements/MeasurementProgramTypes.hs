@@ -51,6 +51,7 @@ data ProgramEnvironment a = ProgramEnvironment {
                               , peStartTime :: !TimeSpec
                               , peEquipment :: ![EquipmentW]
                               , peKnownSmartProgramIDs :: ![SmartProgramID]
+                              , peSmartProgramCode :: Maybe SmartProgramCode
                               , peMessageChannel :: !MessageChannel
                               , peStatusMVar :: !(MVar [Text])
                               , peSmartProgramSendChan :: !SendToSmartProgramsChannel
