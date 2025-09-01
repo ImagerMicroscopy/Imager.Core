@@ -7,11 +7,13 @@ module Measurements.MeasurementProgram (
 import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Concurrent.Chan
+import Control.Concurrent.STM
 import Control.DeepSeq
 import Control.Exception
 import Control.Monad
 import Control.Monad.Trans.Except
 import Control.Monad.IO.Class
+import Control.Monad.STM
 import Data.Either
 import Data.IORef
 import Data.List
@@ -92,13 +94,14 @@ executeMeasurementElements env ddets es = mapM_ (executeMeasurementElement env d
 executeMeasurementElement :: Detector a => ProgramEnvironment a -> DefinedDetections -> MeasurementElement -> IO ()
 executeMeasurementElement env ddets (MEDetection detNames smartProgramIDs) =
     withStatusMessage env "Detection" (
-        executeDetection detectors eqs (detNames, detParams) startTime messageChannel)
+        executeDetection detectors eqs (detNames, detParams) startTime messageChannel (sendToSmartProgramsChannel, smartProgramIDs))
     where
       eqs = peEquipment env
       detectors = peDetectors env
       messageChannel = peMessageChannel env
       startTime = peStartTime env
       detParams = map (\dn -> fromJust $ M.lookup dn ddets) detNames
+      sendToSmartProgramsChannel = peSmartProgramSendChan env
 executeMeasurementElement env _ (MEIrradiation dur ips) =
     withStatusMessage env (T.format "irradiating {} s" (T.Only (fromLSIlluminationDuration dur))) (
         executeIrradiation eqs ips dur)
@@ -319,10 +322,10 @@ insertFastAcquisitionLoops ddets (MEStageLoop n pos es) = MEStageLoop n pos (map
 insertFastAcquisitionLoops ddets (MERelativeStageLoop n ps es) = MERelativeStageLoop n ps (map (insertFastAcquisitionLoops ddets) es)
 insertFastAcquisitionLoops d m = m
 
-executeDetection :: Detector a => [a] -> [EquipmentW] -> ([AcquisitionTypeName], [DetectionParams]) -> [SmartProgramID] -> TimeAtStartOfExperiment -> MessageChannel -> IO ()
-executeDetection dets eqs (acqTypeNames, detParams) smartProgramIDs expStartTime messageChannel =
+executeDetection :: Detector a => [a] -> [EquipmentW] -> ([AcquisitionTypeName], [DetectionParams]) -> TimeAtStartOfExperiment -> MessageChannel -> (SendToSmartProgramsChannel, [SmartProgramID]) -> IO ()
+executeDetection dets eqs (acqTypeNames, detParams) expStartTime messageChannel (smartProgramsChannel, smartProgramIDs) =
     getStagePositionSafe eqs >>= \stagePos ->
-    forM_ (zip acqTypeNames detParams) (\(acqTypeName, dps) ->
+    forM (zip acqTypeNames detParams) (\(acqTypeName, dps) ->
         setDetectorProperties dets (dpDetectors dps) >>
         let requiredDetNames = map dtpDetectorName (dpDetectors dps)
             requiredDets = filter (\d -> (detectorName d) `elem` requiredDetNames) dets
@@ -334,14 +337,23 @@ executeDetection dets eqs (acqTypeNames, detParams) smartProgramIDs expStartTime
                  TimeAtStartOfDetection <$> getTime Monotonic >>= \detStartTime ->
                  mapConcurrently acquireData requiredDets >>= \measuredImages ->
                  disableLightSources eqs (dpIrradiation dps) >>
-                 forM_ (zip measuredImages (map detectorName requiredDets)) (\(measuredImage, detName) ->
+                 forM (zip measuredImages (map detectorName requiredDets)) (\(measuredImage, detName) ->
                      let acquiredData = measuredImageAsAcquiredData measuredImage detName expStartTime detStartTime
                          metadata = AcquisitionMetaData stagePos acqTypeName
-                     in  (acquiredData `deepseq` (addDataToChannel messageChannel (AcquiredDataMessage metadata acquiredData)))))
+                     in  (acquiredData `deepseq` (addDataToChannel messageChannel (AcquiredDataMessage metadata acquiredData))) >>
+                         pure (metadata, acquireData))
+    ) >>= \allAcquiredImages -> sendAcquiredImagesToSmartProgramIfNeeded allAcquiredImages smartProgramIDs
+    where
         sendAcquiredImagesToSmartProgramIfNeeded :: [(AcquisitionMetaData, AcquiredData)] -> [SmartProgramID] -> IO ()
         sendAcquiredImagesToSmartProgramIfNeeded images smartProgramIDs
             | null smartProgramIDs = pure ()
-            | otherwise            = undefined
+            | otherwise            = submitDetectedImagesToSmartPrograms 
+        submitDetectedImagesToSmartPrograms :: SendToSmartProgramsChannel -> [(AcquisitionMetaData, AcquiredData)] -> [SmartProgramID] -> IO ()
+        submitDetectedImagesToSmartPrograms chan ims ids =
+            atomically $
+                writeTChan (sspChan chan) (ids, ims) >>
+                modifyTVar' (sspNumImageSetsInFlight chan) (+1)  
+
 
 setDetectorProperties :: Detector a => [a] -> [DetectorParams] -> IO ()
 setDetectorProperties dets dps =

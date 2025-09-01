@@ -9,7 +9,7 @@ import Control.Parallel.Strategies
 import GHC.Generics
 import Data.Aeson
 import Data.ByteString (ByteString)
-import qualified Data.ByteString as SB
+import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as LB
 import qualified Data.ByteString.Unsafe as SB
 import qualified Data.ByteString.Base64 as B64
@@ -39,7 +39,7 @@ import Measurements.MeasurementProgramTypes
 data Environment a = Environment {
                       envEquipment :: ![EquipmentW]
                     , envDetectors :: ![a]
-                    , envEncodedSpectrometerWavelengths :: !SB.ByteString
+                    , envEncodedSpectrometerWavelengths :: !B.ByteString
                     , envAsyncDataChannel :: !MessageChannel
                     , envAsyncStatusMessagesMVar :: !(MVar [Text])
                     , envAsyncProgramWorker :: !(Async ())
@@ -132,7 +132,7 @@ data ResponseMessage = StatusOK
                      | AsyncAcquisitionIsRunning !Bool
                      deriving (Generic)
 
-instance ToJSON SB.ByteString where
+instance ToJSON B.ByteString where
     toJSON = toJSON . T.decodeUtf8 . B64.encode  -- needed for the default-generated toJSON instances for ResponseMessages
     toEncoding = toEncoding . T.decodeUtf8 . B64.encode
 
