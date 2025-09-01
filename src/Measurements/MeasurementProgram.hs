@@ -320,15 +320,15 @@ insertFastAcquisitionLoops ddets (MERelativeStageLoop n ps es) = MERelativeStage
 insertFastAcquisitionLoops d m = m
 
 executeDetection :: Detector a => [a] -> [EquipmentW] -> ([AcquisitionTypeName], [DetectionParams]) -> [SmartProgramID] -> TimeAtStartOfExperiment -> MessageChannel -> IO ()
-executeDetection dets eqs (detNames, detParams) smartProgramIDs expStartTime messageChannel =
+executeDetection dets eqs (acqTypeNames, detParams) smartProgramIDs expStartTime messageChannel =
     getStagePositionSafe eqs >>= \stagePos ->
-    forM_ (zip detNames detParams) (\(dName, dps) ->
+    forM_ (zip acqTypeNames detParams) (\(acqTypeName, dps) ->
         setDetectorProperties dets (dpDetectors dps) >>
         let requiredDetNames = map dtpDetectorName (dpDetectors dps)
             requiredDets = filter (\d -> (detectorName d) `elem` requiredDetNames) dets
         in  mapM isConfiguredForHardwareTriggering requiredDets >>= \hasTriggering ->
             if (or hasTriggering)
-            then executeFastDetectionLoop dets eqs (dName, dps) 1 expStartTime messageChannel
+            then executeFastDetectionLoop dets eqs (acqTypeName, dps) 1 expStartTime messageChannel
             else setMovableComponents eqs (dpMovableComponents dps) >>
                  enableLightSources eqs (dpIrradiation dps) >>
                  TimeAtStartOfDetection <$> getTime Monotonic >>= \detStartTime ->
@@ -336,7 +336,8 @@ executeDetection dets eqs (detNames, detParams) smartProgramIDs expStartTime mes
                  disableLightSources eqs (dpIrradiation dps) >>
                  forM_ (zip measuredImages (map detectorName requiredDets)) (\(measuredImage, detName) ->
                      let acquiredData = measuredImageAsAcquiredData measuredImage detName expStartTime detStartTime
-                     in  (acquiredData `deepseq` (addDataToChannel messageChannel stagePos dName acquiredData))))
+                         metadata = AcquisitionMetaData stagePos acqTypeName
+                     in  (acquiredData `deepseq` (addDataToChannel messageChannel (AcquiredDataMessage metadata acquiredData)))))
         sendAcquiredImagesToSmartProgramIfNeeded :: [(AcquisitionMetaData, AcquiredData)] -> [SmartProgramID] -> IO ()
         sendAcquiredImagesToSmartProgramIfNeeded images smartProgramIDs
             | null smartProgramIDs = pure ()
@@ -384,8 +385,9 @@ fastStreamingAcquisition requiredDets enableLightSourcesAction disableLightSourc
                       AsyncData (detName, measuredImage) -> 
                                        when (nFetched `mod` 50 == 49) (performMajorGC) >>
                                        readIORef posRef >>= \pos ->
-                                       let acqData = measuredImageAsAcquiredData measuredImage detName expStartTime detStartTime
-                                       in  (acqData `deepseq` (addDataToChannel messageChannel pos acqName acqData)) >>
+                                       let acquiredData = measuredImageAsAcquiredData measuredImage detName expStartTime detStartTime
+                                           metadata = AcquisitionMetaData pos acqName
+                                       in  (acquiredData `deepseq` (addDataToChannel messageChannel (AcquiredDataMessage metadata acquiredData))) >>
                                            fetchData detStartTime posRef (nFetched + 1) nFinished async chan
         stagePositionWorker :: IO StagePosition -> IORef StagePosition -> IO ()
         stagePositionWorker readStagePosFunc positionRef =
@@ -463,13 +465,11 @@ updateStatusMessage env newMsg =
     where
         statusMVar = peStatusMVar env
 
-addDataToChannel :: MessageChannel -> StagePosition -> AcquisitionTypeName -> AcquiredData -> IO ()
-addDataToChannel messageChannel stagePosition acqType acqData =
+addDataToChannel :: MessageChannel -> AsyncMeasurementMessage -> IO ()
+addDataToChannel messageChannel msg =
     numMessagesInChannel messageChannel >>= \nMessages ->
     when (nMessages > 250) (throwIO (userError "too many async data stored")) >>
-    sendMessageToChannel messageChannel (AcquiredDataMessage metaData acqData)
-    where
-        metaData = AcquisitionMetaData stagePosition acqType
+    sendMessageToChannel messageChannel msg
 
 getStagePositionSafe :: [EquipmentW] -> IO StagePosition
 getStagePositionSafe eqs =
