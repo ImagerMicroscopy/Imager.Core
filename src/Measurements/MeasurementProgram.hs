@@ -131,15 +131,23 @@ executeMeasurementElement env ddets (MEDoTimes (NumIterationsTotal n) _ es) =
 
 executeMeasurementElement env ddets (MEFastAcquisitionLoop n (detName, detParams) inputProgramID programIDs) =
     withStatusMessage env (T.format "fast acquisition ({} images)" (T.Only (fromNumIterationsTotal n))) (
+        maybeUpdateLoopCount inputProgramID n >>= \n' ->
         readIORef (peDetectionIndexRef env) >>= \detectionIndex ->
-        executeFastDetectionLoop detectors eqs (detName, detParams) n startTime detectionIndex messageChannel (sendToSmartProgramsChannel, programIDs) >>
-        modifyIORef (peDetectionIndexRef env) (DetectionIndex . ((+) (fromNumIterationsTotal n)) . fromDetectionIndex))
+        executeFastDetectionLoop detectors eqs (detName, detParams) n' startTime detectionIndex messageChannel (sendToSmartProgramsChannel, programIDs) >>
+        modifyIORef (peDetectionIndexRef env) (DetectionIndex . ((+) (fromNumIterationsTotal n')) . fromDetectionIndex))
     where
-      eqs = peEquipment env
-      messageChannel = peMessageChannel env
-      startTime = peStartTime env
-      detectors = peDetectors env
-      sendToSmartProgramsChannel = peSmartProgramSendChan env
+        eqs = peEquipment env
+        messageChannel = peMessageChannel env
+        startTime = peStartTime env
+        detectors = peDetectors env
+        sendToSmartProgramsChannel = peSmartProgramSendChan env
+        maybeUpdateLoopCount :: Maybe SmartProgramID -> NumIterationsTotal -> IO NumIterationsTotal
+        maybeUpdateLoopCount maybeID n 
+                | isNothing maybeID = pure n
+                | otherwise = getSmartProgramDoTimesDecision (fromJust maybeID) >>= \decision ->
+                            if (isNothing decision)
+                                then pure n
+                                else let (SmartProgramDoTimesDecision n') = fromJust decision in pure n'
 
 executeMeasurementElement env ddets (METimeLapse n dur maybeInputProgramID es) =
     withStatusMessage env "time lapse" (

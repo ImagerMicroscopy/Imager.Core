@@ -406,7 +406,7 @@ isSmartProgramChannelEmpty :: SendToSmartProgramsChannel -> IO Bool
 isSmartProgramChannelEmpty chan =
     atomically $ isEmptyTChan (sspChan chan)
 
-newtype SmartProgramDoTimesDecision = SmartProgramDoTimesDecision Int
+newtype SmartProgramDoTimesDecision = SmartProgramDoTimesDecision NumIterationsTotal
 newtype SmartProgramStageLoopDecision = SmartProgramStageLoopDecision [PositionNameAndCoords]
 newtype SmartProgramRelativeStageLoopDecision = SmartProgramRelativeStageLoopDecision RelativeStageLoopParams
 data SmartProgramTimeLapseDecision = SmartProgramTimeLapseDecision !NumIterationsTotal !WaitDuration
@@ -416,7 +416,7 @@ instance FromJSON SmartProgramDoTimesDecision where
         v .: "type" >>= \(tt :: Text) ->
         if (tt /= "dotimesdecision")
             then error "parsing but not a dotimesdecision"
-            else v .: "numiterations" >>= \(numIterations :: Word64) -> pure . SmartProgramDoTimesDecision . fromIntegral $ numIterations
+            else SmartProgramDoTimesDecision <$> v .: "numiterations"
 
 instance FromJSON SmartProgramStageLoopDecision where
     parseJSON (Object v) = 
