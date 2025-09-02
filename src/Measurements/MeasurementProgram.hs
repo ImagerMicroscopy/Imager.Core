@@ -142,10 +142,10 @@ executeMeasurementElement env ddets (MEFastAcquisitionLoop n (detName, detParams
       sendToSmartProgramsChannel = peSmartProgramSendChan env
 
 executeMeasurementElement env ddets (METimeLapse n dur maybeInputProgramID es) =
-    getLoopParameters >>= \(n', dur') ->
-    futureTimes dur' n' >>= \fts ->
-    timeSpecToUTCTimes fts >>= \utcs ->
     withStatusMessage env "time lapse" (
+        maybeUpdateLoopParameters maybeInputProgramID dur n >>= \(n', dur') ->
+        futureTimes dur' n' >>= \fts ->
+        timeSpecToUTCTimes fts >>= \utcs ->
         forM_ (zip3 [1 ..] fts utcs) (\(index :: Int, ts, utc) ->
             formattedTime utc >>= \timeStr ->
             updateStatusMessage env (T.format "next time lapse ({} of {}) at {}" (index, (fromNumIterationsTotal n'), timeStr)) >>
@@ -153,8 +153,8 @@ executeMeasurementElement env ddets (METimeLapse n dur maybeInputProgramID es) =
             updateStatusMessage env (T.format "executing time lapse {} of {}" (index, (fromNumIterationsTotal n'))) >>
             executeMeasurementElements env ddets es))
     where
-        getLoopParameters :: IO (NumIterationsTotal, WaitDuration)
-        getLoopParameters 
+        maybeUpdateLoopParameters :: Maybe SmartProgramID -> WaitDuration -> NumIterationsTotal -> IO (NumIterationsTotal, WaitDuration)
+        maybeUpdateLoopParameters maybeInputProgramID dur n
             | isNothing maybeInputProgramID = pure (n, dur) -- if we don't need to ask a smart program then just take the default values
             | otherwise = getSmartProgramTimeLapseDecision (fromJust maybeInputProgramID) >>= \decision ->
                           if (isNothing decision)           -- smart program can't decide - just take the default values
@@ -184,14 +184,21 @@ executeMeasurementElement env ddets (METimeLapse n dur maybeInputProgramID es) =
                             in threadDelay (fromIntegral (max (ns `div` 1000) 0))
                        else return ()
 
-executeMeasurementElement env ddets (MEStageLoop sn poss _ es) =
+executeMeasurementElement env ddets (MEStageLoop sn poss maybeInputProgramID es) =
     withStatusMessage env "stage loop" (
-        forM_ (zip [1..] poss) (\(index :: Int, (PositionNameAndCoords posName pos)) ->
-            updateStatusMessage env (T.format "stage position {} of {} ({})" (index, nPos, posName)) >>
+        maybeUpdateStagePositions maybeInputProgramID poss >>= \poss' ->
+        forM_ (zip [1..] poss') (\(index :: Int, (PositionNameAndCoords posName pos)) ->
+            updateStatusMessage env (T.format "stage position {} of {} ({})" (index, (length poss'), posName)) >>
             setStagePosition stageEq pos >> executeMeasurementElements env ddets es))
     where
         [stageEq] = filter (\e -> hasMotorizedStage e && motorizedStageName e == sn) (peEquipment env)
-        nPos = length poss
+        maybeUpdateStagePositions :: Maybe SmartProgramID -> [PositionNameAndCoords] -> IO [PositionNameAndCoords]
+        maybeUpdateStagePositions maybeID poss 
+            | isNothing maybeID = pure poss
+            | otherwise = getSmartProgramStageLoopDecision (fromJust maybeID) >>= \decision ->
+                          if (isNothing decision)
+                            then pure poss
+                            else let (SmartProgramStageLoopDecision poss') = fromJust decision in pure poss'
 
 executeMeasurementElement env ddets (MERelativeStageLoop sn (RelativeStageLoopParams dx dy dz (bx, ax) (by, ay) (bz, az) returnToStarting) _ es) =
     withStatusMessage env "relative stage loop" (
