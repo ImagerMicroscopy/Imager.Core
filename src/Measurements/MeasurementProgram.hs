@@ -141,21 +141,30 @@ executeMeasurementElement env ddets (MEFastAcquisitionLoop n (detName, detParams
       detectors = peDetectors env
       sendToSmartProgramsChannel = peSmartProgramSendChan env
 
-executeMeasurementElement env ddets (METimeLapse (NumIterationsTotal n) (WaitDuration dur) _ es) =
-    futureTimes >>= \fts ->
+executeMeasurementElement env ddets (METimeLapse n dur maybeInputProgramID es) =
+    getLoopParameters >>= \(n', dur') ->
+    futureTimes dur' n' >>= \fts ->
     timeSpecToUTCTimes fts >>= \utcs ->
     withStatusMessage env "time lapse" (
         forM_ (zip3 [1 ..] fts utcs) (\(index :: Int, ts, utc) ->
             formattedTime utc >>= \timeStr ->
-            updateStatusMessage env (T.format "next time lapse ({} of {}) at {}" (index, n, timeStr)) >>
+            updateStatusMessage env (T.format "next time lapse ({} of {}) at {}" (index, (fromNumIterationsTotal n'), timeStr)) >>
             waitUntil ts >>
-            updateStatusMessage env (T.format "executing time lapse {} of {}" (index, n)) >>
+            updateStatusMessage env (T.format "executing time lapse {} of {}" (index, (fromNumIterationsTotal n'))) >>
             executeMeasurementElements env ddets es))
     where
-        futureDurations = map ((*) dur . fromIntegral) [0 .. (n - 1)]
-        futureTimes :: IO [TimeSpec]
-        futureTimes = getTime Monotonic >>= \now ->
-                      return $ map (\delta -> fromNanoSecs (toNanoSecs now + round (delta * 1.0e9))) futureDurations
+        getLoopParameters :: IO (NumIterationsTotal, WaitDuration)
+        getLoopParameters 
+            | isNothing maybeInputProgramID = pure (n, dur) -- if we don't need to ask a smart program then just take the default values
+            | otherwise = getSmartProgramTimeLapseDecision (fromJust maybeInputProgramID) >>= \decision ->
+                          if (isNothing decision)           -- smart program can't decide - just take the default values
+                              then pure (n, dur)
+                              else let (SmartProgramTimeLapseDecision n' dur') = fromJust decision
+                                   in  pure (n', dur')
+        futureDurations dur n = map ((*) (fromWaitDuration dur) . fromIntegral) [0 .. ((fromNumIterationsTotal n) - 1)]
+        futureTimes :: WaitDuration -> NumIterationsTotal -> IO [TimeSpec]
+        futureTimes dur n = getTime Monotonic >>= \now ->
+                            return $ map (\delta -> fromNanoSecs (toNanoSecs now + round (delta * 1.0e9))) (futureDurations dur n)
         timeSpecToUTCTimes :: [TimeSpec] -> IO [UTCTime]
         timeSpecToUTCTimes tss = getTime Monotonic >>= \now ->
                                  getCurrentTime >>= \nowUTC ->

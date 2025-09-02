@@ -39,16 +39,16 @@ getAllSmartProgramIDsUsedInMeasurement me = S.toList (searchWorker S.empty me)
         searchWorker s (MEStageLoop _ _ sid es) = mconcat (map (searchWorker s) es) <> if (isJust sid) then S.singleton (fromJust sid) else S.empty
         searchWorker s (MERelativeStageLoop _ _ sid es) = mconcat (map (searchWorker s) es) <> if (isJust sid) then S.singleton (fromJust sid) else S.empty
 
-getSmartProgramDoTimesDecision :: SmartProgramID -> SmartProgramDoTimesDecision
+getSmartProgramDoTimesDecision :: SmartProgramID -> IO (Maybe SmartProgramDoTimesDecision)
 getSmartProgramDoTimesDecision = undefined
 
-getSmartProgramStageLoopDecision :: SmartProgramID -> SmartProgramStageLoopDecision
+getSmartProgramStageLoopDecision :: SmartProgramID -> IO (Maybe SmartProgramStageLoopDecision)
 getSmartProgramStageLoopDecision = undefined
 
-getSmartProgramRelativeStageLoopDecision :: SmartProgramID -> SmartProgramTimeLapseDecision
+getSmartProgramRelativeStageLoopDecision :: SmartProgramID -> IO (Maybe SmartProgramRelativeStageLoopDecision)
 getSmartProgramRelativeStageLoopDecision = undefined
 
-getSmartProgramTimeLapseDecision :: SmartProgramID -> SmartProgramTimeLapseDecision
+getSmartProgramTimeLapseDecision :: SmartProgramID -> IO (Maybe SmartProgramTimeLapseDecision)
 getSmartProgramTimeLapseDecision = undefined
 
 parseSmartProgramIDsFromProgramCode :: SmartProgramCode -> [SmartProgramID]
