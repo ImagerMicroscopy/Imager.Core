@@ -3,6 +3,7 @@
 module Measurements.SmartProgram where
 
 import Control.Concurrent.STM
+import Control.Exception
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Aeson
@@ -61,29 +62,45 @@ parseSmartProgramIDsFromProgramCode code =
                                 Nothing -> error "Could not parse smart program id"
         findID _          = error "did not find object encoding the smart program id"
 
-data SendResponse = ResponseOK
-                deriving (Generic, FromJSON)
+data SmartSendResponse = SmartSendResponseStatusOK
+                       | SmartSendResponseStatusError
+                        deriving (Show)
+
+instance FromJSON SmartSendResponse where
+    parseJSON (Object v) =
+        v .: "type" >>= \(t :: Text) ->
+        case (T.toLower t) of
+            "status" -> v .: "status" >>= \(status :: Text) -> case status of "ok"    -> pure SmartSendResponseStatusOK
+                                                                              "error" -> pure SmartSendResponseStatusError
+
 
 sendDetectedImageToSmartPrograms_Worker :: SendToSmartProgramsChannel -> IO ()
 sendDetectedImageToSmartPrograms_Worker chan =
-    readNextImageToSendToSmartPrograms chan >>= \(smartProgramIds, image) ->
-    sendImageToSmartProgramServer image smartProgramIds >>
-    markImageSentSuccessfullyToSmartPrograms chan
+    putStrLn "Worker starting up" >>
+    ((forever (
+        readNextImageToSendToSmartPrograms chan >>= \(smartProgramIds, image) ->
+        putStrLn "Worker has data" >>
+        sendImageToSmartProgramServer image smartProgramIds >>= \response ->
+        putStrLn ("received response: " ++ show response) >>
+        markImageSentSuccessfullyToSmartPrograms chan)) `catch` (\e -> putStrLn ("Exception caught: " ++ show (e :: SomeException)) >> error (show e)))
 
-sendImageToSmartProgramServer :: (AcquisitionMetaData, AcquiredData) -> [SmartProgramID] -> IO SendResponse
+sendImageToSmartProgramServer :: (AcquisitionMetaData, AcquiredData) -> [SmartProgramID] -> IO SmartSendResponse
 sendImageToSmartProgramServer (metaData, acqData) ids =
     let acqMessage = AcquiredDataMessage metaData acqData
         channelMessage = ChannelMessage 0 acqMessage
         asMsgPack = pack channelMessage
         serverPort = 8100
-        url = http "localhost" /: "data"
+        url = http "127.0.0.1" /: "data"
         queryParams = mconcat [ "id" =: (fromSmartProgramID id) | id <- ids ]
         body = ReqBodyLbs asMsgPack
     in  runReq defaultHttpConfig $ 
+            liftIO (putStrLn "sending") >>
             req
                 POST                    -- HTTP method
                 url                     -- URL
                 body                    -- Request body
                 jsonResponse            -- Response type
-                (port serverPort <> queryParams) >>= -- Options (port and query parameter)
-            liftIO . pure . responseBody
+                (port serverPort <> queryParams <> responseTimeout 1000000) >>= \response -> -- Options (port and query parameter)
+            -- Print the server's response
+            liftIO (putStrLn "Server response:") >>
+            pure (responseBody response)

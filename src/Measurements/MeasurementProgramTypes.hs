@@ -372,6 +372,7 @@ newSmartProgramsChannel = SendToSmartProgramsChannel <$> newTChanIO <*> newTVarI
 
 submitDetectedImageToSmartProgramsIfNeeded :: SendToSmartProgramsChannel -> [SmartProgramID] -> (AcquisitionMetaData, AcquiredData) -> IO ()
 submitDetectedImageToSmartProgramsIfNeeded chan ids im =
+    putStrLn "sending to channel" >>
     when (not $ null ids) (
         atomically $
             writeTChan (sspChan chan) (ids, im) >>
@@ -383,7 +384,7 @@ readNextImageToSendToSmartPrograms chan = atomically $ readTChan (sspChan chan)
 
 markImageSentSuccessfullyToSmartPrograms :: SendToSmartProgramsChannel -> IO ()
 markImageSentSuccessfullyToSmartPrograms chan =
-    atomically $ modifyTVar (sspNumImageSetsInFlight chan) (\n -> n - 1)
+    atomically $ modifyTVar' (sspNumImageSetsInFlight chan) (\n -> n - 1)
 
 waitUntilAllImagesHaveBeenSentToSmartPrograms :: SendToSmartProgramsChannel -> IO ()
 waitUntilAllImagesHaveBeenSentToSmartPrograms chan =

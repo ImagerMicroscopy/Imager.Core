@@ -349,7 +349,8 @@ executeDetection dets eqs (acqTypeNames, detParams) expStartTime detectionIndex 
                      let acquiredData = measuredImageAsAcquiredData measuredImage detName expStartTime detStartTime
                          metadata = AcquisitionMetaData stagePos acqTypeName detectionIndex nImagesMeasuredInThisDetection
                      in  (acquiredData `deepseq` (addDataToChannel messageChannel (AcquiredDataMessage metadata acquiredData))) >>
-                         submitDetectedImageToSmartProgramsIfNeeded smartProgramsChannel smartProgramIDs (metadata, acquiredData)))
+                         submitDetectedImageToSmartProgramsIfNeeded smartProgramsChannel smartProgramIDs (metadata, acquiredData) >>
+                         waitUntilAllImagesHaveBeenSentToSmartPrograms smartProgramsChannel))
     where
         nImagesMeasuredInThisDetection :: NumImagesInDetection
         nImagesMeasuredInThisDetection = NumImagesInDetection $ foldl' (\idx detParam -> idx + length (dpDetectors detParam)) 0 detParams
