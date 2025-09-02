@@ -355,11 +355,17 @@ instance NFData TimeSpec where
 
 newtype SmartProgramCode = SmartProgramCode {fromSmartProgramCode :: Text}
                               deriving (Show, Generic)
-instance FromJSON SmartProgramCode
-instance ToJSON SmartProgramCode
-
 newtype SmartProgramID = SmartProgramID {fromSmartProgramID :: Text}
-                        deriving (Show, Generic, FromJSON, ToJSON, Ord, Eq)
+                        deriving (Show, Generic, Ord, Eq)
+
+instance FromJSON SmartProgramCode where
+    parseJSON = fmap SmartProgramCode . parseJSON
+instance ToJSON SmartProgramCode where
+    toJSON (SmartProgramCode c) = toJSON c
+instance FromJSON SmartProgramID where
+    parseJSON = fmap SmartProgramID . parseJSON
+instance ToJSON SmartProgramID where
+    toJSON (SmartProgramID i) = toJSON i
 
 data SendToSmartProgramsChannel = SendToSmartProgramsChannel {
                                       sspChan :: TChan (([SmartProgramID], (AcquisitionMetaData, AcquiredData)))
@@ -382,9 +388,9 @@ submitDetectedImageToSmartProgramsIfNeeded chan ids im =
 readNextImageToSendToSmartPrograms :: SendToSmartProgramsChannel -> IO ([SmartProgramID], (AcquisitionMetaData, AcquiredData))
 readNextImageToSendToSmartPrograms chan = atomically $ readTChan (sspChan chan)
 
-markImageSentSuccessfullyToSmartPrograms :: SendToSmartProgramsChannel -> IO ()
-markImageSentSuccessfullyToSmartPrograms chan =
-    atomically $ modifyTVar' (sspNumImageSetsInFlight chan) (\n -> n - 1)
+markImagesSentSuccessfullyToSmartPrograms :: SendToSmartProgramsChannel -> Int -> IO ()
+markImagesSentSuccessfullyToSmartPrograms chan nImages =
+    atomically $ modifyTVar' (sspNumImageSetsInFlight chan) (\n -> n - nImages)
 
 waitUntilAllImagesHaveBeenSentToSmartPrograms :: SendToSmartProgramsChannel -> IO ()
 waitUntilAllImagesHaveBeenSentToSmartPrograms chan =
@@ -394,7 +400,39 @@ waitUntilAllImagesHaveBeenSentToSmartPrograms chan =
             then pure ()
             else retry  -- block until the TVar (or channel) is next modified, after which this function will be run again
 
+isSmartProgramChannelEmpty :: SendToSmartProgramsChannel -> IO Bool
+isSmartProgramChannelEmpty chan =
+    atomically $ isEmptyTChan (sspChan chan)
+
 newtype SmartProgramDoTimesDecision = SmartProgramDoTimesDecision Int
-data SmartProgramStageLoopDecision = SmartProgramStageLoopDecision StageName [PositionNameAndCoords]
-data SmartProgramRelativeStageLoopDecision = SmartRelativeStageLoopDecision StageName RelativeStageLoopParams
-data SmartProgramTimeLapseDecision = SmartProgramTimeLapseDecision !Int !Double
+newtype SmartProgramStageLoopDecision = SmartProgramStageLoopDecision [PositionNameAndCoords]
+newtype SmartProgramRelativeStageLoopDecision = SmartProgramRelativeStageLoopDecision RelativeStageLoopParams
+data SmartProgramTimeLapseDecision = SmartProgramTimeLapseDecision !NumIterationsTotal !WaitDuration
+
+instance FromJSON SmartProgramDoTimesDecision where
+    parseJSON (Object v) = 
+        v .: "type" >>= \(tt :: Text) ->
+        if (tt /= "dotimesdecision")
+            then error "parsing but not a dotimesdecision"
+            else v .: "numiterations" >>= \(numIterations :: Word64) -> pure . SmartProgramDoTimesDecision . fromIntegral $ numIterations
+
+instance FromJSON SmartProgramStageLoopDecision where
+    parseJSON (Object v) = 
+        v .: "type" >>= \(tt :: Text) ->
+        if (tt /= "stageloopdecision")
+            then error "parsing but not a stageloopdecision"
+            else SmartProgramStageLoopDecision <$> v .: "positions"
+
+instance FromJSON SmartProgramRelativeStageLoopDecision where
+    parseJSON (Object v) = 
+        v .: "type" >>= \(tt :: Text) ->
+        if (tt /= "relativestageloopdecision")
+            then error "parsing but not a relativestageloopdecision"
+            else SmartProgramRelativeStageLoopDecision <$> v .: "params"
+
+instance FromJSON SmartProgramTimeLapseDecision where
+    parseJSON (Object v) = 
+        v .: "type" >>= \(tt :: Text) ->
+        if (tt /= "timelapsedecision")
+            then error "parsing but not a timelapsedecision"
+            else SmartProgramTimeLapseDecision <$> v .: "ntotal" <*> v .: "timedelta"

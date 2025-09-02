@@ -78,21 +78,21 @@ sendDetectedImageToSmartPrograms_Worker :: SendToSmartProgramsChannel -> IO ()
 sendDetectedImageToSmartPrograms_Worker chan =
     putStrLn "Worker starting up" >>
     ((forever (
-        readNextImageToSendToSmartPrograms chan >>= \(smartProgramIds, image) ->
+        readNextImageToSendToSmartPrograms chan >>= \(smartProgramIDs, image) ->    -- may block until an image is available
         putStrLn "Worker has data" >>
-        sendImageToSmartProgramServer image smartProgramIds >>= \response ->
+        sendImagesToSmartProgramServer [image] smartProgramIDs >>= \response ->
         putStrLn ("received response: " ++ show response) >>
-        markImageSentSuccessfullyToSmartPrograms chan)) `catch` (\e -> putStrLn ("Exception caught: " ++ show (e :: SomeException)) >> error (show e)))
+        markImagesSentSuccessfullyToSmartPrograms chan 1)) `catch` (\e -> putStrLn ("Exception caught: " ++ show (e :: SomeException)) >> error (show e)))
 
-sendImageToSmartProgramServer :: (AcquisitionMetaData, AcquiredData) -> [SmartProgramID] -> IO SmartSendResponse
-sendImageToSmartProgramServer (metaData, acqData) ids =
-    let acqMessage = AcquiredDataMessage metaData acqData
-        channelMessage = ChannelMessage 0 acqMessage
-        asMsgPack = pack channelMessage
+sendImagesToSmartProgramServer :: [(AcquisitionMetaData, AcquiredData)] -> [SmartProgramID] -> IO SmartSendResponse
+sendImagesToSmartProgramServer images ids =
+    let allMessages = map (uncurry AcquiredDataMessage)  images
+        asChannelMessages = map (ChannelMessage 0) allMessages
+        asMsgPackLBS = mconcat (map pack asChannelMessages)
         serverPort = 8100
         url = http "127.0.0.1" /: "data"
         queryParams = mconcat [ "id" =: (fromSmartProgramID id) | id <- ids ]
-        body = ReqBodyLbs asMsgPack
+        body = ReqBodyLbs asMsgPackLBS
     in  runReq defaultHttpConfig $ 
             liftIO (putStrLn "sending") >>
             req
@@ -101,6 +101,4 @@ sendImageToSmartProgramServer (metaData, acqData) ids =
                 body                    -- Request body
                 jsonResponse            -- Response type
                 (port serverPort <> queryParams <> responseTimeout 1000000) >>= \response -> -- Options (port and query parameter)
-            -- Print the server's response
-            liftIO (putStrLn "Server response:") >>
             pure (responseBody response)
