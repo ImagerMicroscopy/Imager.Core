@@ -122,14 +122,14 @@ executeMeasurementElement env _ (MEExecuteRobotProgram rName pName wait) =
     where
         [robot] = filter (\e -> hasRobot e && robotName e == rName) (peEquipment env)
 
-executeMeasurementElement env ddets (MEDoTimes (NumIterationsTotal n) es) =
+executeMeasurementElement env ddets (MEDoTimes (NumIterationsTotal n) _ es) =
     withStatusMessage env "do times" (
         forM_ (zip [1 ..] (take n . repeat $ es)) (\(index :: Int, ses) ->
             updateStatusMessage env (T.format "do times {} of {}" (index, n)) >>
             executeMeasurementElements env ddets ses
         ))
 
-executeMeasurementElement env ddets (MEFastAcquisitionLoop n (detName, detParams) programIDs) =
+executeMeasurementElement env ddets (MEFastAcquisitionLoop n (detName, detParams) inputProgramID programIDs) =
     withStatusMessage env (T.format "fast acquisition ({} images)" (T.Only (fromNumIterationsTotal n))) (
         readIORef (peDetectionIndexRef env) >>= \detectionIndex ->
         executeFastDetectionLoop detectors eqs (detName, detParams) n startTime detectionIndex messageChannel (sendToSmartProgramsChannel, programIDs) >>
@@ -141,7 +141,7 @@ executeMeasurementElement env ddets (MEFastAcquisitionLoop n (detName, detParams
       detectors = peDetectors env
       sendToSmartProgramsChannel = peSmartProgramSendChan env
 
-executeMeasurementElement env ddets (METimeLapse (NumIterationsTotal n) (WaitDuration dur) es) =
+executeMeasurementElement env ddets (METimeLapse (NumIterationsTotal n) (WaitDuration dur) _ es) =
     futureTimes >>= \fts ->
     timeSpecToUTCTimes fts >>= \utcs ->
     withStatusMessage env "time lapse" (
@@ -175,7 +175,7 @@ executeMeasurementElement env ddets (METimeLapse (NumIterationsTotal n) (WaitDur
                             in threadDelay (fromIntegral (max (ns `div` 1000) 0))
                        else return ()
 
-executeMeasurementElement env ddets (MEStageLoop sn poss es) =
+executeMeasurementElement env ddets (MEStageLoop sn poss _ es) =
     withStatusMessage env "stage loop" (
         forM_ (zip [1..] poss) (\(index :: Int, (PositionNameAndCoords posName pos)) ->
             updateStatusMessage env (T.format "stage position {} of {} ({})" (index, nPos, posName)) >>
@@ -184,7 +184,7 @@ executeMeasurementElement env ddets (MEStageLoop sn poss es) =
         [stageEq] = filter (\e -> hasMotorizedStage e && motorizedStageName e == sn) (peEquipment env)
         nPos = length poss
 
-executeMeasurementElement env ddets (MERelativeStageLoop sn (RelativeStageLoopParams dx dy dz (bx, ax) (by, ay) (bz, az) returnToStarting) es) =
+executeMeasurementElement env ddets (MERelativeStageLoop sn (RelativeStageLoopParams dx dy dz (bx, ax) (by, ay) (bz, az) returnToStarting) _ es) =
     withStatusMessage env "relative stage loop" (
         getStagePosition stageEq >>= \(startPosition@(StagePosition startX startY startZ usingAF afOffset)) ->
         let xCoords = map ((+) startX . (*) dx . fromIntegral) [negate bx .. ax]
@@ -322,11 +322,11 @@ getXYCoords xC yC = [ [xC!!n,yC!!n] | n <- [0..length(xC)-1] ]
 
 
 insertFastAcquisitionLoops :: DefinedDetections -> MeasurementElement -> MeasurementElement
-insertFastAcquisitionLoops ddets (MEDoTimes n [MEDetection [dName] smartIDs]) = MEFastAcquisitionLoop n (dName, fromJust $ M.lookup dName ddets) smartIDs
-insertFastAcquisitionLoops ddets (MEDoTimes n es) = MEDoTimes n (map (insertFastAcquisitionLoops ddets) es)
-insertFastAcquisitionLoops ddets (METimeLapse n dur es) = METimeLapse n dur (map (insertFastAcquisitionLoops ddets) es)
-insertFastAcquisitionLoops ddets (MEStageLoop n pos es) = MEStageLoop n pos (map (insertFastAcquisitionLoops ddets) es)
-insertFastAcquisitionLoops ddets (MERelativeStageLoop n ps es) = MERelativeStageLoop n ps (map (insertFastAcquisitionLoops ddets) es)
+insertFastAcquisitionLoops ddets (MEDoTimes n inputSmartID [MEDetection [dName] smartIDs]) = MEFastAcquisitionLoop n (dName, fromJust $ M.lookup dName ddets) inputSmartID smartIDs -- TODO: smart decision is lost
+insertFastAcquisitionLoops ddets (MEDoTimes n ids es) = MEDoTimes n ids (map (insertFastAcquisitionLoops ddets) es)
+insertFastAcquisitionLoops ddets (METimeLapse n dur ids es) = METimeLapse n dur ids(map (insertFastAcquisitionLoops ddets) es)
+insertFastAcquisitionLoops ddets (MEStageLoop n pos ids es) = MEStageLoop n pos ids(map (insertFastAcquisitionLoops ddets) es)
+insertFastAcquisitionLoops ddets (MERelativeStageLoop n ps ids es) = MERelativeStageLoop n ps ids(map (insertFastAcquisitionLoops ddets) es)
 insertFastAcquisitionLoops d m = m
 
 executeDetection :: Detector a => [a] -> [EquipmentW] -> ([AcquisitionTypeName], [DetectionParams]) -> TimeAtStartOfExperiment -> 
@@ -456,11 +456,11 @@ eqNamesUsedAsLightSourceIn ddets me = S.toList (eqNamesUsedAsLightSourceIn' S.em
             let dps = map (\dn -> fromJust $ M.lookup dn ddets) dnNames
             in  s <> (S.fromList . concat $ map (map ipEquipmentName . dpIrradiation) dps)
         eqNamesUsedAsLightSourceIn' s (MEIrradiation _ ips) = s <> ((S.fromList . map ipEquipmentName) ips)
-        eqNamesUsedAsLightSourceIn' s (MEDoTimes _ mes) = s <> mconcat (map (eqNamesUsedAsLightSourceIn' S.empty) mes)
-        eqNamesUsedAsLightSourceIn' s (MEFastAcquisitionLoop _ (_, dp) _) = s <> S.fromList (map ipEquipmentName . dpIrradiation $ dp)
-        eqNamesUsedAsLightSourceIn' s (METimeLapse _ _ mes) = s <> mconcat (map (eqNamesUsedAsLightSourceIn' S.empty) mes)
-        eqNamesUsedAsLightSourceIn' s (MEStageLoop _ _ mes) = s <> mconcat (map (eqNamesUsedAsLightSourceIn' S.empty) mes)
-        eqNamesUsedAsLightSourceIn' s (MERelativeStageLoop _ _ mes) = s <> mconcat (map (eqNamesUsedAsLightSourceIn' S.empty) mes)
+        eqNamesUsedAsLightSourceIn' s (MEDoTimes _ _ mes) = s <> mconcat (map (eqNamesUsedAsLightSourceIn' S.empty) mes)
+        eqNamesUsedAsLightSourceIn' s (MEFastAcquisitionLoop _ (_, dp) _ _) = s <> S.fromList (map ipEquipmentName . dpIrradiation $ dp)
+        eqNamesUsedAsLightSourceIn' s (METimeLapse _ _ _ mes) = s <> mconcat (map (eqNamesUsedAsLightSourceIn' S.empty) mes)
+        eqNamesUsedAsLightSourceIn' s (MEStageLoop _ _ _ mes) = s <> mconcat (map (eqNamesUsedAsLightSourceIn' S.empty) mes)
+        eqNamesUsedAsLightSourceIn' s (MERelativeStageLoop _ _ _ mes) = s <> mconcat (map (eqNamesUsedAsLightSourceIn' S.empty) mes)
         eqNamesUsedAsLightSourceIn' s _ = s
 
 robotNamesUsedIn :: MeasurementElement -> [RobotName]

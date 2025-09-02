@@ -10,6 +10,7 @@ import Data.Aeson
 import Data.Aeson.Types
 import qualified Data.ByteString.Lazy as LB
 import Data.Foldable
+import Data.Maybe
 import Data.MessagePack
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -28,15 +29,15 @@ getAllSmartProgramIDsUsedInMeasurement :: MeasurementElement -> [SmartProgramID]
 getAllSmartProgramIDsUsedInMeasurement me = S.toList (searchWorker S.empty me)
     where
         searchWorker :: S.Set SmartProgramID -> MeasurementElement -> S.Set SmartProgramID
-        searchWorker s (MEDetection _ ids) = foldl' (flip S.insert) s ids
+        searchWorker s (MEDetection _ ids) = S.fromList ids
         searchWorker s (MEIrradiation _ _) = s
         searchWorker s (MEWait _) = s
-        searchWorker s (MEFastAcquisitionLoop _ _ ids) = foldl' (flip S.insert) s ids
+        searchWorker s (MEFastAcquisitionLoop _ _ sid ids) = S.fromList ids <> if (isJust sid) then S.singleton (fromJust sid) else S.empty
         searchWorker s (MEExecuteRobotProgram _ _ _) = s
-        searchWorker s (MEDoTimes _ es) = mconcat (map (searchWorker s) es)
-        searchWorker s (METimeLapse _ _ es) = mconcat (map (searchWorker s) es)
-        searchWorker s (MEStageLoop _ _ es) = mconcat (map (searchWorker s) es)
-        searchWorker s (MERelativeStageLoop _ _ es) = mconcat (map (searchWorker s) es)
+        searchWorker s (MEDoTimes _ sid es) = mconcat (map (searchWorker s) es) <> if (isJust sid) then S.singleton (fromJust sid) else S.empty
+        searchWorker s (METimeLapse _ _ sid es) = mconcat (map (searchWorker s) es) <> if (isJust sid) then S.singleton (fromJust sid) else S.empty
+        searchWorker s (MEStageLoop _ _ sid es) = mconcat (map (searchWorker s) es) <> if (isJust sid) then S.singleton (fromJust sid) else S.empty
+        searchWorker s (MERelativeStageLoop _ _ sid es) = mconcat (map (searchWorker s) es) <> if (isJust sid) then S.singleton (fromJust sid) else S.empty
 
 getSmartProgramDoTimesDecision :: SmartProgramID -> SmartProgramDoTimesDecision
 getSmartProgramDoTimesDecision = undefined

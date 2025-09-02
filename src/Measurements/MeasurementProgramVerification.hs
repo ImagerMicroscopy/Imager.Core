@@ -57,19 +57,19 @@ validateMeasurementElement eqs _ (MEWait (WaitDuration dur))
     | (dur < 0.0) || (dur > 3600) = ["invalid wait duration: " ++ show dur]
     | otherwise = []
 validateMeasurementElement eqs _ (MEExecuteRobotProgram rName pName _) = []
-validateMeasurementElement eqs _ (MEDoTimes (NumIterationsTotal n) es)
+validateMeasurementElement eqs _ (MEDoTimes (NumIterationsTotal n) _ es)
     | (n < 0) || (n > (floor 10e6)) = ["invalid number of times to repeat: " ++ show n]
     | null es = ["do times loop but no actions"]
     | otherwise = []
-validateMeasurementElement eqs _ (MEFastAcquisitionLoop (NumIterationsTotal n) (detName, detParams) programIDs)
+validateMeasurementElement eqs _ (MEFastAcquisitionLoop (NumIterationsTotal n) (detName, detParams) inputProgramID outputProgramIDs)
     | (n < 0) || (n > (floor 10e6)) = ["invalid number of times to repeat: " ++ show n]
     | otherwise = validateDetection eqs detParams
-validateMeasurementElement eqs _ (METimeLapse (NumIterationsTotal n) (WaitDuration dur) es)
+validateMeasurementElement eqs _ (METimeLapse (NumIterationsTotal n) (WaitDuration dur) _ es)
     | (n < 0) || (n > (floor 10e6)) = ["invalid number of times to repeat: " ++ show n]
     | (dur < 0.0) || (dur > 3600 * 2) = ["invalid time lapse duration: " ++ show dur]
     | null es = ["timelapse loop but no elements"]
     | otherwise = []
-validateMeasurementElement eqs _ (MEStageLoop stageName pos es)
+validateMeasurementElement eqs _ (MEStageLoop stageName pos _ es)
     | null pos = ["no positions in stage loop"]
     | T.null (fromStageName stageName) = ["no stage name"]
     | stageName `notElem` stageNames = ["can't find stage named " ++ T.unpack (fromStageName stageName)]
@@ -77,7 +77,7 @@ validateMeasurementElement eqs _ (MEStageLoop stageName pos es)
     | otherwise = []
     where
         stageNames = map motorizedStageName (filter hasMotorizedStage eqs)
-validateMeasurementElement eqs _ (MERelativeStageLoop stageName (RelativeStageLoopParams dx dy dz (bx, ax) (by, ay) (bz, az) _) es)
+validateMeasurementElement eqs _ (MERelativeStageLoop stageName (RelativeStageLoopParams dx dy dz (bx, ax) (by, ay) (bz, az) _) _ es)
     | T.null (fromStageName stageName) = ["no stage name"]
     | stageName `notElem` stageNames = ["can't find stage named " ++ T.unpack (fromStageName stageName)]
     | null es = ["relative stage loop but no elements"]
@@ -114,10 +114,10 @@ foldMeasurementElement :: (Monoid a) => (MeasurementElement -> a) -> Measurement
 foldMeasurementElement f me = foldMeasurementElement' f mempty me
     where
         foldMeasurementElement' :: (Monoid a) => (MeasurementElement -> a) -> a -> MeasurementElement -> a
-        foldMeasurementElement' f ac m@(MEDoTimes _ es)             = mconcat (ac : f m : childVals f es)
-        foldMeasurementElement' f ac m@(METimeLapse _ _ es)         = mconcat (ac : f m : childVals f es)
-        foldMeasurementElement' f ac m@(MEStageLoop _ _ es)         = mconcat (ac : f m : childVals f es)
-        foldMeasurementElement' f ac m@(MERelativeStageLoop _ _ es) = mconcat (ac : f m : childVals f es)
+        foldMeasurementElement' f ac m@(MEDoTimes _ _ es)             = mconcat (ac : f m : childVals f es)
+        foldMeasurementElement' f ac m@(METimeLapse _ _ _ es)         = mconcat (ac : f m : childVals f es)
+        foldMeasurementElement' f ac m@(MEStageLoop _ _ _ es)         = mconcat (ac : f m : childVals f es)
+        foldMeasurementElement' f ac m@(MERelativeStageLoop _ _ _ es) = mconcat (ac : f m : childVals f es)
         foldMeasurementElement' f ac m = ac `mappend` (f m)
         childVals :: (Monoid a) => (MeasurementElement -> a) -> [MeasurementElement] -> [a]
         childVals f mes = map (foldMeasurementElement f) mes
