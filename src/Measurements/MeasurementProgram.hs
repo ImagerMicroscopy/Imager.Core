@@ -200,10 +200,12 @@ executeMeasurementElement env ddets (MEStageLoop sn poss maybeInputProgramID es)
                             then pure poss
                             else let (SmartProgramStageLoopDecision poss') = fromJust decision in pure poss'
 
-executeMeasurementElement env ddets (MERelativeStageLoop sn (RelativeStageLoopParams dx dy dz (bx, ax) (by, ay) (bz, az) returnToStarting) _ es) =
+executeMeasurementElement env ddets (MERelativeStageLoop sn params maybeProgramID es) =
     withStatusMessage env "relative stage loop" (
+        maybeUpdateParameters maybeProgramID params >>= \params' ->
         getStagePosition stageEq >>= \(startPosition@(StagePosition startX startY startZ usingAF afOffset)) ->
-        let xCoords = map ((+) startX . (*) dx . fromIntegral) [negate bx .. ax]
+        let (RelativeStageLoopParams dx dy dz (bx, ax) (by, ay) (bz, az) returnToStarting) = params'
+            xCoords = map ((+) startX . (*) dx . fromIntegral) [negate bx .. ax]
             yCoords = map ((+) startY . (*) dy . fromIntegral) [negate by .. ay]
             (firstX, firstY) = (head xCoords, head yCoords)
             (lastX, lastY) = (head xCoords, head yCoords)
@@ -223,20 +225,16 @@ executeMeasurementElement env ddets (MERelativeStageLoop sn (RelativeStageLoopPa
             forM_ extraPositionsFromEnd (\(x, y) ->
                 setStagePosition stageEq (StagePosition x y startZ usingAF afOffset)) >>
             when (returnToStarting) (setStagePosition stageEq startPosition)
-    --else
-        -- if we are using an autofocus system, and the sample is uneven, the AF system may not be able to find
-        -- the focus if we move too far away from the current position. So we may make intermediate stops on the way
-        -- to the first stage position
-        -- that makes sure we explore in the vicinity of locations with known AF positions.
-    --    let
-    --        (xCoords, yCoords,z_dep_list) = callGrid ax ay bx by dx dy startX startY
-    --        z_list = [startZ] ++ (replicate (length(z_dep_list)-1) 0)
-    --     in
-    --        cyclePositions xCoords yCoords z_list z_dep_list 0 stageEq usingAF afOffset bz az dz env ddets es >>
-    --        setStagePosition stageEq startPosition
     )
     where
         [stageEq] = filter (\e -> hasMotorizedStage e && motorizedStageName e == sn) (peEquipment env)
+        maybeUpdateParameters :: Maybe SmartProgramID -> RelativeStageLoopParams -> IO RelativeStageLoopParams
+        maybeUpdateParameters maybeID params 
+            | isNothing maybeID = pure params
+            | otherwise = getSmartProgramRelativeStageLoopDecision (fromJust maybeID) >>= \decision ->
+                          if (isNothing decision)
+                            then pure params
+                            else let (SmartProgramRelativeStageLoopDecision params') = fromJust decision in pure params'
         extraPositionsBetween :: (Double, Double) -> (Double, Double) -> [(Double, Double)]
         extraPositionsBetween (xStart, yStart) (xEnd, yEnd) =
             take nAdditional $ map (\idx -> (xStart + idx * dx, yStart + idx * dy)) [1.0, 2.0.. ]
