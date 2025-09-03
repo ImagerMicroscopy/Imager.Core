@@ -40,17 +40,65 @@ getAllSmartProgramIDsUsedInMeasurement me = S.toList (searchWorker S.empty me)
         searchWorker s (MEStageLoop _ _ sid es) = mconcat (map (searchWorker s) es) <> if (isJust sid) then S.singleton (fromJust sid) else S.empty
         searchWorker s (MERelativeStageLoop _ _ sid es) = mconcat (map (searchWorker s) es) <> if (isJust sid) then S.singleton (fromJust sid) else S.empty
 
-getSmartProgramDoTimesDecision :: SmartProgramID -> IO (Maybe SmartProgramDoTimesDecision)
-getSmartProgramDoTimesDecision id = queryServerForDecision "dotimesdecision" id
+data SmartProgramServerResponse = ResponseSuccess
+                                | ResponseError !Text
+                                | ResponseNoDecision
+                                | ResponseDoTimesDecision !NumIterationsTotal
+                                | ResponseStageLoopDecision ![PositionNameAndCoords]
+                                | ResponseRelativeStageLoopDecision !RelativeStageLoopParams
+                                | ResponseTimeLapseDecision !NumIterationsTotal !WaitDuration
+                                deriving (Show)
 
-getSmartProgramStageLoopDecision :: SmartProgramID -> IO (Maybe SmartProgramStageLoopDecision)
-getSmartProgramStageLoopDecision = undefined
+isNoDecisionResponse :: SmartProgramServerResponse -> Bool
+isNoDecisionResponse ResponseNoDecision = True
+isNoDecisionResponse _                  = False
 
-getSmartProgramRelativeStageLoopDecision :: SmartProgramID -> IO (Maybe SmartProgramRelativeStageLoopDecision)
-getSmartProgramRelativeStageLoopDecision = undefined
+instance FromJSON SmartProgramServerResponse where
+    parseJSON (Object v) = 
+        v .: "type" >>= \(tt :: Text) ->
+        case tt of
+            "status"                    -> v .: "status" >>= \(st :: Text) -> 
+                                               case st of
+                                                   "success" -> pure ResponseSuccess
+                                                   "error"   -> ResponseError <$> v .: "what"
+            "nodecision"                -> pure ResponseNoDecision
+            "dotimesdecision"           -> ResponseDoTimesDecision <$> v .: "nototal"
+            "stageloopdecision"         -> ResponseStageLoopDecision <$> v .: "positions"
+            "relativestageloopdecision" -> ResponseRelativeStageLoopDecision <$> v .: "params"
+            "timelapsedecision"         -> ResponseTimeLapseDecision <$> v .: "ntotal" <*> v .: "timedelta"
+            _                           -> fail "unknown SmartProgramServerResponse"
 
-getSmartProgramTimeLapseDecision :: SmartProgramID -> IO (Maybe SmartProgramTimeLapseDecision)
-getSmartProgramTimeLapseDecision = undefined
+getSmartProgramDoTimesDecision :: SmartProgramID -> IO SmartProgramServerResponse
+getSmartProgramDoTimesDecision programID = 
+    queryServerForDecision "dotimesdecision" programID >>= \resp ->
+    case resp of
+        r@ResponseDoTimesDecision{} -> pure r
+        ResponseNoDecision          -> pure ResponseNoDecision
+        _                           -> throwIO $ userError ("unexpected SmartProgramResponse for do times:" ++ show resp)
+
+getSmartProgramStageLoopDecision :: SmartProgramID -> IO SmartProgramServerResponse
+getSmartProgramStageLoopDecision programID =
+    queryServerForDecision "stageloopdecision" programID >>= \resp ->
+    case resp of
+        r@ResponseStageLoopDecision{} -> pure r
+        ResponseNoDecision            -> pure ResponseNoDecision
+        _                             -> throwIO $ userError ("unexpected SmartProgramResponse for stage loop:" ++ show resp)
+
+getSmartProgramRelativeStageLoopDecision :: SmartProgramID -> IO SmartProgramServerResponse
+getSmartProgramRelativeStageLoopDecision programID =
+    queryServerForDecision "relativestageloopdecision" programID >>= \resp ->
+    case resp of
+        r@ResponseRelativeStageLoopDecision{} -> pure r
+        ResponseNoDecision                    -> pure ResponseNoDecision
+        _                                     -> throwIO $ userError ("unexpected SmartProgramResponse for relative stage loop:" ++ show resp)
+
+getSmartProgramTimeLapseDecision :: SmartProgramID -> IO SmartProgramServerResponse
+getSmartProgramTimeLapseDecision programID =
+    queryServerForDecision "timelapsedecision" programID >>= \resp ->
+    case resp of
+        r@ResponseTimeLapseDecision{} -> pure r
+        ResponseNoDecision            -> pure ResponseNoDecision
+        _                             -> throwIO $ userError ("unexpected SmartProgramResponse for time lapse:" ++ show resp)
 
 queryServerForDecision :: (FromJSON a) => Text -> SmartProgramID -> IO a
 queryServerForDecision path id =
@@ -69,8 +117,8 @@ queryServerForDecision path id =
 
 parseSmartProgramIDsFromProgramCode :: SmartProgramCode -> [SmartProgramID]
 parseSmartProgramIDsFromProgramCode code =
-    case (decode (LB.fromStrict . T.encodeUtf8 $ fromSmartProgramCode code) :: Maybe Array) of
-        Just (objs :: V.Vector Value) -> map findID (V.toList objs)
+    case (fromSmartProgramCode code) of
+        (Array objs) -> map findID (V.toList objs)
         _                    -> error "Could not parse smart program ids"
     where
         findID :: Value -> SmartProgramID
@@ -78,17 +126,6 @@ parseSmartProgramIDsFromProgramCode code =
                                 Just id -> SmartProgramID id
                                 Nothing -> error "Could not parse smart program id"
         findID _          = error "did not find object encoding the smart program id"
-
-data SmartSendResponse = SmartSendResponseStatusOK
-                       | SmartSendResponseStatusError
-                        deriving (Show)
-
-instance FromJSON SmartSendResponse where
-    parseJSON (Object v) =
-        v .: "type" >>= \(t :: Text) ->
-        case (T.toLower t) of
-            "status" -> v .: "status" >>= \(status :: Text) -> case status of "ok"    -> pure SmartSendResponseStatusOK
-                                                                              "error" -> pure SmartSendResponseStatusError
 
 type SendToSmartProgramsChannelWriter = WaitableChannelWriter ([SmartProgramID], (AcquisitionMetaData, AcquiredData))
 type SendToSmartProgramsChannelReader = WaitableChannelReader ([SmartProgramID], (AcquisitionMetaData, AcquiredData))
@@ -101,13 +138,13 @@ sendDetectedImageToSmartPrograms_Worker chan =
         loopRead =
             forever (
                 peekWaitableChannel chan >>= \(smartProgramIDs, image) ->
-                putStrLn "Worker has data" >>
+                putStrLn "Smart server send worker has data" >>
                 sendImagesToSmartProgramServer [image] smartProgramIDs >>= \response ->
                 putStrLn ("received response: " ++ show response) >>
                 readWaitableChannel chan -- remove the item from the queue
             )
 
-sendImagesToSmartProgramServer :: [(AcquisitionMetaData, AcquiredData)] -> [SmartProgramID] -> IO SmartSendResponse
+sendImagesToSmartProgramServer :: [(AcquisitionMetaData, AcquiredData)] -> [SmartProgramID] -> IO SmartProgramServerResponse
 sendImagesToSmartProgramServer images ids =
     let allMessages = map (uncurry AcquiredDataMessage)  images
         asChannelMessages = map (ChannelMessage 0) allMessages

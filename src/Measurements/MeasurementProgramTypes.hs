@@ -356,7 +356,7 @@ instance NFData TimeSpec where
   rnf t = t `seq` ()
 
 
-newtype SmartProgramCode = SmartProgramCode {fromSmartProgramCode :: Text}
+newtype SmartProgramCode = SmartProgramCode {fromSmartProgramCode :: Value}
                               deriving (Show, Generic)
 newtype SmartProgramID = SmartProgramID {fromSmartProgramID :: Text}
                         deriving (Show, Generic, Ord, Eq)
@@ -370,35 +370,4 @@ instance FromJSON SmartProgramID where
 instance ToJSON SmartProgramID where
     toJSON (SmartProgramID i) = toJSON i
 
-newtype SmartProgramDoTimesDecision = SmartProgramDoTimesDecision NumIterationsTotal
-newtype SmartProgramStageLoopDecision = SmartProgramStageLoopDecision [PositionNameAndCoords]
-newtype SmartProgramRelativeStageLoopDecision = SmartProgramRelativeStageLoopDecision RelativeStageLoopParams
-data SmartProgramTimeLapseDecision = SmartProgramTimeLapseDecision !NumIterationsTotal !WaitDuration
 
-instance FromJSON SmartProgramDoTimesDecision where
-    parseJSON (Object v) = 
-        v .: "type" >>= \(tt :: Text) ->
-        if (tt /= "dotimesdecision")
-            then error "parsing but not a dotimesdecision"
-            else SmartProgramDoTimesDecision <$> v .: "numiterations"
-
-instance FromJSON SmartProgramStageLoopDecision where
-    parseJSON (Object v) = 
-        v .: "type" >>= \(tt :: Text) ->
-        if (tt /= "stageloopdecision")
-            then error "parsing but not a stageloopdecision"
-            else SmartProgramStageLoopDecision <$> v .: "positions"
-
-instance FromJSON SmartProgramRelativeStageLoopDecision where
-    parseJSON (Object v) = 
-        v .: "type" >>= \(tt :: Text) ->
-        if (tt /= "relativestageloopdecision")
-            then error "parsing but not a relativestageloopdecision"
-            else SmartProgramRelativeStageLoopDecision <$> v .: "params"
-
-instance FromJSON SmartProgramTimeLapseDecision where
-    parseJSON (Object v) = 
-        v .: "type" >>= \(tt :: Text) ->
-        if (tt /= "timelapsedecision")
-            then error "parsing but not a timelapsedecision"
-            else SmartProgramTimeLapseDecision <$> v .: "ntotal" <*> v .: "timedelta"

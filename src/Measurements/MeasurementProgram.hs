@@ -145,9 +145,9 @@ executeMeasurementElement env ddets (MEFastAcquisitionLoop n (detName, detParams
         maybeUpdateLoopCount maybeID n 
                 | isNothing maybeID = pure n
                 | otherwise = getSmartProgramDoTimesDecision (fromJust maybeID) >>= \decision ->
-                            if (isNothing decision)
-                                then pure n
-                                else let (SmartProgramDoTimesDecision n') = fromJust decision in pure n'
+                                  case decision of
+                                      ResponseNoDecision         -> pure n
+                                      ResponseDoTimesDecision n' -> pure n'
 
 executeMeasurementElement env ddets (METimeLapse n dur maybeInputProgramID es) =
     withStatusMessage env "time lapse" (
@@ -163,12 +163,11 @@ executeMeasurementElement env ddets (METimeLapse n dur maybeInputProgramID es) =
     where
         maybeUpdateLoopParameters :: Maybe SmartProgramID -> WaitDuration -> NumIterationsTotal -> IO (NumIterationsTotal, WaitDuration)
         maybeUpdateLoopParameters maybeInputProgramID dur n
-            | isNothing maybeInputProgramID = pure (n, dur) -- if we don't need to ask a smart program then just take the default values
+            | isNothing maybeInputProgramID = pure (n, dur)
             | otherwise = getSmartProgramTimeLapseDecision (fromJust maybeInputProgramID) >>= \decision ->
-                          if (isNothing decision)           -- smart program can't decide - just take the default values
-                              then pure (n, dur)
-                              else let (SmartProgramTimeLapseDecision n' dur') = fromJust decision
-                                   in  pure (n', dur')
+                              case decision of
+                                  ResponseNoDecision                -> pure (n, dur)
+                                  ResponseTimeLapseDecision n' dur' -> pure (n', dur')
         futureDurations dur n = map ((*) (fromWaitDuration dur) . fromIntegral) [0 .. ((fromNumIterationsTotal n) - 1)]
         futureTimes :: WaitDuration -> NumIterationsTotal -> IO [TimeSpec]
         futureTimes dur n = getTime Monotonic >>= \now ->
@@ -204,9 +203,9 @@ executeMeasurementElement env ddets (MEStageLoop sn poss maybeInputProgramID es)
         maybeUpdateStagePositions maybeID poss 
             | isNothing maybeID = pure poss
             | otherwise = getSmartProgramStageLoopDecision (fromJust maybeID) >>= \decision ->
-                          if (isNothing decision)
-                            then pure poss
-                            else let (SmartProgramStageLoopDecision poss') = fromJust decision in pure poss'
+                                  case decision of
+                                      ResponseNoDecision              -> pure poss
+                                      ResponseStageLoopDecision poss' -> pure poss'
 
 executeMeasurementElement env ddets (MERelativeStageLoop sn params maybeProgramID es) =
     withStatusMessage env "relative stage loop" (
@@ -240,9 +239,9 @@ executeMeasurementElement env ddets (MERelativeStageLoop sn params maybeProgramI
         maybeUpdateParameters maybeID params 
             | isNothing maybeID = pure params
             | otherwise = getSmartProgramRelativeStageLoopDecision (fromJust maybeID) >>= \decision ->
-                          if (isNothing decision)
-                            then pure params
-                            else let (SmartProgramRelativeStageLoopDecision params') = fromJust decision in pure params'
+                              case decision of
+                                  ResponseNoDecision                        -> pure params
+                                  ResponseRelativeStageLoopDecision params' -> pure params'
         extraPositionsBetween :: (Double, Double) -> (Double, Double) -> [(Double, Double)]
         extraPositionsBetween (xStart, yStart) (xEnd, yEnd) =
             take nAdditional $ map (\idx -> (xStart + idx * dx, yStart + idx * dy)) [1.0, 2.0.. ]
