@@ -57,15 +57,13 @@ main =
     getExecutablePath >>= \exePath ->
     DT.trace (show exePath)  readAvailableEquipment >>= \descs ->
     withEquipmentAndPluginCameras descs $ \(availableEquipment, availablePluginCams) ->
-      read <$> readFile (takeDirectory exePath </> "cameraoptions.txt") >>= \imageOrientationOpss ->
-
+      
       newMessageChannel >>= \asyncMessageChannel ->
       newMVar [] >>= \asyncStatusMessagesMVar ->
       async (return ()) >>= \asyncProgramWorker ->
       wait asyncProgramWorker >>
 
       
-      applyCameraOptions availablePluginCams imageOrientationOpss >>
       getDetectorWavelengths (head availablePluginCams) >>= \wl ->
       return (byteStringFromVector wl) >>= \encodedWl ->
       putStrLn "ready to measure!" >>
@@ -73,13 +71,6 @@ main =
       let env = Environment availableEquipment availablePluginCams encodedWl
                         asyncMessageChannel asyncStatusMessagesMVar asyncProgramWorker
       in  wait =<< async (runServer 3200 messageHandler env serverSettings)
-    where
-        applyCameraOptions :: Detector a => [a] -> [(DetectorName, [ImageOrientationOperation])] -> IO ()
-        applyCameraOptions dets opts =
-            forM_ dets (\det ->
-                case lookup (detectorName det) opts of
-                    Just operations -> setImageOrientation det operations
-                    Nothing         -> putStrLn ("No image orientation options found for " ++ T.unpack (fromDetectorName $ detectorName det)))
 
 messageHandler :: Detector a => MessageHandler (Environment a)
 messageHandler msg env =

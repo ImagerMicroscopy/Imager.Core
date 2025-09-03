@@ -6,7 +6,6 @@ module Detectors.Detector (
   , Detector (..)
   , DetectorProperty
   , AsyncData (..)
-  , ImageOrientationOperation (..)
   , NMeasurementsToPerform
   , acquireMultipleDetectorStreamingData
 ) where
@@ -39,12 +38,6 @@ data AsyncData = AsyncData !(DetectorName, MeasuredImage)   -- (detectorName, im
                | AsyncFinished
                | AsyncError
 
-data ImageOrientationOperation = IPORotateCW
-                               | IPORotateCCW
-                               | IPOFlipHorizontal
-                               | IPOFlipVertical
-                               deriving (Read, Show)
-
 class Detector a where
     detectorName :: a -> DetectorName
     acquireData :: a -> IO MeasuredImage
@@ -62,8 +55,6 @@ class Detector a where
     isConfiguredForHardwareTriggering :: a -> IO Bool
     getDetectorWavelengths :: a -> IO (Vector Double)
     getDetectorWavelengths _ = return V.empty
-    setImageOrientation :: a -> [ImageOrientationOperation] -> IO ()
-    setImageOrientation _ _ = pure ()
 
 acquireMultipleDetectorStreamingData :: (Detector a) => [a] -> IO () -> IO () -> NMeasurementsToPerform -> Chan AsyncData -> IO ()
 acquireMultipleDetectorStreamingData dets actionBeforeAcquisition actionAfterAcquisition nMeasurements chan =

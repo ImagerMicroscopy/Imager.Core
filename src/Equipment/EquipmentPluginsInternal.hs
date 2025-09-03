@@ -67,7 +67,6 @@ data EquipmentPlugin = EquipmentPlugin {
                          , epSetCameraOption :: DetectorName -> DetectorProperty -> IO ()
                          , epGetFrameRate :: DetectorName -> IO Double
                          , epIsConfiguredForHardwareTriggering :: DetectorName -> IO Bool
-                         , epSetImageOrientation :: DetectorName -> [OrientationOp] -> IO ()
                          , epAcquireSingleImage :: DetectorName -> IO MeasuredImage
                          , epStartAsyncAcquisition :: DetectorName -> IO ()
                          , epStartBoundedAsyncAcquisition :: DetectorName -> Word64 -> IO ()
@@ -130,16 +129,6 @@ instance Detector PluginDetector where
     getDetectorFrameRate (PluginDetector camName ep@(EquipmentPlugin{})) = ep.epGetFrameRate camName
     isConfiguredForHardwareTriggering (PluginDetector camName ep@(EquipmentPlugin{})) = ep.epIsConfiguredForHardwareTriggering camName
 
-    setImageOrientation :: PluginDetector -> [ImageOrientationOperation] -> IO ()
-    setImageOrientation (PluginDetector camName ep@(EquipmentPlugin{})) ops =
-        ep.epSetImageOrientation camName (map toSC ops)
-        where
-            toSC :: ImageOrientationOperation -> OrientationOp
-            toSC IPORotateCW = RotateCWOp
-            toSC IPORotateCCW = RotateCCWOp
-            toSC IPOFlipHorizontal = FlipHorizontalOp
-            toSC IPOFlipVertical = FlipVerticalOp
-
 
 type InitFunc = CString -> Ptr () -> IO CInt
 type ShutdownFunc = IO ()
@@ -169,7 +158,6 @@ type ReleaseOptionsDataFunc = FunPtr (CString -> IO ())
 type SetCameraOptionFunc = CString -> CString -> IO CInt
 type GetFrameRateFunc = CString -> Ptr CDouble -> IO CInt
 type IsConfiguredForHardwareTriggeringFunc = CString -> Ptr CInt -> IO CInt
-type SetImageOrientationFunc = CString -> Ptr CInt -> CInt -> IO CInt
 type AcquireSingleImageFunc = CString -> Ptr (Ptr Word16) -> Ptr CInt -> Ptr CInt -> IO CInt
 type StartAsyncAcquisitionFunc = CString -> IO CInt
 type StartBoundedAsyncAcquisitionFunc = CString -> Word64 -> IO CInt
@@ -203,7 +191,6 @@ foreign import ccall "dynamic" mkGetCameraOptionsFunc :: FunPtr GetCameraOptions
 foreign import ccall "dynamic" mkSetCameraOptionFunc :: FunPtr SetCameraOptionFunc -> SetCameraOptionFunc
 foreign import ccall "dynamic" mkGetFrameRateFunc :: FunPtr GetFrameRateFunc -> GetFrameRateFunc
 foreign import ccall "dynamic" mkIsConfiguredForHardwareTriggeringFunc :: FunPtr IsConfiguredForHardwareTriggeringFunc -> IsConfiguredForHardwareTriggeringFunc
-foreign import ccall "dynamic" mkSetImageOrientationFunc :: FunPtr SetImageOrientationFunc -> SetImageOrientationFunc
 foreign import ccall "dynamic" mkAcquireSingleImageFunc :: FunPtr AcquireSingleImageFunc -> AcquireSingleImageFunc
 foreign import ccall "dynamic" mkStartAsyncAcquisitionFunc :: FunPtr StartAsyncAcquisitionFunc -> StartAsyncAcquisitionFunc
 foreign import ccall "dynamic" mkStartBoundedAsyncAcquisitionFunc :: FunPtr StartBoundedAsyncAcquisitionFunc -> StartBoundedAsyncAcquisitionFunc
@@ -243,7 +230,6 @@ loadPlugin pluginConfigDir libName =
     loadFunc modu "SetCameraOption" mkSetCameraOptionFunc >>= \setCameraOptionF ->
     loadFunc modu "GetFrameRate" mkGetFrameRateFunc >>= \getFrameRateF ->
     loadFunc modu "IsConfiguredForHardwareTriggering" mkIsConfiguredForHardwareTriggeringFunc >>= \isConfiguredForHardwareTriggeringF ->
-    loadFunc modu "SetImageOrientation" mkSetImageOrientationFunc >>= \setImageOrientationF ->
     loadFunc modu "AcquireSingleImage" mkAcquireSingleImageFunc >>= \acquireSingleImageF ->
     loadFunc modu "StartAsyncAcquisition" mkStartAsyncAcquisitionFunc >>= \startAsyncAcquisitionF ->
     loadFunc modu "StartBoundedAsyncAcquisition" mkStartBoundedAsyncAcquisitionFunc >>= \startBoundedAsyncAcquisitionF ->
@@ -279,7 +265,6 @@ loadPlugin pluginConfigDir libName =
                                 (setCameraOption getLastSCCamErrorF setCameraOptionF)
                                 (getFrameRate getLastSCCamErrorF getFrameRateF)
                                 (isConfiguredForHardwareTriggering getLastSCCamErrorF isConfiguredForHardwareTriggeringF)
-                                (setImageOrientation getLastSCCamErrorF setImageOrientationF)
                                 (acquireSingleImage getLastSCCamErrorF acquireSingleImageF releaseImageDataF)
                                 (startAsyncAcquisition getLastSCCamErrorF startAsyncAcquisitionF)
                                 (startBoundedAsyncAcquisition getLastSCCamErrorF startBoundedAsyncAcquisitionF)
@@ -445,18 +430,6 @@ loadPlugin pluginConfigDir libName =
             if (isConf == 0)
                 then (pure False)
                 else (pure True)
-        
-        setImageOrientation :: GetLastErrorFunc -> SetImageOrientationFunc -> DetectorName -> [OrientationOp] -> IO ()
-        setImageOrientation errF f (DetectorName camName) ops =
-            withCString (T.unpack camName) $ \nameStr ->
-            withArray (map encodedOp ops) $ \opsPtr ->
-            checkErrorWithCallback errF (f nameStr opsPtr (fromIntegral $ length ops))
-            where
-                encodedOp :: OrientationOp -> CInt
-                encodedOp RotateCWOp = 0
-                encodedOp RotateCCWOp = 1
-                encodedOp FlipHorizontalOp = 2
-                encodedOp FlipVerticalOp = 3
         
         acquireSingleImage :: GetLastErrorFunc -> AcquireSingleImageFunc -> ReleaseImageDataFunc -> DetectorName -> IO MeasuredImage
         acquireSingleImage errF acqF releaseF (DetectorName camName) =

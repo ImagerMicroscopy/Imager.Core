@@ -220,10 +220,6 @@ int IsConfiguredForHardwareTriggering(char* cameraName, int* isConfiguredForHard
     return -1;
 }
 
-int SetImageOrientation(char* cameraName, int* orientationOps, int nOps) {
-    return -1;
-}
-
 int AcquireSingleImage(char* cameraName, uint16_t** imagePtr, int* nRows, int* nCols) {
     return -1;
 }
