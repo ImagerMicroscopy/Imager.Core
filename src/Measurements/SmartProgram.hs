@@ -21,6 +21,7 @@ import GHC.Generics
 import Network.HTTP.Req
 
 import Measurements.MeasurementProgramTypes
+import Utils.WaitableChannel
 
 startSmartPrograms :: SmartProgramCode -> IO ()
 startSmartPrograms code = undefined
@@ -40,7 +41,7 @@ getAllSmartProgramIDsUsedInMeasurement me = S.toList (searchWorker S.empty me)
         searchWorker s (MERelativeStageLoop _ _ sid es) = mconcat (map (searchWorker s) es) <> if (isJust sid) then S.singleton (fromJust sid) else S.empty
 
 getSmartProgramDoTimesDecision :: SmartProgramID -> IO (Maybe SmartProgramDoTimesDecision)
-getSmartProgramDoTimesDecision = undefined
+getSmartProgramDoTimesDecision id = queryServerForDecision "dotimesdecision" id
 
 getSmartProgramStageLoopDecision :: SmartProgramID -> IO (Maybe SmartProgramStageLoopDecision)
 getSmartProgramStageLoopDecision = undefined
@@ -50,6 +51,21 @@ getSmartProgramRelativeStageLoopDecision = undefined
 
 getSmartProgramTimeLapseDecision :: SmartProgramID -> IO (Maybe SmartProgramTimeLapseDecision)
 getSmartProgramTimeLapseDecision = undefined
+
+queryServerForDecision :: (FromJSON a) => Text -> SmartProgramID -> IO a
+queryServerForDecision path id =
+    let serverPort = 8100
+        url = http "127.0.0.1" /: path
+        queryParams = "id" =: (fromSmartProgramID id)
+        body = NoReqBody
+    in  runReq defaultHttpConfig $
+            req
+                GET                     -- HTTP method
+                url                     -- URL
+                body                    -- Request body
+                jsonResponse            -- Response type
+                (port serverPort <> queryParams <> responseTimeout 1000000) >>= \response -> -- Options (port and query parameter)
+            pure (responseBody response)
 
 parseSmartProgramIDsFromProgramCode :: SmartProgramCode -> [SmartProgramID]
 parseSmartProgramIDsFromProgramCode code =
@@ -74,16 +90,22 @@ instance FromJSON SmartSendResponse where
             "status" -> v .: "status" >>= \(status :: Text) -> case status of "ok"    -> pure SmartSendResponseStatusOK
                                                                               "error" -> pure SmartSendResponseStatusError
 
+type SendToSmartProgramsChannelWriter = WaitableChannelWriter ([SmartProgramID], (AcquisitionMetaData, AcquiredData))
+type SendToSmartProgramsChannelReader = WaitableChannelReader ([SmartProgramID], (AcquisitionMetaData, AcquiredData))
 
-sendDetectedImageToSmartPrograms_Worker :: SendToSmartProgramsChannel -> IO ()
+sendDetectedImageToSmartPrograms_Worker :: SendToSmartProgramsChannelReader -> IO ()
 sendDetectedImageToSmartPrograms_Worker chan =
     putStrLn "Worker starting up" >>
-    ((forever (
-        readNextImageToSendToSmartPrograms chan >>= \(smartProgramIDs, image) ->    -- may block until an image is available
-        putStrLn "Worker has data" >>
-        sendImagesToSmartProgramServer [image] smartProgramIDs >>= \response ->
-        putStrLn ("received response: " ++ show response) >>
-        markImagesSentSuccessfullyToSmartPrograms chan 1)) `catch` (\e -> putStrLn ("Exception caught: " ++ show (e :: SomeException)) >> error (show e)))
+    loopRead `catch` (\e -> putStrLn ("Exception caught: " ++ show (e :: SomeException)) >> throwIO e)
+    where
+        loopRead =
+            forever (
+                peekWaitableChannel chan >>= \(smartProgramIDs, image) ->
+                putStrLn "Worker has data" >>
+                sendImagesToSmartProgramServer [image] smartProgramIDs >>= \response ->
+                putStrLn ("received response: " ++ show response) >>
+                readWaitableChannel chan -- remove the item from the queue
+            )
 
 sendImagesToSmartProgramServer :: [(AcquisitionMetaData, AcquiredData)] -> [SmartProgramID] -> IO SmartSendResponse
 sendImagesToSmartProgramServer images ids =

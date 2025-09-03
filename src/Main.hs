@@ -37,9 +37,11 @@ import Equipment.EquipmentInitialization
 import SimpleJSONServer
 import Measurements.MeasurementProgram
 import Measurements.MeasurementProgramTypes
-import Utils.MeasurementProgramUtils
 import Measurements.MeasurementProgramVerification
+import Measurements.SmartProgram
+import Utils.MeasurementProgramUtils
 import Utils.MiscUtils
+import Utils.WaitableChannel
 
 import Debug.Trace as DT
 
@@ -208,7 +210,7 @@ startAsyncAcquisition env ddets me =
     newIORef (DetectionIndex 0) >>= \detectionIdxRef ->
     newMessageChannel >>= \messageChannel ->
     newMVar [] >>= \statusMVar ->
-    newSmartProgramsChannel >>= \smartProgramSendChan ->
+    newWaitableChannel sendDetectedImageToSmartPrograms_Worker >>= \smartProgramSendChan ->
     TimeAtStartOfExperiment <$> getTime Monotonic >>= \startTime ->
     async (executeMeasurement (ProgramEnvironment detectors startTime (envEquipment env) detectionIdxRef [] Nothing messageChannel statusMVar smartProgramSendChan) me ddets >>
            return ()) >>= \asyncWorker ->

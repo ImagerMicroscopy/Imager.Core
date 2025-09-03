@@ -26,6 +26,7 @@ import Equipment.Equipment
 import Equipment.EquipmentTypes
 import Camera.SCCameraTypes
 import Utils.MiscUtils
+import Utils.WaitableChannel
 
 type Prog = [MeasurementElement]
 
@@ -64,7 +65,7 @@ data ProgramEnvironment a = ProgramEnvironment {
                               , peSmartProgramCode :: Maybe SmartProgramCode
                               , peMessageChannel :: !MessageChannel
                               , peStatusMVar :: !(MVar [Text])
-                              , peSmartProgramSendChan :: !SendToSmartProgramsChannel
+                              , peSmartProgramSendChan :: !(WaitableChannelWriter ([SmartProgramID], (AcquisitionMetaData, AcquiredData)))
                             }
 
 data DetectionParams = DetectionParams {
@@ -368,43 +369,6 @@ instance FromJSON SmartProgramID where
     parseJSON = fmap SmartProgramID . parseJSON
 instance ToJSON SmartProgramID where
     toJSON (SmartProgramID i) = toJSON i
-
-data SendToSmartProgramsChannel = SendToSmartProgramsChannel {
-                                      sspChan :: TChan (([SmartProgramID], (AcquisitionMetaData, AcquiredData)))
-                                    , sspNumImageSetsInFlight :: TVar Int    -- incremented when a dataset is submitted to the channel, decremented only once the image has been sent
-                                                                             -- (not when it is removed from the queue!)
-                                  }
-
-newSmartProgramsChannel :: IO SendToSmartProgramsChannel
-newSmartProgramsChannel = SendToSmartProgramsChannel <$> newTChanIO <*> newTVarIO 0
-
-submitDetectedImageToSmartProgramsIfNeeded :: SendToSmartProgramsChannel -> [SmartProgramID] -> (AcquisitionMetaData, AcquiredData) -> IO ()
-submitDetectedImageToSmartProgramsIfNeeded chan ids im =
-    putStrLn "sending to channel" >>
-    when (not $ null ids) (
-        atomically $
-            writeTChan (sspChan chan) (ids, im) >>
-            modifyTVar' (sspNumImageSetsInFlight chan) (+1)
-    )
-
-readNextImageToSendToSmartPrograms :: SendToSmartProgramsChannel -> IO ([SmartProgramID], (AcquisitionMetaData, AcquiredData))
-readNextImageToSendToSmartPrograms chan = atomically $ readTChan (sspChan chan)
-
-markImagesSentSuccessfullyToSmartPrograms :: SendToSmartProgramsChannel -> Int -> IO ()
-markImagesSentSuccessfullyToSmartPrograms chan nImages =
-    atomically $ modifyTVar' (sspNumImageSetsInFlight chan) (\n -> n - nImages)
-
-waitUntilAllImagesHaveBeenSentToSmartPrograms :: SendToSmartProgramsChannel -> IO ()
-waitUntilAllImagesHaveBeenSentToSmartPrograms chan =
-    atomically $
-        readTVar (sspNumImageSetsInFlight chan) >>= \numImageSetsInFlight ->
-        if (numImageSetsInFlight == 0)
-            then pure ()
-            else retry  -- block until the TVar (or channel) is next modified, after which this function will be run again
-
-isSmartProgramChannelEmpty :: SendToSmartProgramsChannel -> IO Bool
-isSmartProgramChannelEmpty chan =
-    atomically $ isEmptyTChan (sspChan chan)
 
 newtype SmartProgramDoTimesDecision = SmartProgramDoTimesDecision NumIterationsTotal
 newtype SmartProgramStageLoopDecision = SmartProgramStageLoopDecision [PositionNameAndCoords]
