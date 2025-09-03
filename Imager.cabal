@@ -58,6 +58,7 @@ executable Imager
                      , Detectors.Detector
                      , Utils.MiscUtils
                      , Utils.DLLUtils
+                     , Utils.WaitableChannel
                      , Equipment.Devices.Arduino
                      , Equipment.Devices.Asahi
                      , Equipment.Devices.ASITigerController
