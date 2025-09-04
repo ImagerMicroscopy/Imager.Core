@@ -135,8 +135,8 @@ executeMeasurementElement env ddets (MEDoTimes (NumIterationsTotal n) _ es) =
         ))
 
 executeMeasurementElement env ddets (MEFastAcquisitionLoop n (detName, detParams) inputProgramID programIDs) =
-    withStatusMessage env (T.format "fast acquisition ({} images)" (T.Only (fromNumIterationsTotal n))) (
-        maybeUpdateLoopCount inputProgramID n >>= \n' ->
+    maybeUpdateLoopCount inputProgramID n >>= \n' ->
+    withStatusMessage env (T.format "fast acquisition ({} images)" (T.Only (fromNumIterationsTotal n'))) (
         readIORef (peDetectionIndexRef env) >>= \detectionIndex ->
         executeFastDetectionLoop detectors eqs (detName, detParams) n' startTime detectionIndex messageChannel (sendToSmartProgramsChannel, programIDs) >>
         modifyIORef (peDetectionIndexRef env) (DetectionIndex . ((+) (fromNumIterationsTotal n')) . fromDetectionIndex))

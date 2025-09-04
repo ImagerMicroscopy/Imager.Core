@@ -63,7 +63,7 @@ instance FromJSON SmartProgramServerResponse where
                                                    "success" -> pure ResponseSuccess
                                                    "error"   -> ResponseError <$> v .: "what"
             "nodecision"                -> pure ResponseNoDecision
-            "dotimesdecision"           -> ResponseDoTimesDecision <$> v .: "nototal"
+            "dotimesdecision"           -> ResponseDoTimesDecision <$> v .: "ntotal"
             "stageloopdecision"         -> ResponseStageLoopDecision <$> v .: "positions"
             "relativestageloopdecision" -> ResponseRelativeStageLoopDecision <$> v .: "params"
             "timelapsedecision"         -> ResponseTimeLapseDecision <$> v .: "ntotal" <*> v .: "timedelta"
