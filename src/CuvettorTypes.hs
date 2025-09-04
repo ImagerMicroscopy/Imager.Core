@@ -60,7 +60,7 @@ data RequestMessage = AcquireData !DetectionParams
                     | ExecuteMeasurementProgram {
                           execMeasurementProgram :: !MeasurementElement
                         , execMeasurementDetections :: !DefinedDetections
-                        , execMeasurementSmartProgramCode :: !(Maybe SmartProgramCode)
+                        , execMeasurementSmartProgramCode :: !SmartProgramCode
                       }
                     | FetchAsyncData
                     | AcknowledgeDataReceipt !Word64
@@ -84,7 +84,7 @@ instance ToJSON RequestMessage where
         "action" .= ("executemeasurementprogram" :: Text) <>
         "program" .= prog <>
         "defineddetections" .= dets <>
-        "smartprogramcode" .= (fromSmartProgramCode <$> smartprog))
+        "smartprogramcode" .= (fromSmartProgramCode smartprog))
     toEncoding FetchAsyncData = pairs ("action" .= ("fetchasyncspectra" :: Text))
     toEncoding (AcknowledgeDataReceipt upToIdx) = pairs ("action" .= ("acknowledgedatareceipt" :: Text) <> "uptoandincluding" .= upToIdx)
     toEncoding FetchAsyncStatusMessages = pairs ("action" .= ("fetchasyncstatusmessages" :: Text))
@@ -105,7 +105,7 @@ instance FromJSON RequestMessage where
             "getdetectorproperties" -> GetDetectorProperties <$> v .: "detectorname"
             "setdetectorproperty" -> SetDetectorProperty <$> v .: "detectorname" <*> v .: "property"
             "ping"      -> return Ping
-            "executemeasurementprogram" -> ExecuteMeasurementProgram <$> v .: "program" <*> v .: "defineddetections" <*> v .:? "smartprogramcode"
+            "executemeasurementprogram" -> ExecuteMeasurementProgram <$> v .: "program" <*> v .: "defineddetections" <*> v .: "smartprogramcode"
             "fetchasyncspectra" -> return FetchAsyncData
             "acknowledgedatareceipt" -> AcknowledgeDataReceipt <$> v .: "uptoandincluding"
             "fetchasyncstatusmessages" -> return FetchAsyncStatusMessages

@@ -14,6 +14,7 @@ import Control.Monad
 import Control.Monad.Trans.Except
 import Control.Monad.IO.Class
 import Control.Monad.STM
+import Data.Aeson
 import Data.Either
 import Data.IORef
 import Data.List
@@ -29,6 +30,7 @@ import qualified Data.Text.Lazy as LT
 import qualified Data.Text.Format as T
 import Data.Time.Clock
 import Data.Time.LocalTime
+import qualified Data.Vector as V
 import Data.Word
 import System.Mem
 import System.Clock
@@ -46,15 +48,16 @@ import Utils.MeasurementProgramUtils
 import Utils.MiscUtils
 import Utils.WaitableChannel
 
-executeMeasurement :: Detector a => ([a], [EquipmentW], MessageChannel, MVar [Text]) -> MeasurementElement -> DefinedDetections -> IO ()
-executeMeasurement (detectors, equipment, messageChannel, statusMVar) me ddets =
+executeMeasurement :: Detector a => ([a], [EquipmentW], MessageChannel, MVar [Text]) -> MeasurementElement -> DefinedDetections -> SmartProgramCode -> IO ()
+executeMeasurement (detectors, equipment, messageChannel, statusMVar) me ddets smartProgramCode =
     withAsync (forever $ resetSystemSleepTimer >> threadDelay (round 60.0e6)) (\_ ->
         withWaitableChannel sendDetectedImageToSmartPrograms_Worker (\smartProgramsChannelWriter ->
             newIORef (DetectionIndex 0) >>= \detectionIdxRef ->
             TimeAtStartOfExperiment <$> getTime Monotonic >>= \startTime ->
-            let env = ProgramEnvironment detectors startTime equipment detectionIdxRef [] Nothing messageChannel statusMVar smartProgramsChannelWriter  
-            in  when (isJust (peSmartProgramCode env)) (
-                    sendProgramsToSmartProgramServer (fromJust (peSmartProgramCode env))) >>
+            let smartProgramIDs = parseSmartProgramIDsFromProgramCode smartProgramCode
+                env = ProgramEnvironment detectors startTime equipment detectionIdxRef [] smartProgramCode messageChannel statusMVar smartProgramsChannelWriter  
+            in  when (not $ null smartProgramIDs) (
+                    sendProgramsToSmartProgramServer smartProgramCode) >>
                 forM_ equipment (flushSerialPorts) >>
                 forM_ (M.toList commonDetectorProperties) (\(detName, opts) ->
                     mapM_ (setDetectorOption (namedDetector detName)) opts) >>
@@ -433,7 +436,8 @@ fastStreamingAcquisition requiredDets enableLightSourcesAction disableLightSourc
                                            metadata = AcquisitionMetaData pos acqName (DetectionIndex thisDetIdx) numImagesPerDetectionIndex
                                        in  when (nImagesAcquiredTotal `mod` 50 == 49) (performMajorGC) >>
                                            (acquiredData `deepseq` (addDataToChannel messageChannel (AcquiredDataMessage metadata acquiredData))) >>
-                                           writeWriteableChannel smartProgramsChannel (smartProgramIDs, (metadata, acquiredData)) >>
+                                           when (not . null $ smartProgramIDs) (
+                                               writeWriteableChannel smartProgramsChannel (smartProgramIDs, (metadata, acquiredData))) >>
                                            fetchData detStartTime posRef newMap nDetectorsFinished async chan
         stagePositionWorker :: IO StagePosition -> IORef StagePosition -> IO ()
         stagePositionWorker readStagePosFunc positionRef =

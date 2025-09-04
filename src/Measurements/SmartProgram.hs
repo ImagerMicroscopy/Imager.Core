@@ -155,6 +155,9 @@ sendImagesToSmartProgramServer images ids =
         when (not $ isSuccessResponse result) (
             throwIO $ userError ("sending smart programs image but received " ++ show result))
 
+emptySmartProgramCode :: SmartProgramCode
+emptySmartProgramCode = SmartProgramCode (Array V.empty)
+
 parseSmartProgramIDsFromProgramCode :: SmartProgramCode -> [SmartProgramID]
 parseSmartProgramIDsFromProgramCode code =
     case (fromSmartProgramCode code) of

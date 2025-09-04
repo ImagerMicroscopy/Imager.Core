@@ -21,8 +21,7 @@ import qualified Data.Text.Encoding as T
 import qualified Data.ByteString.Base64 as B64
 import qualified Data.Map.Strict as M
 import Data.Maybe
-import Data.Vector.Storable (Vector)
-import qualified Data.Vector.Storable as V
+import qualified Data.Vector as V
 import Data.Word
 import System.Clock
 import System.Environment
@@ -88,7 +87,7 @@ performAction :: Detector a => Environment a -> RequestMessage -> IO (ResponseMe
 performAction env (AcquireData params) =
     let detElem = MEDetection [AcquisitionTypeName "Default"] []
         ddets = M.fromList [(AcquisitionTypeName "Default", params)]
-    in  startAsyncAcquisition env ddets detElem >>= \(asyncWorker, messageChannel, statusMVar) ->
+    in  startAsyncAcquisition env ddets detElem emptySmartProgramCode >>= \(asyncWorker, messageChannel, statusMVar) ->
         wait asyncWorker >>
         readChannelMessages messageChannel >>= \acquiredData ->
         return (AcquiredDataResponse acquiredData, env)
@@ -154,8 +153,8 @@ performAction env (SetDetectorProperty detName prop) =
 
 performAction env Ping = return (Pong, env)
 
-performAction env (ExecuteMeasurementProgram me ddets _) =
-    startAsyncAcquisition env ddets me >>= \(asyncWorker, spectraMVar, statusMVar) ->
+performAction env (ExecuteMeasurementProgram me ddets smartProgramCode) =
+    startAsyncAcquisition env ddets me smartProgramCode >>= \(asyncWorker, spectraMVar, statusMVar) ->
     let newEnv = env {envAsyncDataChannel = spectraMVar, envAsyncStatusMessagesMVar = statusMVar, envAsyncProgramWorker = asyncWorker}
     in  return (StatusOK, newEnv)
 
@@ -203,13 +202,13 @@ performAction env IsAsyncAcquisitionRunning =
     asyncAcquisitionRunning env >>= \asyncIsRunning ->
     return (AsyncAcquisitionIsRunning asyncIsRunning, env)
 
-startAsyncAcquisition :: Detector a => Environment a -> DefinedDetections -> MeasurementElement -> IO (Async (), MessageChannel, MVar [Text])
-startAsyncAcquisition env ddets me =
+startAsyncAcquisition :: Detector a => Environment a -> DefinedDetections -> MeasurementElement -> SmartProgramCode -> IO (Async (), MessageChannel, MVar [Text])
+startAsyncAcquisition env ddets me smartProgramCode =
     ensureAsyncAcquisitionNotRunning env >>
     validateMeasurementElementThrows (envDetectors env) (envEquipment env) me ddets >>
     newMessageChannel >>= \messageChannel ->
     newMVar [] >>= \statusMVar ->
-    async (executeMeasurement (detectors, envEquipment env, messageChannel, statusMVar) me ddets >>
+    async (executeMeasurement (detectors, envEquipment env, messageChannel, statusMVar) me ddets smartProgramCode >>
            return ()) >>= \asyncWorker ->
     return (asyncWorker, messageChannel, statusMVar)
     where

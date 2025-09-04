@@ -62,7 +62,7 @@ data ProgramEnvironment a = ProgramEnvironment {
                               , peEquipment :: ![EquipmentW]
                               , peDetectionIndexRef :: !(IORef DetectionIndex)
                               , peKnownSmartProgramIDs :: ![SmartProgramID]
-                              , peSmartProgramCode :: Maybe SmartProgramCode
+                              , peSmartProgramCode :: SmartProgramCode
                               , peMessageChannel :: !MessageChannel
                               , peStatusMVar :: !(MVar [Text])
                               , peSmartProgramSendChan :: !(WaitableChannelWriter ([SmartProgramID], (AcquisitionMetaData, AcquiredData)))
