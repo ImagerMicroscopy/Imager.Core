@@ -23,9 +23,6 @@ import Network.HTTP.Req
 import Measurements.MeasurementProgramTypes
 import Utils.WaitableChannel
 
-startSmartPrograms :: SmartProgramCode -> IO ()
-startSmartPrograms code = undefined
-
 getAllSmartProgramIDsUsedInMeasurement :: MeasurementElement -> [SmartProgramID]
 getAllSmartProgramIDsUsedInMeasurement me = S.toList (searchWorker S.empty me)
     where
@@ -52,6 +49,10 @@ data SmartProgramServerResponse = ResponseSuccess
 isNoDecisionResponse :: SmartProgramServerResponse -> Bool
 isNoDecisionResponse ResponseNoDecision = True
 isNoDecisionResponse _                  = False
+
+isSuccessResponse :: SmartProgramServerResponse -> Bool
+isSuccessResponse ResponseSuccess = True
+isSuccessResponse _               = False
 
 instance FromJSON SmartProgramServerResponse where
     parseJSON (Object v) = 
@@ -115,6 +116,45 @@ queryServerForDecision path id =
                 (port serverPort <> queryParams <> responseTimeout 1000000) >>= \response -> -- Options (port and query parameter)
             pure (responseBody response)
 
+sendProgramsToSmartProgramServer :: SmartProgramCode -> IO ()
+sendProgramsToSmartProgramServer code =
+    let serverPort = 8100
+        url = http "127.0.0.1" /: "startprograms"
+        body = ReqBodyJson code
+    in  runReq defaultHttpConfig ( 
+            liftIO (putStrLn "sending") >>
+            req
+                POST                    -- HTTP method
+                url                     -- URL
+                body                    -- Request body
+                jsonResponse            -- Response type
+                (port serverPort <> responseTimeout 1000000) >>= \response -> -- Options (port and query parameter)
+            pure (responseBody response)) >>= \result ->
+        when (not $ isSuccessResponse result) (
+            throwIO $ userError ("sending smart programs but received " ++ show result))
+
+
+sendImagesToSmartProgramServer :: [(AcquisitionMetaData, AcquiredData)] -> [SmartProgramID] -> IO ()
+sendImagesToSmartProgramServer images ids =
+    let allMessages = map (uncurry AcquiredDataMessage)  images
+        asChannelMessages = map (ChannelMessage 0) allMessages
+        asMsgPackLBS = mconcat (map pack asChannelMessages)
+        serverPort = 8100
+        url = http "127.0.0.1" /: "data"
+        queryParams = mconcat [ "id" =: (fromSmartProgramID id) | id <- ids ]
+        body = ReqBodyLbs asMsgPackLBS
+    in  runReq defaultHttpConfig (
+            liftIO (putStrLn "sending") >>
+            req
+                POST                    -- HTTP method
+                url                     -- URL
+                body                    -- Request body
+                jsonResponse            -- Response type
+                (port serverPort <> queryParams <> responseTimeout 1000000) >>= \response -> -- Options (port and query parameter)
+            pure (responseBody response)) >>= \result ->
+        when (not $ isSuccessResponse result) (
+            throwIO $ userError ("sending smart programs image but received " ++ show result))
+
 parseSmartProgramIDsFromProgramCode :: SmartProgramCode -> [SmartProgramID]
 parseSmartProgramIDsFromProgramCode code =
     case (fromSmartProgramCode code) of
@@ -139,26 +179,7 @@ sendDetectedImageToSmartPrograms_Worker chan =
             forever (
                 peekWaitableChannel chan >>= \(smartProgramIDs, image) ->
                 putStrLn "Smart server send worker has data" >>
-                sendImagesToSmartProgramServer [image] smartProgramIDs >>= \response ->
-                putStrLn ("received response: " ++ show response) >>
+                sendImagesToSmartProgramServer [image] smartProgramIDs >>
                 readWaitableChannel chan -- remove the item from the queue
             )
 
-sendImagesToSmartProgramServer :: [(AcquisitionMetaData, AcquiredData)] -> [SmartProgramID] -> IO SmartProgramServerResponse
-sendImagesToSmartProgramServer images ids =
-    let allMessages = map (uncurry AcquiredDataMessage)  images
-        asChannelMessages = map (ChannelMessage 0) allMessages
-        asMsgPackLBS = mconcat (map pack asChannelMessages)
-        serverPort = 8100
-        url = http "127.0.0.1" /: "data"
-        queryParams = mconcat [ "id" =: (fromSmartProgramID id) | id <- ids ]
-        body = ReqBodyLbs asMsgPackLBS
-    in  runReq defaultHttpConfig $ 
-            liftIO (putStrLn "sending") >>
-            req
-                POST                    -- HTTP method
-                url                     -- URL
-                body                    -- Request body
-                jsonResponse            -- Response type
-                (port serverPort <> queryParams <> responseTimeout 1000000) >>= \response -> -- Options (port and query parameter)
-            pure (responseBody response)

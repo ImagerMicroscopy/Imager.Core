@@ -50,7 +50,7 @@ executeMeasurement :: Detector a => ProgramEnvironment a -> MeasurementElement -
 executeMeasurement env me ddets =
     withAsync (forever $ resetSystemSleepTimer >> threadDelay (round 60.0e6)) (\_ ->
         when (isJust (peSmartProgramCode env)) (
-            startSmartPrograms (fromJust (peSmartProgramCode env))) >>
+            sendProgramsToSmartProgramServer (fromJust (peSmartProgramCode env))) >>
         forM_ eqs (flushSerialPorts) >>
         forM_ (M.toList commonDetectorProperties) (\(detName, opts) ->
             mapM_ (setDetectorOption (namedDetector detName)) opts) >>
