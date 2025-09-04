@@ -21,13 +21,13 @@ data WaitableChannelReader a = WaitableChannelReader {
                                  , wcrTVar :: TVar Int
                                }
 
-newWaitableChannel :: (WaitableChannelReader a -> IO ()) -> IO (WaitableChannelWriter a)
-newWaitableChannel readerAction =
+withWaitableChannel :: (WaitableChannelReader a -> IO ()) -> (WaitableChannelWriter a -> IO b) -> IO b
+withWaitableChannel readerAction writerAction =
     newTChanIO >>= \chan ->
     newTVarIO 0 >>= \tvar ->
     pure (WaitableChannelReader chan tvar) >>= \channelReadEnd ->
-    async (readerAction channelReadEnd) >>= \as ->
-    pure (WaitableChannelWriter chan tvar as)
+    withAsync (readerAction channelReadEnd) (\as ->
+        writerAction (WaitableChannelWriter chan tvar as))
 
 writeWriteableChannel :: WaitableChannelWriter a -> a -> IO ()
 writeWriteableChannel chan dat =

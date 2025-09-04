@@ -207,12 +207,9 @@ startAsyncAcquisition :: Detector a => Environment a -> DefinedDetections -> Mea
 startAsyncAcquisition env ddets me =
     ensureAsyncAcquisitionNotRunning env >>
     validateMeasurementElementThrows (envDetectors env) (envEquipment env) me ddets >>
-    newIORef (DetectionIndex 0) >>= \detectionIdxRef ->
     newMessageChannel >>= \messageChannel ->
     newMVar [] >>= \statusMVar ->
-    newWaitableChannel sendDetectedImageToSmartPrograms_Worker >>= \smartProgramSendChan ->
-    TimeAtStartOfExperiment <$> getTime Monotonic >>= \startTime ->
-    async (executeMeasurement (ProgramEnvironment detectors startTime (envEquipment env) detectionIdxRef [] Nothing messageChannel statusMVar smartProgramSendChan) me ddets >>
+    async (executeMeasurement (detectors, envEquipment env, messageChannel, statusMVar) me ddets >>
            return ()) >>= \asyncWorker ->
     return (asyncWorker, messageChannel, statusMVar)
     where

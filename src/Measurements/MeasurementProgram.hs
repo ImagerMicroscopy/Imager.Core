@@ -46,27 +46,29 @@ import Utils.MeasurementProgramUtils
 import Utils.MiscUtils
 import Utils.WaitableChannel
 
-executeMeasurement :: Detector a => ProgramEnvironment a -> MeasurementElement -> DefinedDetections -> IO ()
-executeMeasurement env me ddets =
+executeMeasurement :: Detector a => ([a], [EquipmentW], MessageChannel, MVar [Text]) -> MeasurementElement -> DefinedDetections -> IO ()
+executeMeasurement (detectors, equipment, messageChannel, statusMVar) me ddets =
     withAsync (forever $ resetSystemSleepTimer >> threadDelay (round 60.0e6)) (\_ ->
-        when (isJust (peSmartProgramCode env)) (
-            sendProgramsToSmartProgramServer (fromJust (peSmartProgramCode env))) >>
-        forM_ eqs (flushSerialPorts) >>
-        forM_ (M.toList commonDetectorProperties) (\(detName, opts) ->
-            mapM_ (setDetectorOption (namedDetector detName)) opts) >>
-        executeMeasurementElement env ddetsWithoutCommon (insertFastAcquisitionLoops ddetsWithoutCommon me)
-        `catch` (\e -> deactivateUsedLightSources >>
-                       mapM_ abortRobotProgramExecution usedRobots >>
-                       putStrLn (displayException e) >>
-                       throwIO (e :: SomeException)))
+        withWaitableChannel sendDetectedImageToSmartPrograms_Worker (\smartProgramsChannelWriter ->
+            newIORef (DetectionIndex 0) >>= \detectionIdxRef ->
+            TimeAtStartOfExperiment <$> getTime Monotonic >>= \startTime ->
+            let env = ProgramEnvironment detectors startTime equipment detectionIdxRef [] Nothing messageChannel statusMVar smartProgramsChannelWriter  
+            in  when (isJust (peSmartProgramCode env)) (
+                    sendProgramsToSmartProgramServer (fromJust (peSmartProgramCode env))) >>
+                forM_ equipment (flushSerialPorts) >>
+                forM_ (M.toList commonDetectorProperties) (\(detName, opts) ->
+                    mapM_ (setDetectorOption (namedDetector detName)) opts) >>
+                executeMeasurementElement env ddetsWithoutCommon (insertFastAcquisitionLoops ddetsWithoutCommon me)
+                `catch` (\e -> deactivateUsedLightSources >>
+                            mapM_ abortRobotProgramExecution usedRobots >>
+                            putStrLn (displayException e) >>
+                            throwIO (e :: SomeException))))
     where
-        detectors = peDetectors env
         namedDetector n = head (filter ((==) n . detectorName) detectors)
-        eqs = peEquipment env
         eqsUsedAsLightSource = eqNamesUsedAsLightSourceIn ddets me
-        deactivateUsedLightSources = mapM_ deactivateLightSource (filter (\e -> equipmentName e `elem` eqsUsedAsLightSource) eqs)
+        deactivateUsedLightSources = mapM_ deactivateLightSource (filter (\e -> equipmentName e `elem` eqsUsedAsLightSource) equipment)
         usedRobots = let usedRobotEqNames = robotNamesUsedIn me
-                     in  filter (\e -> (robotName e) `elem` usedRobotEqNames) eqs
+                     in  filter (\e -> (robotName e) `elem` usedRobotEqNames) equipment
         (ddetsWithoutCommon, commonDetectorProperties) =  removeCommonDetectorProperties ddets
 
 removeCommonDetectorProperties :: DefinedDetections -> (DefinedDetections, Map DetectorName [DetectorProperty])
