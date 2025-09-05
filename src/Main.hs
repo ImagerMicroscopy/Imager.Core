@@ -115,12 +115,6 @@ performAction env (SetMotorizedStagePosition name ds) =
     where
         stage = lookupStageThrows (envEquipment env) name
 
-performAction env (ListRobotPrograms name) =
-    listRobotPrograms (lookupRobotThrows eqs name) >>= \programs ->
-    return (RobotProgramsResponse programs, env)
-    where
-        eqs = envEquipment env
-
 performAction env ListAvailableDetectors =
     return (AvailableDetectorsResponse (map detectorName dets), env)
     where

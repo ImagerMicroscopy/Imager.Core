@@ -38,7 +38,6 @@ import Equipment.Devices.Oxxius
 import Equipment.Devices.MarcelOxxius
 import Equipment.Devices.Prior
 import Equipment.Devices.PIStage
-import Equipment.Devices.Robottor
 import Equipment.Devices.Sutter
 import Equipment.Devices.Thorlabs
 import Equipment.Devices.RemoteStage
@@ -105,7 +104,6 @@ initializeDevice d@(PriorDesc {}) = initializePriorStage d
 initializeDevice d@(PIStageDesc {}) = initializePIStage d
 initializeDevice d@(MarzhauserStageDesc {}) = initializeMarzhauserStage d
 initializeDevice d@(DummyStageDesc {}) = initializeDummyStage d
-initializeDevice d@(RobottorDesc {}) = initializeRobottor d
 initializeDevice d@(RemoteStageDesc {}) = initializeRemoteStage d
 initializeDevice d = error ("unknown type of device description: " ++ show d)
 
@@ -132,7 +130,6 @@ deviceDescName (PriorDesc {}) = "Prior motorized stage"
 deviceDescName (PIStageDesc {}) = "PI Stage"
 deviceDescName (MarzhauserStageDesc {}) = "Marzhauser motorized stage"
 deviceDescName (DummyStageDesc {}) = "Dummy motorized stage"
-deviceDescName (RobottorDesc {}) = "Robottor"
 deviceDescName (RemoteStageDesc {}) = "RemoteStage"
 deviceDescName d = error ("unknown type of device description " ++ show d)
 

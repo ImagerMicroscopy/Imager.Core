@@ -19,6 +19,7 @@ import GHC.Generics
 import System.Clock
 
 import Camera.SCCameraTypes
+import Encodings.EquipmentEncoding
 import Equipment.Equipment
 import Equipment.EquipmentTypes
 import Camera.SCCameraTypes
@@ -40,7 +41,7 @@ newtype NumImagesInDetection = NumImagesInDetection {fromNumImagesInDetection ::
 data MeasurementElement = MEDetection ![AcquisitionTypeName]
                         | MEIrradiation !LSIlluminationDuration ![IrradiationParams]
                         | MEWait !WaitDuration
-                        | MEExecuteRobotProgram !RobotName !RobotProgramName !Bool
+                        | MEExecuteRobotProgram !RobotProgramExecutionParams
                         | MEDoTimes !NumIterationsTotal !Prog
                         | MEFastAcquisitionLoop !NumIterationsTotal !(AcquisitionTypeName, DetectionParams)
                         | METimeLapse !NumIterationsTotal !WaitDuration !Prog
@@ -85,6 +86,13 @@ data MovableComponentParams = MovableComponentParams {
                                 , mcComponentSettings :: ![MovableComponentSetting]
                               } deriving (Show, Eq)
 
+data RobotProgramExecutionParams = RobotProgramExecutionParams {
+                                       rpepEquipmentName :: !EqName
+                                     , rpepRobotName :: !RobotName
+                                     , rprpProgramName :: !RobotProgramName
+                                     , rprpProgramArguments :: ![RobotProgramArgument]
+                                   } deriving (Show)
+
 data PositionNameAndCoords = PositionNameAndCoords !Text !StagePosition
                              deriving (Show)
 
@@ -106,7 +114,7 @@ instance FromJSON MeasurementElement where
           "detection"   -> MEDetection <$> v .: "detectionnames"
           "irradiation" -> MEIrradiation <$> v .: "duration" <*> v .: "irradiation"
           "wait"        -> MEWait <$> v .: "duration"
-          "executerobotprogram" -> MEExecuteRobotProgram <$> v .: "robotname" <*> v .: "programname" <*> v .: "waitforcompletion"
+          "executerobotprogram" -> MEExecuteRobotProgram <$> v .: "programparameters"
           "dotimes"     -> MEDoTimes <$> v .: "ntotal" <*> v .: "elements"
           "timelapse"   -> METimeLapse <$> v .: "ntotal" <*> v .: "timedelta" <*> v .: "elements"
           -- no FromJSON instance for MEFastAcquisitionLoop because it is automatically applied
@@ -118,7 +126,7 @@ instance ToJSON MeasurementElement where
   toEncoding (MEDetection dets) = pairs ("elementtype" .= ("detection" :: Text) <> "detectionnames" .= dets)
   toEncoding (MEIrradiation dur ip) = pairs ("elementtype" .= ("irradiation" :: Text) <> "duration" .= dur <> "irradiation" .= ip)
   toEncoding (MEWait d) = pairs ("elementtype" .= ("wait" :: Text) <> "duration" .= d)
-  toEncoding (MEExecuteRobotProgram n p w) = pairs ("elementtype" .= ("executerobotprogram" :: Text) <> "robotname" .= n <> "programname" .= p <> "waitforcompletion" .= w)
+  toEncoding (MEExecuteRobotProgram params) = pairs ("elementtype" .= ("executerobotprogram" :: Text) <> "programparameters" .= params)
   toEncoding (MEDoTimes n es) = pairs ("elementtype" .= ("dotimes" :: Text) <> "ntotal" .= n <> "elements" .= es)
   toEncoding (METimeLapse n td es) = pairs ("elementtype" .= ("timelapse" :: Text) <> "ntotal" .= n <> "timedelta" .= td <> "elements" .= es)
   toEncoding (MEFastAcquisitionLoop n det) = pairs ("elementtype" .= ("fastacquisitionloop" :: Text) <> "ntotal" .= n <> "detection" .= det)
@@ -157,6 +165,20 @@ instance ToJSON IrradiationParams where
         pairs ("equipmentname" .= eName <> "lightsourcename" .= lName
             <> "lightsourcechannel" .= channel <> "lightsourcepower" .= power)
     toJSON _ = error "no toJSON"
+
+instance FromJSON RobotProgramExecutionParams where
+    parseJSON (Object v) =
+        RobotProgramExecutionParams <$> v .: "equipmentname"
+                                    <*> v .: "robotname"
+                                    <*> v .: "robotprogramname"
+                                    <*> v .: "robotprogramarguments"
+instance ToJSON RobotProgramExecutionParams where
+    toJSON params =
+        object [ "equipmentname"  .= rpepEquipmentName params
+               , "robotname"      .= rpepRobotName params
+               , "robotprogramname" .= rprpProgramName params
+               , "robotprogramarguments" .= rprpProgramArguments params
+               ]
 
 instance FromJSON MovableComponentParams where
     parseJSON (Object v) =

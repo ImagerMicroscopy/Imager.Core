@@ -26,7 +26,7 @@ type RobotInfo = (Text, [Text]) -- robot name, robot programs
 
 validateMeasurementElementThrows :: Detector a => [a] -> [EquipmentW] -> MeasurementElement -> DefinedDetections -> IO ()
 validateMeasurementElementThrows dets eqs me ddets =
-    fmap ((++) (validateDefinedDetections dets ddets)) (verifyRobotElements eqs me) >>= \result ->
+    pure ((validateDefinedDetections dets ddets) ++ (verifyRobotElements eqs me)) >>= \result ->
     when (not $ null result) (
         throwIO (userError $ head result)) >>
     case (foldMeasurementElement (validateMeasurementElement eqs ddets) me) of
@@ -56,7 +56,7 @@ validateMeasurementElement eqs _ (MEIrradiation dur ips)
 validateMeasurementElement eqs _ (MEWait (WaitDuration dur))
     | (dur < 0.0) || (dur > 3600) = ["invalid wait duration: " ++ show dur]
     | otherwise = []
-validateMeasurementElement eqs _ (MEExecuteRobotProgram rName pName _) = []
+validateMeasurementElement eqs _ (MEExecuteRobotProgram _) = []
 validateMeasurementElement eqs _ (MEDoTimes (NumIterationsTotal n) es)
     | (n < 0) || (n > (floor 10e6)) = ["invalid number of times to repeat: " ++ show n]
     | null es = ["do times loop but no actions"]
@@ -89,25 +89,27 @@ validateMeasurementElement eqs _ (MERelativeStageLoop stageName (RelativeStageLo
     where
         stageNames = map motorizedStageName (filter hasMotorizedStage eqs)
 
-verifyRobotElements :: [EquipmentW] -> MeasurementElement -> IO [String]
-verifyRobotElements  eqs me = do
-          pExists <- programsExist
-          rAllows <- robotsAllowExecution
-          if (not pExists)
-          then return ["referring to unknown program"]
-          else if (not rAllows)
-               then return ["robot does not allow remote execution"]
-               else return []
+verifyRobotElements :: [EquipmentW] -> MeasurementElement -> [String]
+verifyRobotElements eqs me = filter (not . null) . map (verifyRobotElement eqs) $ allRobotMeasurementElements
     where
-        rss = filter hasRobot eqs
-        availableRobotNames = map equipmentName rss
-        robotsAndProgramsInProgram = map (\(MEExecuteRobotProgram rName pName _) -> (lookupRobotThrows rss rName, pName)) robotElements
-        usedRobots = map fst robotsAndProgramsInProgram
-        robotsAllowExecution = and <$> mapM robotAcceptsExternalCommands usedRobots
-        programsExist = and <$> (mapM (\(robot, pName) -> (pName `elem`) <$> listRobotPrograms robot) robotsAndProgramsInProgram)
-        robotElements = foldMeasurementElement f me
-        f m@(MEExecuteRobotProgram _ _ _) = [m]
-        f _ = []
+        allRobotMeasurementElements = foldMeasurementElement f me
+            where
+                f m@(MEExecuteRobotProgram RobotProgramExecutionParams{}) = [m]
+                f _ = []
+        allRobotDescriptions = concat (map availableRobots eqs)
+        verifyRobotElement :: [EquipmentW] -> MeasurementElement -> String
+        verifyRobotElement eqs (MEExecuteRobotProgram (RobotProgramExecutionParams eqName robotName progName args)) =
+            if (eqExists && robotExists && programExists)
+                then []
+                else "invalid execute robot program element"
+            where
+                eqExists = eqName `elem` (map equipmentName eqs)
+                [eq] = filter ((==) eqName . equipmentName) eqs
+                robots = availableRobots eq
+                robotExists = robotName `elem` (map rdName robots)
+                [robot] = filter ((==) robotName . rdName) robots
+                programExists = progName `elem` (map rpName $ rdRobotPrograms robot)
+                -- TODO: check if the program arguments make sense
 
 -- apply f to all contained MeasurementElements and combine the results
 foldMeasurementElement :: (Monoid a) => (MeasurementElement -> a) -> MeasurementElement -> a

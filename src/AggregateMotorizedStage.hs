@@ -59,10 +59,7 @@ instance Equipment AllButMotorizedStageEquipment where
 
     hasMotorizedStage _ = False
 
-    hasRobot e = hasRobot (abmsEq e)
-    robotName e = robotName (abmsEq e)
-    listRobotPrograms e = listRobotPrograms (abmsEq e)
-    robotAcceptsExternalCommands e = robotAcceptsExternalCommands (abmsEq e)
+    availableRobots e = availableRobots (abmsEq e)
     executeRobotProgram e = executeRobotProgram (abmsEq e)
     abortRobotProgramExecution e = abortRobotProgramExecution (abmsEq e)
 
