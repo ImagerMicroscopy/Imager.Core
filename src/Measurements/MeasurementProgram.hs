@@ -150,7 +150,8 @@ executeMeasurementElement env ddets (MEFastAcquisitionLoop n (detName, detParams
         maybeUpdateLoopCount :: Maybe SmartProgramID -> NumIterationsTotal -> IO NumIterationsTotal
         maybeUpdateLoopCount maybeID n 
                 | isNothing maybeID = pure n
-                | otherwise = getSmartProgramDoTimesDecision (fromJust maybeID) >>= \decision ->
+                | otherwise = waitUntilWaitableChannelIsEmpty (peSmartProgramSendChan env) >>
+                              getSmartProgramDoTimesDecision (fromJust maybeID) >>= \decision ->
                                   case decision of
                                       ResponseNoDecision         -> pure n
                                       ResponseDoTimesDecision n' -> pure n'
@@ -170,7 +171,8 @@ executeMeasurementElement env ddets (METimeLapse n dur maybeInputProgramID es) =
         maybeUpdateLoopParameters :: Maybe SmartProgramID -> WaitDuration -> NumIterationsTotal -> IO (NumIterationsTotal, WaitDuration)
         maybeUpdateLoopParameters maybeInputProgramID dur n
             | isNothing maybeInputProgramID = pure (n, dur)
-            | otherwise = getSmartProgramTimeLapseDecision (fromJust maybeInputProgramID) >>= \decision ->
+            | otherwise = waitUntilWaitableChannelIsEmpty (peSmartProgramSendChan env) >>
+                          getSmartProgramTimeLapseDecision (fromJust maybeInputProgramID) >>= \decision ->
                               case decision of
                                   ResponseNoDecision                -> pure (n, dur)
                                   ResponseTimeLapseDecision n' dur' -> pure (n', dur')
@@ -208,7 +210,8 @@ executeMeasurementElement env ddets (MEStageLoop sn poss maybeInputProgramID es)
         maybeUpdateStagePositions :: Maybe SmartProgramID -> [PositionNameAndCoords] -> IO [PositionNameAndCoords]
         maybeUpdateStagePositions maybeID poss 
             | isNothing maybeID = pure poss
-            | otherwise = getSmartProgramStageLoopDecision (fromJust maybeID) >>= \decision ->
+            | otherwise = waitUntilWaitableChannelIsEmpty (peSmartProgramSendChan env) >>
+                          getSmartProgramStageLoopDecision (fromJust maybeID) >>= \decision ->
                                   case decision of
                                       ResponseNoDecision              -> pure poss
                                       ResponseStageLoopDecision poss' -> pure poss'
@@ -244,7 +247,8 @@ executeMeasurementElement env ddets (MERelativeStageLoop sn params maybeProgramI
         maybeUpdateParameters :: Maybe SmartProgramID -> RelativeStageLoopParams -> IO RelativeStageLoopParams
         maybeUpdateParameters maybeID params 
             | isNothing maybeID = pure params
-            | otherwise = getSmartProgramRelativeStageLoopDecision (fromJust maybeID) >>= \decision ->
+            | otherwise = waitUntilWaitableChannelIsEmpty (peSmartProgramSendChan env) >>
+                          getSmartProgramRelativeStageLoopDecision (fromJust maybeID) >>= \decision ->
                               case decision of
                                   ResponseNoDecision                        -> pure params
                                   ResponseRelativeStageLoopDecision params' -> pure params'
@@ -349,7 +353,7 @@ getXYCoords xC yC = [ [xC!!n,yC!!n] | n <- [0..length(xC)-1] ]
 
 
 insertFastAcquisitionLoops :: DefinedDetections -> MeasurementElement -> MeasurementElement
-insertFastAcquisitionLoops ddets (MEDoTimes n inputSmartID [MEDetection [dName] smartIDs]) = MEFastAcquisitionLoop n (dName, fromJust $ M.lookup dName ddets) inputSmartID smartIDs -- TODO: smart decision is lost
+insertFastAcquisitionLoops ddets (MEDoTimes n inputSmartID [MEDetection [dName] smartIDs]) = MEFastAcquisitionLoop n (dName, fromJust $ M.lookup dName ddets) inputSmartID smartIDs
 insertFastAcquisitionLoops ddets (MEDoTimes n ids es) = MEDoTimes n ids (map (insertFastAcquisitionLoops ddets) es)
 insertFastAcquisitionLoops ddets (METimeLapse n dur ids es) = METimeLapse n dur ids(map (insertFastAcquisitionLoops ddets) es)
 insertFastAcquisitionLoops ddets (MEStageLoop n pos ids es) = MEStageLoop n pos ids(map (insertFastAcquisitionLoops ddets) es)
