@@ -61,11 +61,12 @@ executeMeasurement (detectors, equipment, messageChannel, statusMVar) me ddets s
                 forM_ equipment (flushSerialPorts) >>
                 forM_ (M.toList commonDetectorProperties) (\(detName, opts) ->
                     mapM_ (setDetectorOption (namedDetector detName)) opts) >>
-                executeMeasurementElement env ddetsWithoutCommon (insertFastAcquisitionLoops ddetsWithoutCommon me)
-                `catch` (\e -> deactivateUsedLightSources >>
-                            mapM_ abortRobotProgramExecution usedRobots >>
-                            putStrLn (displayException e) >>
-                            throwIO (e :: SomeException))))
+                (executeMeasurementElement env ddetsWithoutCommon (insertFastAcquisitionLoops ddetsWithoutCommon me)
+                    `catch` (\e -> deactivateUsedLightSources >>
+                                mapM_ abortRobotProgramExecution usedRobots >>
+                                putStrLn (displayException e) >>
+                                throwIO (e :: SomeException)))
+                    `finally` (when (not $ null smartProgramIDs) (sendMeasurementFinishedToSmartProgramServer))))
     where
         namedDetector n = head (filter ((==) n . detectorName) detectors)
         eqsUsedAsLightSource = eqNamesUsedAsLightSourceIn ddets me

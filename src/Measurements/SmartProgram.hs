@@ -155,6 +155,25 @@ sendImagesToSmartProgramServer images ids =
         when (not $ isSuccessResponse result) (
             throwIO $ userError ("sending smart programs image but received " ++ show result))
 
+sendMeasurementFinishedToSmartProgramServer :: IO ()
+sendMeasurementFinishedToSmartProgramServer =
+    -- send the signal but do not throw any exceptions even if this fail - when we 
+    -- send this we are already cleaning up anyway.
+    sendMessage `catch` (\e -> putStrLn ("Exception caught in stop send: " ++ show (e :: SomeException)))
+    where
+        sendMessage =
+            let serverPort = 8100
+                url = http "127.0.0.1" /: "measurementfinished"
+                body = NoReqBody
+            in  runReq defaultHttpConfig (
+                    req
+                        POST                    -- HTTP method
+                        url                     -- URL
+                        body                    -- Request body
+                        jsonResponse            -- Response type
+                        (port serverPort <> responseTimeout 1000000) >>= \response -> -- Options (port and query parameter)
+                    pure (responseBody response))
+
 emptySmartProgramCode :: SmartProgramCode
 emptySmartProgramCode = SmartProgramCode (Array V.empty)
 
@@ -176,12 +195,11 @@ type SendToSmartProgramsChannelReader = WaitableChannelReader ([SmartProgramID],
 sendDetectedImageToSmartPrograms_Worker :: SendToSmartProgramsChannelReader -> IO ()
 sendDetectedImageToSmartPrograms_Worker chan =
     putStrLn "Worker starting up" >>
-    loopRead `catch` (\e -> putStrLn ("Exception caught: " ++ show (e :: SomeException)) >> throwIO e)
+    loopRead `catch` (\e -> putStrLn ("Exception caughtin image send: " ++ show (e :: SomeException)) >> throwIO e)
     where
         loopRead =
             forever (
                 peekWaitableChannel chan >>= \(smartProgramIDs, image) ->
-                putStrLn "Smart server send worker has data" >>
                 sendImagesToSmartProgramServer [image] smartProgramIDs >>
                 readWaitableChannel chan -- remove the item from the queue
             )
