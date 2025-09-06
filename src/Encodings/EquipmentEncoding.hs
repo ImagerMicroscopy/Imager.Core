@@ -49,6 +49,22 @@ instance ToJSON RobotProgramArgumentDescription where
                                                                   "maxvalue" .= cradMaxValue a,
                                                                   "increment" .= cradIncrement a]
 
+instance FromJSON RobotProgramArgumentDescription where
+    parseJSON (Object v) = do
+        argType :: Text <- v .: "type"
+        case argType of
+            "discreterobotprogramargument" -> do
+                argumentName <- v .: "programargumentname"
+                permissibleValues <- v .: "permissiblevalues"
+                return $ DiscreteRobotProgramArgumentDescription argumentName permissibleValues
+            "continuousrobotprogramargument" -> do
+                argumentName <- v .: "programargumentname"
+                minValue <- v .: "minvalue"
+                maxValue <- v .: "maxvalue"
+                increment <- v .: "increment"
+                return $ ContinuousRobotProgramArgumentDescription argumentName minValue maxValue increment
+            _ -> fail "Unknown argument type"
+
 instance ToJSON RobotProgramArgument where
     toJSON (DiscreteRobotProgramArgument arg) =
         object ["robotprogramargumenttype" .= ("discrete" :: Text),

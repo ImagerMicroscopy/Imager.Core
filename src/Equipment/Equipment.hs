@@ -30,7 +30,7 @@ class Equipment e where
 
     availableRobots :: e -> [RobotDescription]
     executeRobotProgram :: e -> RobotName -> RobotProgramName -> [RobotProgramArgument] -> IO ()
-    abortRobotProgramExecution :: e -> IO ()
+    stopRobot :: e -> IO ()
 
     availableLightSources _ = []
     activateLightSource e _ _ = error ("calling activateLightSource on " ++ show (fromEqName (equipmentName e)))
@@ -50,7 +50,7 @@ class Equipment e where
     
     availableRobots e = []
     executeRobotProgram e _ _ _ = error ("calling default executeRobotProgram implementation on "  ++ show (fromEqName (equipmentName e)))
-    abortRobotProgramExecution e = error ("calling default abortRobotProgramExecution on " ++ show (fromEqName (equipmentName e)))
+    stopRobot e = error ("calling default stopRobot on " ++ show (fromEqName (equipmentName e)))
 
 instance Equipment EquipmentW where
     equipmentName (EquipmentW e) = equipmentName e
@@ -69,4 +69,4 @@ instance Equipment EquipmentW where
     setStagePosition (EquipmentW e) = setStagePosition e
     availableRobots (EquipmentW e) = availableRobots e
     executeRobotProgram (EquipmentW e) = executeRobotProgram e
-    abortRobotProgramExecution (EquipmentW e) = abortRobotProgramExecution e
+    stopRobot (EquipmentW e) = stopRobot e

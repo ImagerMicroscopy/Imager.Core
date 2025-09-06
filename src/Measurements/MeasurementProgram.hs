@@ -49,7 +49,7 @@ executeMeasurement env me ddets =
             mapM_ (setDetectorOption (namedDetector detName)) opts) >>
         executeMeasurementElement env ddetsWithoutCommon (insertFastAcquisitionLoops ddetsWithoutCommon me)
         `catch` (\e -> deactivateUsedLightSources >>
-                       mapM_ abortRobotProgramExecution eqWithUsedRobots >>
+                       mapM_ stopRobot eqWithUsedRobots >>
                        putStrLn (displayException e) >>
                        throwIO (e :: SomeException)))
     where
