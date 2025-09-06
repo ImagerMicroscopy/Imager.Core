@@ -92,6 +92,7 @@ initializeDevice d@(PWMLaserControllerDesc {}) = initializePWMLaserControllerLig
 initializeDevice d@(MultiModeLasersDesc {}) = initializeMultiModeLasersLightSource d
 initializeDevice d@(BlueBoxNijiDesc {}) = initializeBlueBoxNiji d
 initializeDevice d@(DummyLightSourceDesc {}) = initializeDummyLightSource d
+initializeDevice d@(DummyRobotDesc {}) = initializeDummyRobot d
 initializeDevice d@(ThorlabsFW103HDesc {}) = initializeThorlabsFW130H d
 initializeDevice d@(ThorlabsFW102CDesc {}) = initializeThorlabsFW102C d
 initializeDevice d@(SutterLambda10BDesc {}) = initializeSutterLambda10B d
