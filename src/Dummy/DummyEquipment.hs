@@ -86,10 +86,10 @@ instance Equipment DummyRobot where
     closeDevice (DummyRobot name) = putStrLn ("Closed dummy robot " ++ T.unpack (fromEqName name))
     availableRobots _ = [RobotDescription (RobotName "Robot 1") [program1, program2]]
         where
-            program1 = RobotProgram (RobotProgramName "prog 1") [DiscreteRobotProgramArgumentDescription "arg1_1_str" ["str11", "str12"], 
-                                                                 ContinuousRobotProgramArgumentDescription "arg1_2_num" 0 100 1]
-            program2 = RobotProgram (RobotProgramName "prog 2") [ContinuousRobotProgramArgumentDescription "arg2_1_num" (-10) (-10) 0,
-                                                                 DiscreteRobotProgramArgumentDescription "arg1_1_str" ["str21", "str22"]]
-    executeRobotProgram _ rName pName args = putStrLn ("Execute on " ++ (show rName) ++ " program " ++ (show pName) ++ " with args " ++ (show args))
+            program1 = RobotProgram (RobotProgramName "program 1") [DiscreteRobotProgramArgumentDescription "prog1_stringarg" ["stringarg1", "stringarg2"], 
+                                                                    ContinuousRobotProgramArgumentDescription "prog1_numarg" 0 100 1]
+            program2 = RobotProgram (RobotProgramName "program 2") [ContinuousRobotProgramArgumentDescription "prog2_numarg" (-10) (-10) 0,
+                                                                    DiscreteRobotProgramArgumentDescription "prog2_stringarg" ["stringarg1", "stringarg2"]]
+    executeRobotProgram _ rName pName args = putStrLn ("Execute on " ++ (show $ fromRobotName rName) ++ " program " ++ (show $ fromRobotProgramName pName) ++ " with args " ++ (show args))
     stopRobot _ = putStrLn "want to stop robot"
                                                                  

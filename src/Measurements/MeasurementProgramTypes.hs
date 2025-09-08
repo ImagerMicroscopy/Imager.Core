@@ -170,14 +170,14 @@ instance FromJSON RobotProgramExecutionParams where
     parseJSON (Object v) =
         RobotProgramExecutionParams <$> v .: "equipmentname"
                                     <*> v .: "robotname"
-                                    <*> v .: "robotprogramname"
-                                    <*> v .: "robotprogramarguments"
+                                    <*> v .: "programname"
+                                    <*> v .: "programarguments"
 instance ToJSON RobotProgramExecutionParams where
     toJSON params =
         object [ "equipmentname"  .= rpepEquipmentName params
                , "robotname"      .= rpepRobotName params
-               , "robotprogramname" .= rprpProgramName params
-               , "robotprogramarguments" .= rprpProgramArguments params
+               , "programname" .= rprpProgramName params
+               , "programarguments" .= rprpProgramArguments params
                ]
 
 instance FromJSON MovableComponentParams where

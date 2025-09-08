@@ -215,8 +215,21 @@ int ListRobotProgramArgumentsInfo(char* robotName, char* programName, char** enc
 
     });
 }
+
 void ReleaseRobotProgramArgumentsInfo(char* data) {
 
+}
+
+int ExecuteRobotProgram(char* robotName, char* programName, char* programArguments) {
+    return HandleExceptions([&]() {
+
+    });
+}
+
+int StopRobot() {
+    return HandleExceptions([&]() {
+
+    });
 }
 
 int ListConnectedCameraNames(char **namesPtr, int nNames, int maxNBytesPerName, int *nNamesReturned) {

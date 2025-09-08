@@ -40,10 +40,10 @@ instance ToJSON RobotProgram where
     toJSON p = object ["programname" .= rpName p, "programarguments" .= rpArguments p]
 
 instance ToJSON RobotProgramArgumentDescription where
-    toJSON a@DiscreteRobotProgramArgumentDescription{} = object ["type" .= ("discreterobotprogramargument" :: Text),
+    toJSON a@DiscreteRobotProgramArgumentDescription{} = object ["type" .= ("discreteargument" :: Text),
                                                                  "programargumentname" .= dradArgumentName a,
                                                                  "permissiblevalues" .= dradPermissibleArgumentValues a]
-    toJSON a@ContinuousRobotProgramArgumentDescription{} = object ["type" .= ("continuousrobotprogramargument" :: Text),
+    toJSON a@ContinuousRobotProgramArgumentDescription{} = object ["type" .= ("continuousargument" :: Text),
                                                                   "programargumentname" .= cradArgumentName a,
                                                                   "minvalue" .= cradMinValue a,
                                                                   "maxvalue" .= cradMaxValue a,
@@ -53,11 +53,11 @@ instance FromJSON RobotProgramArgumentDescription where
     parseJSON (Object v) = do
         argType :: Text <- v .: "type"
         case argType of
-            "discreterobotprogramargument" -> do
+            "discreteargument" -> do
                 argumentName <- v .: "programargumentname"
                 permissibleValues <- v .: "permissiblevalues"
                 return $ DiscreteRobotProgramArgumentDescription argumentName permissibleValues
-            "continuousrobotprogramargument" -> do
+            "continuousargument" -> do
                 argumentName <- v .: "programargumentname"
                 minValue <- v .: "minvalue"
                 maxValue <- v .: "maxvalue"
