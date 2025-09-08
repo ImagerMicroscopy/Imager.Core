@@ -37,12 +37,41 @@ newtype FName = FName {
 newtype StageName = StageName {
                         fromStageName :: Text
                     } deriving (Show, Eq, Ord, ToJSON, FromJSON)
+
+data RobotDescription = RobotDescription {
+                            rdName :: !RobotName
+                          , rdRobotPrograms :: ![RobotProgram]
+                        }
+                      deriving (Show)
+
 newtype RobotName = RobotName {
                         fromRobotName :: Text
-                    } deriving (Show, Eq, Ord, ToJSON, FromJSON)
+                    } deriving (Show, Eq, Ord)
+
 newtype RobotProgramName = RobotProgramName {
                                fromRobotProgramName :: Text
-                           } deriving (Show, Eq, Ord, ToJSON, FromJSON)
+                           } deriving (Show, Eq, Ord)
+
+data RobotProgram = RobotProgram {
+                        rpName :: !RobotProgramName
+                      , rpArguments :: ![RobotProgramArgumentDescription]
+                    } deriving (Show)
+
+data RobotProgramArgumentDescription = DiscreteRobotProgramArgumentDescription {
+                                           dradArgumentName :: !Text
+                                         , dradPermissibleArgumentValues :: ![Text]
+                                       }
+                                     | ContinuousRobotProgramArgumentDescription {
+                                           cradArgumentName :: !Text
+                                         , cradMinValue :: !Double
+                                         , cradMaxValue :: !Double
+                                         , cradIncrement :: !Double
+                                       }
+                                    deriving (Show)
+
+data RobotProgramArgument = DiscreteRobotProgramArgument {drpaValue :: !Text}
+                          | ContinuousRobotProgramArgument {crpaValue :: !Double}
+                          deriving (Show)
 
 data StagePosition = StagePosition {
                          spX :: !Double
@@ -148,13 +177,9 @@ instance FromJSON MovableComponentSetting where
             _ -> fail "not a MovableComponentSetting type"
     parseJSON _ = fail "not a MovableComponentSetting"
 
-data FilterWheelDescription = FilterWheelDescription {
-                                  fwdName :: !FWName
-                                , fwdFilters :: ![FName]
-                              }
-
 data StageAxis = XAxis | YAxis | ZAxis
                deriving (Eq, Show)
+
 
 data WantDigitalModulation = DigitalModulation 
                            | NoModulation
@@ -203,6 +228,9 @@ data EquipmentDescription = CoherentLightSourceDesc {
                             }
                           | DummyLightSourceDesc {
                                 dlsdName :: !Text
+                            }
+                          | DummyRobotDesc {
+                                drdName :: !Text
                             }
                           | ThorlabsFW103HDesc {
                                 fw103DescName :: !Text

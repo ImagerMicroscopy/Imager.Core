@@ -70,7 +70,6 @@ executable Imager
                      , Equipment.Devices.MarcelOxxius
                      , Equipment.Devices.Prior
                      , Equipment.Devices.PIStage
-                     , Equipment.Devices.Robottor
                      , Equipment.Devices.Sutter
                      , Equipment.Devices.RemoteStage
                      , Camera.SCCameraTypes

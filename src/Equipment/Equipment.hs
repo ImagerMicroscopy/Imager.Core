@@ -28,12 +28,9 @@ class Equipment e where
     getStagePosition :: e -> IO StagePosition
     setStagePosition :: e -> StagePosition -> IO ()
 
-    hasRobot :: e -> Bool
-    robotName :: e -> RobotName
-    listRobotPrograms :: e -> IO [RobotProgramName]
-    robotAcceptsExternalCommands :: e -> IO Bool
-    executeRobotProgram :: e -> RobotProgramName -> Bool -> IO ()
-    abortRobotProgramExecution :: e -> IO ()
+    availableRobots :: e -> [RobotDescription]
+    executeRobotProgram :: e -> RobotName -> RobotProgramName -> [RobotProgramArgument] -> IO ()
+    stopRobot :: e -> IO ()
 
     availableLightSources _ = []
     activateLightSource e _ _ = error ("calling activateLightSource on " ++ show (fromEqName (equipmentName e)))
@@ -51,12 +48,9 @@ class Equipment e where
     getStagePosition e = error ("calling getStagePosition on " ++ show (fromEqName (equipmentName e)))
     setStagePosition e _ = error ("calling setStagePosition on " ++ show (fromEqName (equipmentName e)))
     
-    hasRobot e = False
-    robotName e = error ("calling robotName on " ++ show (fromEqName (equipmentName e)))
-    listRobotPrograms e = error ("calling listRobotPrograms on " ++ show (fromEqName (equipmentName e)))
-    robotAcceptsExternalCommands e = error ("calling robotAcceptsExternalCommands on " ++ show (fromEqName (equipmentName e)))
-    executeRobotProgram e _ = error ("calling executeRobotProgram on " ++ show (fromEqName (equipmentName e)))
-    abortRobotProgramExecution e = error ("calling abortRobotProgramExecution on " ++ show (fromEqName (equipmentName e)))
+    availableRobots e = []
+    executeRobotProgram e _ _ _ = error ("calling default executeRobotProgram implementation on "  ++ show (fromEqName (equipmentName e)))
+    stopRobot e = error ("calling default stopRobot on " ++ show (fromEqName (equipmentName e)))
 
 instance Equipment EquipmentW where
     equipmentName (EquipmentW e) = equipmentName e
@@ -73,9 +67,6 @@ instance Equipment EquipmentW where
     supportedStageAxes (EquipmentW e) = supportedStageAxes e
     getStagePosition (EquipmentW e) = getStagePosition e
     setStagePosition (EquipmentW e) = setStagePosition e
-    hasRobot (EquipmentW e) = hasRobot e
-    robotName (EquipmentW e) = robotName e
-    listRobotPrograms (EquipmentW e) = listRobotPrograms e
-    robotAcceptsExternalCommands (EquipmentW e) = robotAcceptsExternalCommands e
+    availableRobots (EquipmentW e) = availableRobots e
     executeRobotProgram (EquipmentW e) = executeRobotProgram e
-    abortRobotProgramExecution (EquipmentW e) = abortRobotProgramExecution e
+    stopRobot (EquipmentW e) = stopRobot e

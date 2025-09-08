@@ -52,7 +52,6 @@ data RequestMessage = AcquireData !DetectionParams
                     | ListAvailableEquipment
                     | GetMotorizedStagePosition !StageName
                     | SetMotorizedStagePosition !StageName !StagePosition
-                    | ListRobotPrograms !RobotName
                     | ListAvailableDetectors
                     | GetDetectorProperties !DetectorName
                     | SetDetectorProperty !DetectorName !DetectorProperty
@@ -75,7 +74,6 @@ instance ToJSON RequestMessage where
     toEncoding ListAvailableEquipment = pairs ("action" .= ("listavailableequipment" :: Text))
     toEncoding (GetMotorizedStagePosition name) = pairs ("action" .= ("getmotorizedstageposition" :: Text) <> "name" .= name)
     toEncoding (SetMotorizedStagePosition name ds) = pairs ("action" .= ("setmotorizedstageposition" :: Text) <> "name" .= name <> "position" .= ds)
-    toEncoding (ListRobotPrograms name) = pairs ("action" .= ("listrobotprograms" :: Text) <> "name" .= name)
     toEncoding ListAvailableDetectors = pairs ("action" .= ("listavailabledetectors" :: Text))
     toEncoding (GetDetectorProperties detName) = pairs ("action" .= ("getdetectorproperties" :: Text) <> "detectorname" .= detName)
     toEncoding (SetDetectorProperty detName prop) = pairs ("action" .= ("setdetectorproperty" :: Text) <> "detectorname" .= detName <> "property" .= prop)
@@ -100,7 +98,6 @@ instance FromJSON RequestMessage where
             "listavailableequipment" -> return ListAvailableEquipment
             "getmotorizedstageposition" -> GetMotorizedStagePosition <$> v .: "name"
             "setmotorizedstageposition" -> SetMotorizedStagePosition <$> v .: "name" <*> v .: "position"
-            "listrobotprograms" -> ListRobotPrograms <$> v .: "name"
             "listavailabledetectors" -> return ListAvailableDetectors
             "getdetectorproperties" -> GetDetectorProperties <$> v .: "detectorname"
             "setdetectorproperty" -> SetDetectorProperty <$> v .: "detectorname" <*> v .: "property"
@@ -123,7 +120,6 @@ data ResponseMessage = StatusOK
                      | Wavelengths !AcquiredData
                      | AvailableEquipment ![EquipmentW]
                      | MotorizedStagePosition !StagePosition
-                     | RobotProgramsResponse ![RobotProgramName]
                      | AvailableDetectorsResponse ![DetectorName]
                      | DetectorPropertiesResponse ![DetectorProperty] Double
                      | Pong
@@ -145,7 +141,6 @@ instance ToJSON ResponseMessage where
     toEncoding (Wavelengths d) = pairs ("responsetype" .= ("wavelengths" :: Text) <> "wavelengths" .= d)
     toEncoding (AvailableEquipment es) = pairs ("responsetype" .= ("availableequipment" :: Text) <> "equipment" .= es)
     toEncoding (MotorizedStagePosition ds) = pairs ("responsetype" .= ("motorizedstageposition" :: Text) <> "position" .= ds)
-    toEncoding (RobotProgramsResponse ps) = pairs ("responsetype" .= ("robotprograms" :: Text) <> "programs" .= ps)
     toEncoding (AvailableDetectorsResponse ns) = pairs ("responsetype" .= ("availabledetectors" :: Text) <> "detectornames" .= ns)
     toEncoding (DetectorPropertiesResponse d fr) = pairs ("responsetype" .= ("detectorproperties" :: Text) <> "detectorproperties" .= d <>
                                                           "framerate" .= fr)

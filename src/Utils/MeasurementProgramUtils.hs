@@ -26,8 +26,3 @@ lookupStageThrows eqs name = case eligibleStages of
                         _   -> throw (userError ("more than one stage with the same name"))
     where
       eligibleStages = filter (\e -> hasMotorizedStage e && (name == motorizedStageName e)) eqs
-
-lookupRobotThrows :: [EquipmentW] -> RobotName -> EquipmentW
-lookupRobotThrows eqs eqName = case (filter (\e -> hasRobot e && (robotName e == eqName)) eqs) of
-                                   [r] -> r
-                                   _   -> throw (userError "missing robot in program validation")

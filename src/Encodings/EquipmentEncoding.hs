@@ -4,8 +4,8 @@ module Encodings.EquipmentEncoding
 where
 
 import Data.Aeson
+import Data.Text (Text)
 import qualified Data.Text as T
-
 import Equipment.Equipment
 import Equipment.EquipmentTypes
 
@@ -14,17 +14,68 @@ instance ToJSON LightSourceDescription where
                        "allowmultiplechannels" .= lsdAllowsMultipleChannels l,
                        "channels" .= lsdChannels l]
 
-instance ToJSON FilterWheelDescription where
-    toJSON fw = object ["name" .= fwdName fw, "filters" .= fwdFilters fw]
-
 instance ToJSON EquipmentW where
     toJSON e = object ["name" .= equipmentName e,
                        "availablelightsources" .= availableLightSources e,
                        "availablemovablecomponents" .= availableMovableComponents e,
                        "hasmotorizedstage" .= hasMotorizedStage e,
                        "motorizedstageName" .= stageN,
-                       "hasrobot" .= hasRobot e,
-                       "robotname" .= robotN]
+                       "availablerobots" .= availableRobots e]
        where
            stageN = if (hasMotorizedStage e) then (fromStageName (motorizedStageName e)) else T.empty
-           robotN = if (hasRobot e) then (fromRobotName (robotName e)) else T.empty
+
+instance ToJSON RobotName where
+    toJSON (RobotName n) = toJSON n
+instance FromJSON RobotName where
+    parseJSON = fmap RobotName . parseJSON
+instance ToJSON RobotProgramName where
+    toJSON (RobotProgramName n) = toJSON n
+instance FromJSON RobotProgramName where
+    parseJSON = fmap RobotProgramName . parseJSON
+
+instance ToJSON RobotDescription where
+    toJSON d = object ["robotname" .= rdName d, "robotprograms" .= rdRobotPrograms d]
+
+instance ToJSON RobotProgram where
+    toJSON p = object ["programname" .= rpName p, "programarguments" .= rpArguments p]
+
+instance ToJSON RobotProgramArgumentDescription where
+    toJSON a@DiscreteRobotProgramArgumentDescription{} = object ["type" .= ("discreteargument" :: Text),
+                                                                 "programargumentname" .= dradArgumentName a,
+                                                                 "permissiblevalues" .= dradPermissibleArgumentValues a]
+    toJSON a@ContinuousRobotProgramArgumentDescription{} = object ["type" .= ("continuousargument" :: Text),
+                                                                  "programargumentname" .= cradArgumentName a,
+                                                                  "minvalue" .= cradMinValue a,
+                                                                  "maxvalue" .= cradMaxValue a,
+                                                                  "increment" .= cradIncrement a]
+
+instance FromJSON RobotProgramArgumentDescription where
+    parseJSON (Object v) = do
+        argType :: Text <- v .: "type"
+        case argType of
+            "discreteargument" -> do
+                argumentName <- v .: "programargumentname"
+                permissibleValues <- v .: "permissiblevalues"
+                return $ DiscreteRobotProgramArgumentDescription argumentName permissibleValues
+            "continuousargument" -> do
+                argumentName <- v .: "programargumentname"
+                minValue <- v .: "minvalue"
+                maxValue <- v .: "maxvalue"
+                increment <- v .: "increment"
+                return $ ContinuousRobotProgramArgumentDescription argumentName minValue maxValue increment
+            _ -> fail "Unknown argument type"
+
+instance ToJSON RobotProgramArgument where
+    toJSON (DiscreteRobotProgramArgument arg) =
+        object ["robotprogramargumenttype" .= ("discrete" :: Text),
+                "argument" .= arg]
+    toJSON (ContinuousRobotProgramArgument arg) =
+        object ["robotprogramargumenttype" .= ("continuous" :: Text),
+                "argument" .= arg]
+
+instance FromJSON RobotProgramArgument where
+    parseJSON (Object v) = 
+        v .: "robotprogramargumenttype" >>= \(argType :: Text) ->
+        case argType of
+            "discrete"  -> DiscreteRobotProgramArgument <$> v .: "argument"
+            "continuous" -> ContinuousRobotProgramArgument <$> v .: "argument"

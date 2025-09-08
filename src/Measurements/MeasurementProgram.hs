@@ -63,7 +63,7 @@ executeMeasurement (detectors, equipment, messageChannel, statusMVar) me ddets s
                     mapM_ (setDetectorOption (namedDetector detName)) opts) >>
                 (executeMeasurementElement env ddetsWithoutCommon (insertFastAcquisitionLoops ddetsWithoutCommon me)
                     `catch` (\e -> deactivateUsedLightSources >>
-                                mapM_ abortRobotProgramExecution usedRobots >>
+                                mapM_ stopRobot eqWithUsedRobots >>
                                 putStrLn (displayException e) >>
                                 throwIO (e :: SomeException)))
                     `finally` (when (not $ null smartProgramIDs) (sendMeasurementFinishedToSmartProgramServer))))
@@ -71,8 +71,8 @@ executeMeasurement (detectors, equipment, messageChannel, statusMVar) me ddets s
         namedDetector n = head (filter ((==) n . detectorName) detectors)
         eqsUsedAsLightSource = eqNamesUsedAsLightSourceIn ddets me
         deactivateUsedLightSources = mapM_ deactivateLightSource (filter (\e -> equipmentName e `elem` eqsUsedAsLightSource) equipment)
-        usedRobots = let usedRobotEqNames = robotNamesUsedIn me
-                     in  filter (\e -> (robotName e) `elem` usedRobotEqNames) equipment
+        eqWithUsedRobots = let usedRobotEqNames = equipmentNamesWithRobotsUsedInME me
+                           in  filter (\e -> (equipmentName e) `elem` usedRobotEqNames) equipment
         (ddetsWithoutCommon, commonDetectorProperties) =  removeCommonDetectorProperties ddets
 
 removeCommonDetectorProperties :: DefinedDetections -> (DefinedDetections, Map DetectorName [DetectorProperty])
@@ -122,11 +122,11 @@ executeMeasurementElement env _ (MEWait (WaitDuration dur)) =
     withStatusMessage env (T.format "waiting {} s" (T.Only dur)) (
         threadDelay (round $ dur * 1e6))
 
-executeMeasurementElement env _ (MEExecuteRobotProgram rName pName wait) =
-    withStatusMessage env (T.format "executing program {} on {}" ((fromRobotProgramName pName), fromRobotName rName)) (
-        executeRobotProgram robot pName wait)
+executeMeasurementElement env _ (MEExecuteRobotProgram (RobotProgramExecutionParams eqName robotName progName progArgs)) =
+    withStatusMessage env (T.format "executing program {} on {}/{}" (fromRobotProgramName progName, fromRobotName robotName,  fromEqName eqName)) (
+        executeRobotProgram eq robotName progName progArgs)
     where
-        [robot] = filter (\e -> hasRobot e && robotName e == rName) (peEquipment env)
+        [eq] = filter ((== eqName) . equipmentName) (peEquipment env)
 
 executeMeasurementElement env ddets (MEDoTimes (NumIterationsTotal n) _ es) =
     withStatusMessage env "do times" (
@@ -495,11 +495,11 @@ eqNamesUsedAsLightSourceIn ddets me = S.toList (eqNamesUsedAsLightSourceIn' S.em
         eqNamesUsedAsLightSourceIn' s (MERelativeStageLoop _ _ _ mes) = s <> mconcat (map (eqNamesUsedAsLightSourceIn' S.empty) mes)
         eqNamesUsedAsLightSourceIn' s _ = s
 
-robotNamesUsedIn :: MeasurementElement -> [RobotName]
-robotNamesUsedIn = foldMeasurementElement f
+equipmentNamesWithRobotsUsedInME :: MeasurementElement -> [EqName]
+equipmentNamesWithRobotsUsedInME = foldMeasurementElement f
     where
-        f :: MeasurementElement -> [RobotName]
-        f (MEExecuteRobotProgram rName _ _) = [rName]
+        f :: MeasurementElement -> [EqName]
+        f (MEExecuteRobotProgram (RobotProgramExecutionParams eqName _ _ _)) = [eqName]
         f _ = []
 
 withStatusMessage :: ProgramEnvironment a -> LT.Text -> IO b -> IO b

@@ -52,9 +52,16 @@ extern "C" {
     LIBSPEC int GetStagePosition(double* x, double* y, double* z, int* usingHardwareAF, int* afOffset);
     LIBSPEC int SetStagePosition(double x, double y, double z, int usingHardwareAF, int afOffset);
 
+    // Robots
+    LIBSPEC int ListRobots(char** namesPtr, int nNames, int maxNBytesPerName, int* nNamesReturned);
+    LIBSPEC int ListRobotPrograms(char* robotName, char** namesPtr, int nNames, int maxNBytesPerName, int* nNamesReturned);
+    LIBSPEC int ListRobotProgramArgumentsInfo(char* robotName, char* programName, char** encodedArgumentsPtr);
+    LIBSPEC void ReleaseRobotProgramArgumentsInfo(char* data);
+    LIBSPEC int ExecuteRobotProgram(char* robotName, char* programName, char* programArguments);
+    LIBSPEC int StopRobot();
+
     // Cameras
     LIBSPEC int ListConnectedCameraNames(char **namesPtr, int nNames, int maxNBytesPerName, int *nNamesReturned);
-
     LIBSPEC int GetCameraOptions(char* cameraName, char** encodedOptionsPtr);
     LIBSPEC void ReleaseOptionsData(char* data);
     LIBSPEC int SetCameraOption(char* cameraName, char* encodedOption);

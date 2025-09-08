@@ -28,10 +28,10 @@ getAllSmartProgramIDsUsedInMeasurement me = S.toList (searchWorker S.empty me)
     where
         searchWorker :: S.Set SmartProgramID -> MeasurementElement -> S.Set SmartProgramID
         searchWorker s (MEDetection _ ids) = S.fromList ids
-        searchWorker s (MEIrradiation _ _) = s
-        searchWorker s (MEWait _) = s
+        searchWorker s (MEIrradiation{}) = s
+        searchWorker s (MEWait{}) = s
         searchWorker s (MEFastAcquisitionLoop _ _ sid ids) = S.fromList ids <> if (isJust sid) then S.singleton (fromJust sid) else S.empty
-        searchWorker s (MEExecuteRobotProgram _ _ _) = s
+        searchWorker s (MEExecuteRobotProgram{}) = s
         searchWorker s (MEDoTimes _ sid es) = mconcat (map (searchWorker s) es) <> if (isJust sid) then S.singleton (fromJust sid) else S.empty
         searchWorker s (METimeLapse _ _ sid es) = mconcat (map (searchWorker s) es) <> if (isJust sid) then S.singleton (fromJust sid) else S.empty
         searchWorker s (MEStageLoop _ _ sid es) = mconcat (map (searchWorker s) es) <> if (isJust sid) then S.singleton (fromJust sid) else S.empty

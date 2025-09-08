@@ -15,10 +15,12 @@ import Utils.FilterUtils
 data DummyLightSource = DummyLightSource !EqName
 data DummyFilterWheel = DummyFilterWheel !EqName ![(FName, Int)]
 data DummyStage = DummyStage !StageName !(IORef StagePosition)
+data DummyRobot = DummyRobot !EqName
 
 initializeDummyLightSource :: EquipmentDescription -> IO EquipmentW
 initializeDummyLightSource (DummyLightSourceDesc name) =
-    putStrLn ("opened light source " ++ T.unpack name) >> return (EquipmentW $ DummyLightSource (EqName name))
+    putStrLn ("opened light source " ++ T.unpack name) >>
+    return (EquipmentW $ DummyLightSource (EqName name))
 
 initializeDummyFilterWheel :: EquipmentDescription -> IO EquipmentW
 initializeDummyFilterWheel (DummyFilterWheelDesc name chs) =
@@ -29,6 +31,11 @@ initializeDummyStage :: EquipmentDescription -> IO EquipmentW
 initializeDummyStage (DummyStageDesc name) =
     putStrLn ("dummy stage " ++ (T.unpack name) ++ " open") >>
     EquipmentW <$> (DummyStage (StageName name) <$> newIORef (StagePosition 0 0 0 True 1))
+
+initializeDummyRobot :: EquipmentDescription -> IO EquipmentW
+initializeDummyRobot (DummyRobotDesc name) =
+    putStrLn ("initialized dummy robot " ++ T.unpack name) >>
+    pure (EquipmentW $ DummyRobot (EqName name))
 
 instance Equipment DummyLightSource where
     equipmentName (DummyLightSource n) = n
@@ -72,3 +79,17 @@ instance Equipment DummyStage where
     setStagePosition (DummyStage n posRef) ds =
         writeIORef posRef ds >>
         putStrLn ("set position of " ++ T.unpack (fromStageName n) ++ " to " ++ show ds)
+
+instance Equipment DummyRobot where
+    equipmentName _ = EqName "Dummy Robot"
+    flushSerialPorts _ = pure ()
+    closeDevice (DummyRobot name) = putStrLn ("Closed dummy robot " ++ T.unpack (fromEqName name))
+    availableRobots _ = [RobotDescription (RobotName "Robot 1") [program1, program2]]
+        where
+            program1 = RobotProgram (RobotProgramName "program 1") [DiscreteRobotProgramArgumentDescription "prog1_stringarg" ["stringarg1", "stringarg2"], 
+                                                                    ContinuousRobotProgramArgumentDescription "prog1_numarg" 0 100 1]
+            program2 = RobotProgram (RobotProgramName "program 2") [ContinuousRobotProgramArgumentDescription "prog2_numarg" (-10) (-10) 0,
+                                                                    DiscreteRobotProgramArgumentDescription "prog2_stringarg" ["stringarg1", "stringarg2"]]
+    executeRobotProgram _ rName pName args = putStrLn ("Execute on " ++ (show $ fromRobotName rName) ++ " program " ++ (show $ fromRobotProgramName pName) ++ " with args " ++ (show args))
+    stopRobot _ = putStrLn "want to stop robot"
+                                                                 
