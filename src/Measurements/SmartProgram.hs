@@ -37,38 +37,6 @@ getAllSmartProgramIDsUsedInMeasurement me = S.toList (searchWorker S.empty me)
         searchWorker s (MEStageLoop _ _ sid es) = mconcat (map (searchWorker s) es) <> if (isJust sid) then S.singleton (fromJust sid) else S.empty
         searchWorker s (MERelativeStageLoop _ _ sid es) = mconcat (map (searchWorker s) es) <> if (isJust sid) then S.singleton (fromJust sid) else S.empty
 
-data SmartProgramServerResponse = ResponseSuccess
-                                | ResponseError !Text
-                                | ResponseNoDecision
-                                | ResponseDoTimesDecision !NumIterationsTotal
-                                | ResponseStageLoopDecision ![PositionNameAndCoords]
-                                | ResponseRelativeStageLoopDecision !RelativeStageLoopParams
-                                | ResponseTimeLapseDecision !NumIterationsTotal !WaitDuration
-                                deriving (Show)
-
-isNoDecisionResponse :: SmartProgramServerResponse -> Bool
-isNoDecisionResponse ResponseNoDecision = True
-isNoDecisionResponse _                  = False
-
-isSuccessResponse :: SmartProgramServerResponse -> Bool
-isSuccessResponse ResponseSuccess = True
-isSuccessResponse _               = False
-
-instance FromJSON SmartProgramServerResponse where
-    parseJSON (Object v) = 
-        v .: "type" >>= \(tt :: Text) ->
-        case tt of
-            "status"                    -> v .: "status" >>= \(st :: Text) -> 
-                                               case st of
-                                                   "success" -> pure ResponseSuccess
-                                                   "error"   -> ResponseError <$> v .: "what"
-            "nodecision"                -> pure ResponseNoDecision
-            "dotimesdecision"           -> ResponseDoTimesDecision <$> v .: "ntotal"
-            "stageloopdecision"         -> ResponseStageLoopDecision <$> v .: "positions"
-            "relativestageloopdecision" -> ResponseRelativeStageLoopDecision <$> v .: "params"
-            "timelapsedecision"         -> ResponseTimeLapseDecision <$> v .: "ntotal" <*> v .: "timedelta"
-            _                           -> fail "unknown SmartProgramServerResponse"
-
 getSmartProgramDoTimesDecision :: SmartProgramID -> IO SmartProgramServerResponse
 getSmartProgramDoTimesDecision programID = 
     queryServerForDecision "dotimesdecision" programID >>= \resp ->
@@ -189,18 +157,15 @@ parseSmartProgramIDsFromProgramCode code =
                                 Nothing -> error "Could not parse smart program id"
         findID _          = error "did not find object encoding the smart program id"
 
-type SendToSmartProgramsChannelWriter = WaitableChannelWriter ([SmartProgramID], (AcquisitionMetaData, AcquiredData))
-type SendToSmartProgramsChannelReader = WaitableChannelReader ([SmartProgramID], (AcquisitionMetaData, AcquiredData))
-
-sendDetectedImageToSmartPrograms_Worker :: SendToSmartProgramsChannelReader -> IO ()
-sendDetectedImageToSmartPrograms_Worker chan =
+sendDetectedImageToSmartPrograms_Worker :: ([(AcquisitionMetaData, AcquiredData)] -> [SmartProgramID] -> IO ()) -> SendToSmartProgramsChannelReader -> IO ()
+sendDetectedImageToSmartPrograms_Worker sendFunc chan =
     putStrLn "Worker starting up" >>
     loopRead `catch` (\e -> putStrLn ("Exception caughtin image send: " ++ show (e :: SomeException)) >> throwIO e)
     where
         loopRead =
             forever (
                 peekWaitableChannel chan >>= \(smartProgramIDs, image) ->
-                sendImagesToSmartProgramServer [image] smartProgramIDs >>
+                sendFunc [image] smartProgramIDs >>
                 readWaitableChannel chan -- remove the item from the queue
             )
 

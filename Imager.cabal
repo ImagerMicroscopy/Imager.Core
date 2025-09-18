@@ -38,8 +38,10 @@ executable Imager
                      , parallel
                      , vector
                      , filepath
+                     , process
                      , req
                      , stm
+                     , temporary
   other-modules:       AggregateMotorizedStage
                      , CuvettorTypes
                      , Equipment.Devices.BlueBoxOptics
@@ -54,6 +56,7 @@ executable Imager
                      , Utils.MeasurementProgramUtils
                      , Measurements.MeasurementProgramVerification
                      , Measurements.SmartProgram
+                     , Measurements.SmartProgramRunner
                      , RCSerialPort
                      , Detectors.Detector
                      , Utils.MiscUtils

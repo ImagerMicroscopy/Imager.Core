@@ -25,7 +25,6 @@ import Camera.SCCameraTypes
 import Encodings.EquipmentEncoding
 import Equipment.Equipment
 import Equipment.EquipmentTypes
-import Camera.SCCameraTypes
 import Utils.MiscUtils
 import Utils.WaitableChannel
 
@@ -377,11 +376,10 @@ instance NFData NumberType where
 instance NFData TimeSpec where
   rnf t = t `seq` ()
 
-
 newtype SmartProgramCode = SmartProgramCode {fromSmartProgramCode :: Value}
-                              deriving (Show, Generic)
+                              deriving (Show)
 newtype SmartProgramID = SmartProgramID {fromSmartProgramID :: Text}
-                        deriving (Show, Generic, Ord, Eq)
+                        deriving (Show, Ord, Eq)
 
 instance FromJSON SmartProgramCode where
     parseJSON = fmap SmartProgramCode . parseJSON
@@ -392,4 +390,56 @@ instance FromJSON SmartProgramID where
 instance ToJSON SmartProgramID where
     toJSON (SmartProgramID i) = toJSON i
 
+type Port = Int
 
+data LaunchableSmartProgram = LaunchableSmartProgram {
+                                  lspID :: !SmartProgramID
+                                , lspCode :: !Text
+                                , lspPythonInterpreter :: !FilePath
+                                , lspWorkingDirectory :: !FilePath
+                              } deriving (Show)
+
+data RunningSmartProgram = RunningSmartProgram {
+                               rspID :: !SmartProgramID
+                             , rspPort :: !Port
+                             , rspProgram :: !LaunchableSmartProgram
+                        } deriving (Show)
+
+type RunningSmartProgramMap = M.Map SmartProgramID RunningSmartProgram
+
+
+data SmartProgramServerResponse = ResponseSuccess
+                                | ResponseError !Text
+                                | ResponseNoDecision
+                                | ResponseDoTimesDecision !NumIterationsTotal
+                                | ResponseStageLoopDecision ![PositionNameAndCoords]
+                                | ResponseRelativeStageLoopDecision !RelativeStageLoopParams
+                                | ResponseTimeLapseDecision !NumIterationsTotal !WaitDuration
+                                deriving (Show)
+
+isNoDecisionResponse :: SmartProgramServerResponse -> Bool
+isNoDecisionResponse ResponseNoDecision = True
+isNoDecisionResponse _                  = False
+
+isSuccessResponse :: SmartProgramServerResponse -> Bool
+isSuccessResponse ResponseSuccess = True
+isSuccessResponse _               = False
+
+instance FromJSON SmartProgramServerResponse where
+    parseJSON (Object v) = 
+        v .: "type" >>= \(tt :: Text) ->
+        case tt of
+            "status"                    -> v .: "status" >>= \(st :: Text) -> 
+                                               case st of
+                                                   "success" -> pure ResponseSuccess
+                                                   "error"   -> ResponseError <$> v .: "what"
+            "nodecision"                -> pure ResponseNoDecision
+            "dotimesdecision"           -> ResponseDoTimesDecision <$> v .: "ntotal"
+            "stageloopdecision"         -> ResponseStageLoopDecision <$> v .: "positions"
+            "relativestageloopdecision" -> ResponseRelativeStageLoopDecision <$> v .: "params"
+            "timelapsedecision"         -> ResponseTimeLapseDecision <$> v .: "ntotal" <*> v .: "timedelta"
+            _                           -> fail "unknown SmartProgramServerResponse"
+
+
+type SendToSmartProgramsChannelWriter = WaitableChannelWriter ([SmartProgramID], (AcquisitionMetaData, AcquiredData))
+type SendToSmartProgramsChannelReader = WaitableChannelReader ([SmartProgramID], (AcquisitionMetaData, AcquiredData))
