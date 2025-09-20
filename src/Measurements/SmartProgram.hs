@@ -1,6 +1,12 @@
 {-# LANGUAGE DeriveGeneric, DeriveAnyClass #-}
 
-module Measurements.SmartProgram where
+module Measurements.SmartProgram (
+    getAllSmartProgramIDsUsedInMeasurement
+  , withSmartProgramServer
+  , sendDetectedImageToSmartPrograms_Worker
+  , parseSmartProgramIDsFromCode
+  , emptySmartProgramCode
+) where
 
 import Control.Concurrent.STM
 import Control.Exception
@@ -36,6 +42,21 @@ getAllSmartProgramIDsUsedInMeasurement me = S.toList (searchWorker S.empty me)
         searchWorker s (METimeLapse _ _ sid es) = mconcat (map (searchWorker s) es) <> if (isJust sid) then S.singleton (fromJust sid) else S.empty
         searchWorker s (MEStageLoop _ _ sid es) = mconcat (map (searchWorker s) es) <> if (isJust sid) then S.singleton (fromJust sid) else S.empty
         searchWorker s (MERelativeStageLoop _ _ sid es) = mconcat (map (searchWorker s) es) <> if (isJust sid) then S.singleton (fromJust sid) else S.empty
+
+withSmartProgramServer :: SmartProgramCode -> (SmartProgramCommunicationFunctions -> IO ()) -> IO ()
+withSmartProgramServer programs action = 
+    sendProgramsToSmartProgramServer programs >>
+    action smartProgramServerCommunicationFunctions
+
+smartProgramServerCommunicationFunctions :: SmartProgramCommunicationFunctions
+smartProgramServerCommunicationFunctions =
+    SmartProgramCommunicationFunctions
+        sendMeasurementFinishedToSmartProgramServer
+        sendImagesToSmartProgramServer
+        getSmartProgramDoTimesDecision
+        getSmartProgramStageLoopDecision
+        getSmartProgramRelativeStageLoopDecision
+        getSmartProgramTimeLapseDecision
 
 getSmartProgramDoTimesDecision :: SmartProgramID -> IO SmartProgramServerResponse
 getSmartProgramDoTimesDecision programID = 
@@ -143,19 +164,21 @@ sendMeasurementFinishedToSmartProgramServer =
                     pure (responseBody response))
 
 emptySmartProgramCode :: SmartProgramCode
-emptySmartProgramCode = SmartProgramCode (Array V.empty)
+emptySmartProgramCode = DAGOrchestratorCode (Array V.empty)
 
-parseSmartProgramIDsFromProgramCode :: SmartProgramCode -> [SmartProgramID]
-parseSmartProgramIDsFromProgramCode code =
-    case (fromSmartProgramCode code) of
+parseSmartProgramIDsFromCode :: SmartProgramCode -> [SmartProgramID]
+parseSmartProgramIDsFromCode (DAGOrchestratorCode code) =
+    case code of
         (Array objs) -> map findID (V.toList objs)
-        _                    -> error "Could not parse smart program ids"
+        _            -> error "Could not parse smart program ids"
     where
         findID :: Value -> SmartProgramID
         findID (Object o) = case (flip parseMaybe o $ \x -> x .: "DagID") of
                                 Just id -> SmartProgramID id
                                 Nothing -> error "Could not parse smart program id"
         findID _          = error "did not find object encoding the smart program id"
+parseSmartProgramIDsFromCode (ProgramRunnerCode cs) = map lspID cs
+
 
 sendDetectedImageToSmartPrograms_Worker :: ([(AcquisitionMetaData, AcquiredData)] -> [SmartProgramID] -> IO ()) -> SendToSmartProgramsChannelReader -> IO ()
 sendDetectedImageToSmartPrograms_Worker sendFunc chan =

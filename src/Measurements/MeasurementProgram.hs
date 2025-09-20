@@ -44,6 +44,7 @@ import Measurements.MeasurementProgramVerification
 import Measurements.SmartProgram
 import Camera.SCCameraTypes
 import Measurements.SmartProgram
+import Measurements.SmartProgramRunner
 import Utils.MeasurementProgramUtils
 import Utils.MiscUtils
 import Utils.WaitableChannel
@@ -51,22 +52,20 @@ import Utils.WaitableChannel
 executeMeasurement :: Detector a => ([a], [EquipmentW], MessageChannel, MVar [Text]) -> MeasurementElement -> DefinedDetections -> SmartProgramCode -> IO ()
 executeMeasurement (detectors, equipment, messageChannel, statusMVar) me ddets smartProgramCode =
     withAsync (forever $ resetSystemSleepTimer >> threadDelay (round 60.0e6)) (\_ ->
-        withWaitableChannel sendDetectedImageToSmartPrograms_Worker (\smartProgramsChannelWriter ->
-            newIORef (DetectionIndex 0) >>= \detectionIdxRef ->
-            TimeAtStartOfExperiment <$> getTime Monotonic >>= \startTime ->
-            let smartProgramIDs = parseSmartProgramIDsFromProgramCode smartProgramCode
-                env = ProgramEnvironment detectors startTime equipment detectionIdxRef [] smartProgramCode messageChannel statusMVar smartProgramsChannelWriter  
-            in  when (not $ null smartProgramIDs) (
-                    sendProgramsToSmartProgramServer smartProgramCode) >>
-                forM_ equipment (flushSerialPorts) >>
+        newIORef (DetectionIndex 0) >>= \detectionIdxRef ->
+        TimeAtStartOfExperiment <$> getTime Monotonic >>= \startTime ->
+        withSmartPrograms smartProgramCode $ \smartProgramCommunicationFuncs ->
+        withWaitableChannel (sendDetectedImageToSmartPrograms_Worker (spcfSendImagesFunc smartProgramCommunicationFuncs)) $ \smartProgramsChannelWriter ->
+            let smartProgramIDs = parseSmartProgramIDsFromCode smartProgramCode
+                env = ProgramEnvironment detectors startTime equipment detectionIdxRef smartProgramIDs messageChannel statusMVar smartProgramCommunicationFuncs smartProgramsChannelWriter  
+            in  forM_ equipment (flushSerialPorts) >>
                 forM_ (M.toList commonDetectorProperties) (\(detName, opts) ->
                     mapM_ (setDetectorOption (namedDetector detName)) opts) >>
                 (executeMeasurementElement env ddetsWithoutCommon (insertFastAcquisitionLoops ddetsWithoutCommon me)
                     `catch` (\e -> deactivateUsedLightSources >>
                                 mapM_ stopRobot eqWithUsedRobots >>
                                 putStrLn (displayException e) >>
-                                throwIO (e :: SomeException)))
-                    `finally` (when (not $ null smartProgramIDs) (sendMeasurementFinishedToSmartProgramServer))))
+                                throwIO (e :: SomeException))))
     where
         namedDetector n = head (filter ((==) n . detectorName) detectors)
         eqsUsedAsLightSource = eqNamesUsedAsLightSourceIn ddets me
@@ -135,8 +134,8 @@ executeMeasurementElement env ddets (MEDoTimes (NumIterationsTotal n) _ es) =
             executeMeasurementElements env ddets ses
         ))
 
-executeMeasurementElement env ddets (MEFastAcquisitionLoop n (detName, detParams) inputProgramID programIDs) =
-    maybeUpdateLoopCount inputProgramID n >>= \n' ->
+executeMeasurementElement env ddets (MEFastAcquisitionLoop n (detName, detParams) maybeDecisionFromSmartProgramID programIDs) =
+    maybeUpdateLoopCount maybeDecisionFromSmartProgramID n >>= \n' ->
     withStatusMessage env (T.format "fast acquisition ({} images)" (T.Only (fromNumIterationsTotal n'))) (
         readIORef (peDetectionIndexRef env) >>= \detectionIndex ->
         executeFastDetectionLoop detectors eqs (detName, detParams) n' startTime detectionIndex messageChannel (sendToSmartProgramsChannel, programIDs) >>
@@ -147,18 +146,19 @@ executeMeasurementElement env ddets (MEFastAcquisitionLoop n (detName, detParams
         startTime = peStartTime env
         detectors = peDetectors env
         sendToSmartProgramsChannel = peSmartProgramSendChan env
+        getDoTimesDecisionFunc = spcfGetSmartProgramDoTimesDecisionFunc (peSmartProgramCommunicationFuncs env)
         maybeUpdateLoopCount :: Maybe SmartProgramID -> NumIterationsTotal -> IO NumIterationsTotal
         maybeUpdateLoopCount maybeID n 
                 | isNothing maybeID = pure n
                 | otherwise = waitUntilWaitableChannelIsEmpty (peSmartProgramSendChan env) >>
-                              getSmartProgramDoTimesDecision (fromJust maybeID) >>= \decision ->
+                              getDoTimesDecisionFunc (fromJust maybeID) >>= \decision ->
                                   case decision of
                                       ResponseNoDecision         -> pure n
                                       ResponseDoTimesDecision n' -> pure n'
 
-executeMeasurementElement env ddets (METimeLapse n dur maybeInputProgramID es) =
+executeMeasurementElement env ddets (METimeLapse n dur maybeDecisionFromSmartProgramID es) =
     withStatusMessage env "time lapse" (
-        maybeUpdateLoopParameters maybeInputProgramID dur n >>= \(n', dur') ->
+        maybeUpdateLoopParameters maybeDecisionFromSmartProgramID dur n >>= \(n', dur') ->
         futureTimes dur' n' >>= \fts ->
         timeSpecToUTCTimes fts >>= \utcs ->
         forM_ (zip3 [1 ..] fts utcs) (\(index :: Int, ts, utc) ->
@@ -168,11 +168,12 @@ executeMeasurementElement env ddets (METimeLapse n dur maybeInputProgramID es) =
             updateStatusMessage env (T.format "executing time lapse {} of {}" (index, (fromNumIterationsTotal n'))) >>
             executeMeasurementElements env ddets es))
     where
+        getTimeLapseDecisionFunc = spcfGetSmartProgramTimeLapseDecisionFunc (peSmartProgramCommunicationFuncs env)
         maybeUpdateLoopParameters :: Maybe SmartProgramID -> WaitDuration -> NumIterationsTotal -> IO (NumIterationsTotal, WaitDuration)
         maybeUpdateLoopParameters maybeInputProgramID dur n
             | isNothing maybeInputProgramID = pure (n, dur)
             | otherwise = waitUntilWaitableChannelIsEmpty (peSmartProgramSendChan env) >>
-                          getSmartProgramTimeLapseDecision (fromJust maybeInputProgramID) >>= \decision ->
+                          getTimeLapseDecisionFunc (fromJust maybeInputProgramID) >>= \decision ->
                               case decision of
                                   ResponseNoDecision                -> pure (n, dur)
                                   ResponseTimeLapseDecision n' dur' -> pure (n', dur')
@@ -199,26 +200,27 @@ executeMeasurementElement env ddets (METimeLapse n dur maybeInputProgramID es) =
                             in threadDelay (fromIntegral (max (ns `div` 1000) 0))
                        else return ()
 
-executeMeasurementElement env ddets (MEStageLoop sn poss maybeInputProgramID es) =
+executeMeasurementElement env ddets (MEStageLoop sn poss maybeDecisionFromSmartProgramID es) =
     withStatusMessage env "stage loop" (
-        maybeUpdateStagePositions maybeInputProgramID poss >>= \poss' ->
+        maybeUpdateStagePositions maybeDecisionFromSmartProgramID poss >>= \poss' ->
         forM_ (zip [1..] poss') (\(index :: Int, (PositionNameAndCoords posName pos)) ->
             updateStatusMessage env (T.format "stage position {} of {} ({})" (index, (length poss'), posName)) >>
             setStagePosition stageEq pos >> executeMeasurementElements env ddets es))
     where
         [stageEq] = filter (\e -> hasMotorizedStage e && motorizedStageName e == sn) (peEquipment env)
+        getStageLoopDecisionFunc = spcfGetSmartProgramStageLoopDecisionFunc (peSmartProgramCommunicationFuncs env)
         maybeUpdateStagePositions :: Maybe SmartProgramID -> [PositionNameAndCoords] -> IO [PositionNameAndCoords]
         maybeUpdateStagePositions maybeID poss 
             | isNothing maybeID = pure poss
             | otherwise = waitUntilWaitableChannelIsEmpty (peSmartProgramSendChan env) >>
-                          getSmartProgramStageLoopDecision (fromJust maybeID) >>= \decision ->
+                          getStageLoopDecisionFunc (fromJust maybeID) >>= \decision ->
                                   case decision of
                                       ResponseNoDecision              -> pure poss
                                       ResponseStageLoopDecision poss' -> pure poss'
 
-executeMeasurementElement env ddets (MERelativeStageLoop sn params maybeProgramID es) =
+executeMeasurementElement env ddets (MERelativeStageLoop sn params maybeDecisionFromSmartProgramID es) =
     withStatusMessage env "relative stage loop" (
-        maybeUpdateParameters maybeProgramID params >>= \params' ->
+        maybeUpdateParameters maybeDecisionFromSmartProgramID params >>= \params' ->
         getStagePosition stageEq >>= \(startPosition@(StagePosition startX startY startZ usingAF afOffset)) ->
         let (RelativeStageLoopParams dx dy dz (bx, ax) (by, ay) (bz, az) returnToStarting) = params'
             xCoords = map ((+) startX . (*) dx . fromIntegral) [negate bx .. ax]
@@ -244,11 +246,12 @@ executeMeasurementElement env ddets (MERelativeStageLoop sn params maybeProgramI
     )
     where
         [stageEq] = filter (\e -> hasMotorizedStage e && motorizedStageName e == sn) (peEquipment env)
+        getRelativeStageLoopDecisionFunc = spcfGetSmartProgramRelativeStageLoopDecisionFunc (peSmartProgramCommunicationFuncs env)
         maybeUpdateParameters :: Maybe SmartProgramID -> RelativeStageLoopParams -> IO RelativeStageLoopParams
         maybeUpdateParameters maybeID params 
             | isNothing maybeID = pure params
             | otherwise = waitUntilWaitableChannelIsEmpty (peSmartProgramSendChan env) >>
-                          getSmartProgramRelativeStageLoopDecision (fromJust maybeID) >>= \decision ->
+                          getRelativeStageLoopDecisionFunc (fromJust maybeID) >>= \decision ->
                               case decision of
                                   ResponseNoDecision                        -> pure params
                                   ResponseRelativeStageLoopDecision params' -> pure params'
@@ -531,3 +534,7 @@ getStagePositionSafe eqs =
     case (filter hasMotorizedStage eqs) of
         []    -> pure (StagePosition (-1.0) (-1.0) (-1.0) False 0)
         x : _ -> getStagePosition x
+
+withSmartPrograms :: SmartProgramCode -> (SmartProgramCommunicationFunctions -> IO ()) -> IO ()
+withSmartPrograms cs@(DAGOrchestratorCode{}) action = withSmartProgramServer cs action
+withSmartPrograms (ProgramRunnerCode cs) action = withRunnableSmartPrograms cs action

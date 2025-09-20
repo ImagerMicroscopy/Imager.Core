@@ -82,7 +82,7 @@ instance ToJSON RequestMessage where
         "action" .= ("executemeasurementprogram" :: Text) <>
         "program" .= prog <>
         "defineddetections" .= dets <>
-        "smartprogramcode" .= (fromSmartProgramCode smartprog))
+        "smartprogramcode" .= smartprog)
     toEncoding FetchAsyncData = pairs ("action" .= ("fetchasyncspectra" :: Text))
     toEncoding (AcknowledgeDataReceipt upToIdx) = pairs ("action" .= ("acknowledgedatareceipt" :: Text) <> "uptoandincluding" .= upToIdx)
     toEncoding FetchAsyncStatusMessages = pairs ("action" .= ("fetchasyncstatusmessages" :: Text))

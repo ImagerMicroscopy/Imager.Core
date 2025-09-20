@@ -1,4 +1,6 @@
-module Measurements.SmartProgramRunner where
+module Measurements.SmartProgramRunner (
+    withRunnableSmartPrograms
+) where
 
 import Control.Concurrent.Async
 import Control.Exception
@@ -21,16 +23,23 @@ import System.Process
 import Measurements.MeasurementProgramTypes
 import Utils.MiscUtils
 
-withRunnableSmartPrograms :: [LaunchableSmartProgram] -> (RunningSmartProgramMap -> IO ()) -> IO ()
+withRunnableSmartPrograms :: [LaunchableSmartProgram] -> (SmartProgramCommunicationFunctions -> IO ()) -> IO ()
 withRunnableSmartPrograms programs action = withRunnableSmartPrograms' (zip programs ports) action M.empty
     where
         ports = [49152 ..]
-        withRunnableSmartPrograms' :: [(LaunchableSmartProgram, Port)] -> (RunningSmartProgramMap -> IO ()) -> RunningSmartProgramMap -> IO ()
+        withRunnableSmartPrograms' :: [(LaunchableSmartProgram, Port)] -> (SmartProgramCommunicationFunctions -> IO ()) -> RunningSmartProgramMap -> IO ()
         withRunnableSmartPrograms' ((prog, port) : progs) action accum =
             let programID = lspID prog
             in  withAsync (runSmartProgram prog port) $ \_ -> withRunnableSmartPrograms' progs action (M.insert programID (RunningSmartProgram programID port prog) accum)
-        withRunnableSmartPrograms' [] action accum =
-            action accum
+        withRunnableSmartPrograms' [] action smartProgramMap =
+            let commFunctions = SmartProgramCommunicationFunctions
+                    (sendMeasurementStopToRunningSmartPrograms smartProgramMap)
+                    (sendImagesToRunningSmartPrograms smartProgramMap)
+                    (getRunningSmartProgramDoTimesDecision smartProgramMap)
+                    (getRunningSmartProgramStageLoopDecision smartProgramMap)
+                    (getRunningSmartProgramRelativeStageLoopDecision smartProgramMap)
+                    (getRunningSmartProgramTimeLapseDecision smartProgramMap)
+            in  action commFunctions
 
 runSmartProgram :: LaunchableSmartProgram -> Port -> IO ()
 runSmartProgram programDetails httpPort =
@@ -49,16 +58,13 @@ runSmartProgram programDetails httpPort =
 pythonWrapperCode :: IO Text
 pythonWrapperCode = T.readFile "SmartProgramWrapperCode.py"
 
-sendMeasurementStartToRunningSmartPrograms :: RunningSmartProgramMap -> IO ()
-sendMeasurementStartToRunningSmartPrograms = undefined
-
 sendMeasurementStopToRunningSmartPrograms :: RunningSmartProgramMap -> IO ()
 sendMeasurementStopToRunningSmartPrograms = undefined
 
 sendImagesToRunningSmartPrograms :: RunningSmartProgramMap -> [(AcquisitionMetaData, AcquiredData)] -> [SmartProgramID] -> IO ()
 sendImagesToRunningSmartPrograms smartProgramMap images programsToSendTo =
     forConcurrently_ programsToSendTo (\programID ->
-        sendImagesToRunningSmartProgram images programID smartProgramMap) 
+        sendImagesToRunningSmartProgram smartProgramMap images programID) 
     where
         sendImagesToRunningSmartProgram :: RunningSmartProgramMap -> [(AcquisitionMetaData, AcquiredData)] -> SmartProgramID -> IO ()
         sendImagesToRunningSmartProgram smartProgramMap images programToSendTo =

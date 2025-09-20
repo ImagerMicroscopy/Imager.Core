@@ -62,11 +62,20 @@ data ProgramEnvironment a = ProgramEnvironment {
                               , peEquipment :: ![EquipmentW]
                               , peDetectionIndexRef :: !(IORef DetectionIndex)
                               , peKnownSmartProgramIDs :: ![SmartProgramID]
-                              , peSmartProgramCode :: SmartProgramCode
                               , peMessageChannel :: !MessageChannel
                               , peStatusMVar :: !(MVar [Text])
+                              , peSmartProgramCommunicationFuncs :: !SmartProgramCommunicationFunctions
                               , peSmartProgramSendChan :: !(WaitableChannelWriter ([SmartProgramID], (AcquisitionMetaData, AcquiredData)))
                             }
+
+data SmartProgramCommunicationFunctions = SmartProgramCommunicationFunctions {
+                                              spcfSendMeasurementStoppedFunc :: IO ()
+                                            , spcfSendImagesFunc :: [(AcquisitionMetaData, AcquiredData)] -> [SmartProgramID] -> IO ()
+                                            , spcfGetSmartProgramDoTimesDecisionFunc :: SmartProgramID -> IO SmartProgramServerResponse
+                                            , spcfGetSmartProgramStageLoopDecisionFunc :: SmartProgramID -> IO SmartProgramServerResponse
+                                            , spcfGetSmartProgramRelativeStageLoopDecisionFunc :: SmartProgramID -> IO SmartProgramServerResponse
+                                            , spcfGetSmartProgramTimeLapseDecisionFunc :: SmartProgramID -> IO SmartProgramServerResponse
+                                          }
 
 data DetectionParams = DetectionParams {
                            dpDetectors :: ![DetectorParams]
@@ -376,15 +385,30 @@ instance NFData NumberType where
 instance NFData TimeSpec where
   rnf t = t `seq` ()
 
-newtype SmartProgramCode = SmartProgramCode {fromSmartProgramCode :: Value}
-                              deriving (Show)
+data SmartProgramCode = DAGOrchestratorCode {
+                            fromDAGOrchestratorCode :: !Value
+                        }
+                      | ProgramRunnerCode {
+                            fromProgramRunnerCode :: ![LaunchableSmartProgram]
+                        }
+                        deriving (Show)
 newtype SmartProgramID = SmartProgramID {fromSmartProgramID :: Text}
                         deriving (Show, Ord, Eq)
 
-instance FromJSON SmartProgramCode where
-    parseJSON = fmap SmartProgramCode . parseJSON
 instance ToJSON SmartProgramCode where
-    toJSON (SmartProgramCode c) = toJSON c
+    toJSON (DAGOrchestratorCode v) =
+        object ["type" .= ("dagorchestratorcode" :: Text), "code" .= v]
+    toJSON (ProgramRunnerCode progs) =
+        object ["type" .= ("programrunnercode" :: Text), "programs" .= progs]
+
+instance FromJSON SmartProgramCode where
+    parseJSON (Object v) =
+        v .: "type" >>= \(t :: Text) ->
+        case t of
+            "dagorchestratorcode" -> DAGOrchestratorCode <$> v .: "code"
+            "programrunnercode"   -> ProgramRunnerCode <$> v .: "programs"
+            _                     -> error "failing to parse SmartProgramCode"
+
 instance FromJSON SmartProgramID where
     parseJSON = fmap SmartProgramID . parseJSON
 instance ToJSON SmartProgramID where
@@ -398,6 +422,21 @@ data LaunchableSmartProgram = LaunchableSmartProgram {
                                 , lspPythonInterpreter :: !FilePath
                                 , lspWorkingDirectory :: !FilePath
                               } deriving (Show)
+
+instance FromJSON LaunchableSmartProgram where
+    parseJSON (Object v) =
+        LaunchableSmartProgram <$> v .: "programid"
+                               <*> v .: "programcode"
+                               <*> v .: "pythoninterpreter"
+                               <*> v .: "workingdirectory"
+
+instance ToJSON LaunchableSmartProgram where
+    toJSON (LaunchableSmartProgram programid programcode pythoninterpreter workingdirectory) =
+        object [ "programid"         .= programid
+               , "programcode"       .= programcode
+               , "pythoninterpreter" .= pythoninterpreter
+               , "workingdirectory"  .= workingdirectory
+               ]
 
 data RunningSmartProgram = RunningSmartProgram {
                                rspID :: !SmartProgramID
