@@ -203,8 +203,9 @@ startAsyncAcquisition env ddets me =
     newIORef (DetectionIndex 0) >>= \detectionIdxRef ->
     newMessageChannel >>= \messageChannel ->
     newMVar [] >>= \statusMVar ->
+    newIORef "" >>= \stagePositionNameRef ->
     TimeAtStartOfExperiment <$> getTime Monotonic >>= \startTime ->
-    async (executeMeasurement (ProgramEnvironment detectors startTime (envEquipment env) detectionIdxRef messageChannel statusMVar) me ddets >>
+    async (executeMeasurement (ProgramEnvironment detectors startTime (envEquipment env) detectionIdxRef stagePositionNameRef messageChannel statusMVar) me ddets >>
            return ()) >>= \asyncWorker ->
     return (asyncWorker, messageChannel, statusMVar)
     where

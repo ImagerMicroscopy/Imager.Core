@@ -89,7 +89,8 @@ executeMeasurementElement :: Detector a => ProgramEnvironment a -> DefinedDetect
 executeMeasurementElement env ddets (MEDetection detNames) =
     withStatusMessage env "Detection" (
         readIORef (peDetectionIndexRef env) >>= \detIdx ->
-        executeDetection detectors eqs (detNames, detParams) startTime detIdx messageChannel) >>
+        readIORef (peCurrentNamedPosition env) >>= \stagePositionName ->
+        executeDetection detectors eqs (detNames, detParams) startTime detIdx stagePositionName messageChannel) >>
         modifyIORef (peDetectionIndexRef env) (DetectionIndex . (+1) . fromDetectionIndex)
     where
       eqs = peEquipment env
@@ -124,7 +125,8 @@ executeMeasurementElement env ddets (MEDoTimes (NumIterationsTotal n) es) =
 executeMeasurementElement env ddets (MEFastAcquisitionLoop n (detName, detParams)) =
     withStatusMessage env (T.format "fast acquisition ({} images)" (T.Only (fromNumIterationsTotal n))) (
         readIORef (peDetectionIndexRef env) >>= \detectionIndex ->
-        executeFastDetectionLoop detectors eqs (detName, detParams) n startTime detectionIndex messageChannel) >>
+        readIORef (peCurrentNamedPosition env) >>= \stagePositionName ->
+        executeFastDetectionLoop detectors eqs (detName, detParams) n startTime detectionIndex stagePositionName messageChannel) >>
         modifyIORef (peDetectionIndexRef env) (DetectionIndex . ((+) (fromNumIterationsTotal n)) . fromDetectionIndex)
     where
       eqs = peEquipment env
@@ -168,9 +170,12 @@ executeMeasurementElement env ddets (METimeLapse (NumIterationsTotal n) (WaitDur
 
 executeMeasurementElement env ddets (MEStageLoop sn poss es) =
     withStatusMessage env "stage loop" (
+        readIORef (peCurrentNamedPosition env) >>= \savedPositionName -> -- restore previous name in case of nested stage loops
         forM_ (zip [1..] poss) (\(index :: Int, (PositionNameAndCoords posName pos)) ->
             updateStatusMessage env (T.format "stage position {} of {} ({})" (index, nPos, posName)) >>
-            setStagePosition stageEq pos >> executeMeasurementElements env ddets es))
+            writeIORef (peCurrentNamedPosition env) posName >>
+            setStagePosition stageEq pos >> executeMeasurementElements env ddets es) >>
+        writeIORef (peCurrentNamedPosition env) savedPositionName)
     where
         [stageEq] = filter (\e -> hasMotorizedStage e && motorizedStageName e == sn) (peEquipment env)
         nPos = length poss
@@ -320,8 +325,8 @@ insertFastAcquisitionLoops ddets (MEStageLoop n pos es) = MEStageLoop n pos (map
 insertFastAcquisitionLoops ddets (MERelativeStageLoop n ps es) = MERelativeStageLoop n ps (map (insertFastAcquisitionLoops ddets) es)
 insertFastAcquisitionLoops d m = m
 
-executeDetection :: Detector a => [a] -> [EquipmentW] -> ([AcquisitionTypeName], [DetectionParams]) -> TimeAtStartOfExperiment -> DetectionIndex -> MessageChannel -> IO ()
-executeDetection dets eqs (acqTypeNames, detParams) expStartTime detectionIndex messageChannel =
+executeDetection :: Detector a => [a] -> [EquipmentW] -> ([AcquisitionTypeName], [DetectionParams]) -> TimeAtStartOfExperiment -> DetectionIndex -> Text -> MessageChannel -> IO ()
+executeDetection dets eqs (acqTypeNames, detParams) expStartTime detectionIndex stagePositionName messageChannel =
     getStagePositionSafe eqs >>= \stagePos ->
     forM_ (zip acqTypeNames detParams) (\(acqTypeName, dps) ->
         setDetectorProperties dets (dpDetectors dps) >>
@@ -329,7 +334,7 @@ executeDetection dets eqs (acqTypeNames, detParams) expStartTime detectionIndex 
             requiredDets = filter (\d -> (detectorName d) `elem` requiredDetNames) dets
         in  mapM isConfiguredForHardwareTriggering requiredDets >>= \hasTriggering ->
             if (or hasTriggering)
-            then executeFastDetectionLoop dets eqs (acqTypeName, dps) (NumIterationsTotal 1) expStartTime detectionIndex messageChannel
+            then executeFastDetectionLoop dets eqs (acqTypeName, dps) (NumIterationsTotal 1) expStartTime detectionIndex stagePositionName messageChannel
             else setMovableComponents eqs (dpMovableComponents dps) >>
                  enableLightSources eqs (dpIrradiation dps) >>
                  TimeAtStartOfDetection <$> getTime Monotonic >>= \detStartTime ->
@@ -337,7 +342,7 @@ executeDetection dets eqs (acqTypeNames, detParams) expStartTime detectionIndex 
                  disableLightSources eqs (dpIrradiation dps) >>
                  forM_ (zip measuredImages (map detectorName requiredDets)) (\(measuredImage, detName) ->
                      let acquiredData = measuredImageAsAcquiredData measuredImage detName expStartTime detStartTime
-                         metadata = AcquisitionMetaData stagePos acqTypeName detectionIndex nImagesMeasuredInThisDetection
+                         metadata = AcquisitionMetaData stagePos stagePositionName acqTypeName detectionIndex nImagesMeasuredInThisDetection
                      in  (acquiredData `deepseq` (addDataToChannel messageChannel (AcquiredDataMessage metadata acquiredData)))))
     where
         nImagesMeasuredInThisDetection :: NumImagesInDetection
@@ -349,11 +354,11 @@ setDetectorProperties dets dps =
         let [thisDet] = filter ((==) detName . detectorName) dets
         in  mapM_ (setDetectorOption thisDet) detOptions)
 
-executeFastDetectionLoop :: Detector a => [a] -> [EquipmentW] -> (AcquisitionTypeName, DetectionParams) -> NumIterationsTotal -> TimeAtStartOfExperiment -> DetectionIndex -> MessageChannel -> IO ()
-executeFastDetectionLoop dets eqs (detName, detParams) nTimesToPerform expStartTime detectionIndex messageChannel =
+executeFastDetectionLoop :: Detector a => [a] -> [EquipmentW] -> (AcquisitionTypeName, DetectionParams) -> NumIterationsTotal -> TimeAtStartOfExperiment -> DetectionIndex -> Text -> MessageChannel -> IO ()
+executeFastDetectionLoop dets eqs (detName, detParams) nTimesToPerform expStartTime detectionIndex stagePositionName messageChannel =
     setDetectorProperties dets (dpDetectors detParams) >>
     setMovableComponents eqs (dpMovableComponents detParams) >>
-    fastStreamingAcquisition requiredDets enableLightSourcesAction disableLightSourcesAction detName nTimesToPerform (getStagePositionSafe eqs) expStartTime detectionIndex messageChannel
+    fastStreamingAcquisition requiredDets enableLightSourcesAction disableLightSourcesAction detName nTimesToPerform (getStagePositionSafe eqs) expStartTime detectionIndex stagePositionName messageChannel
     where
         requiredDetNames = map dtpDetectorName (dpDetectors detParams)
         requiredDets = filter (\d -> (detectorName d) `elem` requiredDetNames) dets
@@ -361,9 +366,9 @@ executeFastDetectionLoop dets eqs (detName, detParams) nTimesToPerform expStartT
         enableLightSourcesAction = enableLightSources eqs (dpIrradiation detParams)
         disableLightSourcesAction = disableLightSources eqs (dpIrradiation detParams)
 
-fastStreamingAcquisition :: Detector a => [a] -> IO () -> IO () -> AcquisitionTypeName -> NumIterationsTotal -> IO StagePosition -> TimeAtStartOfExperiment -> DetectionIndex -> MessageChannel -> IO ()
+fastStreamingAcquisition :: Detector a => [a] -> IO () -> IO () -> AcquisitionTypeName -> NumIterationsTotal -> IO StagePosition -> TimeAtStartOfExperiment -> DetectionIndex -> Text -> MessageChannel -> IO ()
 fastStreamingAcquisition requiredDets enableLightSourcesAction disableLightSourcesAction acqName (NumIterationsTotal nTimesToPerform)
-                         readStagePosFunc expStartTime (DetectionIndex detectionIndex) messageChannel =
+                         readStagePosFunc expStartTime (DetectionIndex detectionIndex) stagePositionName messageChannel =
     newChan >>= \chan ->
     readStagePosFunc >>= newIORef >>= \stagePosRef ->
     withAsync (stagePositionWorker readStagePosFunc stagePosRef) (\stageAs ->
@@ -392,7 +397,7 @@ fastStreamingAcquisition requiredDets enableLightSourcesAction disableLightSourc
                                            nImagesAcquiredTotal = sum (M.elems numImagesAcquiredMap)
                                            newMap = M.adjust (+1) detName numImagesAcquiredMap
                                            acquiredData = measuredImageAsAcquiredData measuredImage detName expStartTime detStartTime
-                                           metadata = AcquisitionMetaData pos acqName (DetectionIndex thisDetIdx) numImagesPerDetectionIndex
+                                           metadata = AcquisitionMetaData pos stagePositionName acqName (DetectionIndex thisDetIdx) numImagesPerDetectionIndex
                                        in  when (nImagesAcquiredTotal `mod` 50 == 49) (performMajorGC) >>
                                            (acquiredData `deepseq` (addDataToChannel messageChannel (AcquiredDataMessage metadata acquiredData))) >>
                                            fetchData detStartTime posRef newMap nDetectorsFinished async chan
