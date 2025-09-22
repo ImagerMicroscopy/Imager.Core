@@ -61,6 +61,8 @@ data ProgramEnvironment a = ProgramEnvironment {
                               , peStartTime :: !TimeAtStartOfExperiment
                               , peEquipment :: ![EquipmentW]
                               , peDetectionIndexRef :: !(IORef DetectionIndex)
+                              , peCurrentNamedPosition :: !(IORef Text)   -- if we are doing a stage loop, name of the
+                                                                          -- current position. Otherwise empty string.
                               , peKnownSmartProgramIDs :: ![SmartProgramID]
                               , peMessageChannel :: !MessageChannel
                               , peStatusMVar :: !(MVar [Text])
@@ -347,6 +349,7 @@ measuredImageAsAcquiredData (MeasuredImage nRows nCols (SecondsSinceStartOfDetec
 
 data AcquisitionMetaData = AcquisitionMetaData {
                                amdStagePosition :: !StagePosition
+                             , amdStagePositionName :: !Text
                              , amdAcquisitionTypename :: !AcquisitionTypeName
                              , amdDetectionIndex :: !DetectionIndex     -- The detection that this image logically belongs to.
                                                                         -- All images acquired in the same MEDetection will have the same detectionIndex.
@@ -357,9 +360,10 @@ instance ToJSON AcquisitionMetaData
 instance FromJSON AcquisitionMetaData
 
 instance MessagePack AcquisitionMetaData where
-    toObject (AcquisitionMetaData position typename detIdx nImagesInDetection) =
+    toObject (AcquisitionMetaData position positionName typename detIdx nImagesInDetection) =
       toObject $ M.fromList [
                  ("stageposition" :: Text, toObject position),
+                 ("stagepositionname", toObject positionName),
                  ("acquisitiontype", toObject (fromAcqName typename)),
                  ("detectionindex", toObject (fromDetectionIndex detIdx)),
                  ("nimageswithdetectionindex", toObject (fromNumImagesInDetection nImagesInDetection))
