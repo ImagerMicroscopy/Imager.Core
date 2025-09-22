@@ -1,5 +1,6 @@
 module Measurements.SmartProgramRunner (
     withRunnableSmartPrograms
+  , emptySmartProgramCode
 ) where
 
 import Control.Concurrent.Async
@@ -15,6 +16,9 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import Network.HTTP.Req
+import System.Directory
+import System.Environment
+import System.FilePath
 import System.FilePath
 import System.IO
 import System.IO.Temp
@@ -23,12 +27,16 @@ import System.Process
 import Measurements.MeasurementProgramTypes
 import Utils.MiscUtils
 
+emptySmartProgramCode :: SmartProgramCode
+emptySmartProgramCode = ProgramRunnerCode []
+
 withRunnableSmartPrograms :: [LaunchableSmartProgram] -> (SmartProgramCommunicationFunctions -> IO ()) -> IO ()
-withRunnableSmartPrograms programs action = withRunnableSmartPrograms' (zip programs ports) action M.empty
+withRunnableSmartPrograms programs action = putStrLn "starting runnable" >> withRunnableSmartPrograms' (zip programs ports) action M.empty
     where
         ports = [49152 ..]
         withRunnableSmartPrograms' :: [(LaunchableSmartProgram, Port)] -> (SmartProgramCommunicationFunctions -> IO ()) -> RunningSmartProgramMap -> IO ()
         withRunnableSmartPrograms' ((prog, port) : progs) action accum =
+            putStrLn "will launch program" >>
             let programID = lspID prog
             in  withAsync (runSmartProgram prog port) $ \_ -> withRunnableSmartPrograms' progs action (M.insert programID (RunningSmartProgram programID port prog) accum)
         withRunnableSmartPrograms' [] action smartProgramMap =
@@ -43,20 +51,27 @@ withRunnableSmartPrograms programs action = withRunnableSmartPrograms' (zip prog
 
 runSmartProgram :: LaunchableSmartProgram -> Port -> IO ()
 runSmartProgram programDetails httpPort =
-    withTempFile (lspWorkingDirectory programDetails) "SmartProgramUserCode.py" $ \userCodeFilePath userCodeFileHandle ->
-    withTempFile (lspWorkingDirectory programDetails) "SmartProgramWrapper.py" $ \wrapperCodeFilePath wrapperCodeFileHandle ->
-    T.hPutStr userCodeFileHandle (lspCode programDetails) >> hFlush userCodeFileHandle >>
-    pythonWrapperCode >>= T.hPutStr wrapperCodeFileHandle >> hFlush wrapperCodeFileHandle >>
-    let interpreterPath = lspPythonInterpreter programDetails
-        commandLine = T.unpack $ formatT "{} {} {}" (interpreterPath, wrapperCodeFilePath, httpPort)
-        processParams = (shell commandLine) {std_out = CreatePipe, std_err = CreatePipe}
-    in  withCreateProcess processParams $ \_ (Just stdout ) (Just stderr) processHandle ->
-        withAsync (forever $ hGetLine stdout >>= \output -> putStrLn ("Output from smart program: " ++ output)) $ \_ ->
-        withAsync (forever $ hGetLine stderr >>= \output -> putStrLn ("Error output from smart program: " ++ output)) $ \_ ->
-        waitForProcess processHandle >> pure ()
+    doIt `catch` (\e -> putStrLn ("Exception caught in runSmartProgram: " ++ show (e :: SomeException)) >> throwIO e)
+    where
+        doIt =
+            withTempFileF "SmartProgramUserCode.py" (\userCodeFilePath userCodeFileHandle ->
+            withTempFileF "SmartProgramWrapper.py" (\wrapperCodeFilePath wrapperCodeFileHandle ->
+            T.hPutStr userCodeFileHandle (lspCode programDetails) >> hFlush userCodeFileHandle >>
+            readPythonWrapperCode >>= T.hPutStr wrapperCodeFileHandle >> hFlush wrapperCodeFileHandle >>
+            putStrLn ("Starting program on port " ++ show httpPort) >>
+            let interpreterPath = lspPythonInterpreter programDetails
+                processParams = (proc interpreterPath [wrapperCodeFilePath, show httpPort, userCodeFilePath]) {std_out = CreatePipe, std_err = CreatePipe}
+            in  withCreateProcess processParams (\_ (Just stdout ) (Just stderr) processHandle ->
+                withAsync (forever $ hGetLine stdout >>= \output -> putStrLn ("Output from smart program: " ++ output)) $ \_ ->
+                withAsync (forever $ hGetLine stderr >>= \output -> putStrLn ("Error output from smart program: " ++ output)) $ \_ ->
+                waitForProcess processHandle >> pure () )))
+        withTempFileF = if (null (lspWorkingDirectory programDetails)) then withSystemTempFile else (withTempFile (lspWorkingDirectory programDetails))
+    
 
-pythonWrapperCode :: IO Text
-pythonWrapperCode = T.readFile "SmartProgramWrapperCode.py"
+readPythonWrapperCode :: IO Text
+readPythonWrapperCode = takeDirectory <$> getExecutablePath >>= \imagerDir ->
+    let filepath = imagerDir </> "SmartProgramSupport" </> "SmartProgramRunner.py"
+    in  putStrLn "will read code " >> T.readFile filepath >>= \code -> putStrLn "have code" >> pure code
 
 sendMeasurementStopToRunningSmartPrograms :: RunningSmartProgramMap -> IO ()
 sendMeasurementStopToRunningSmartPrograms = undefined
@@ -75,7 +90,7 @@ sendImagesToRunningSmartPrograms smartProgramMap images programsToSendTo =
                 url = http "127.0.0.1" /: "data"
                 body = ReqBodyLbs asMsgPackLBS
             in  runReq defaultHttpConfig (
-                    liftIO (putStrLn "sending") >>
+                    liftIO (putStrLn "sending imaging to running program") >>
                     req
                         POST                    -- HTTP method
                         url                     -- URL
@@ -119,10 +134,9 @@ getRunningSmartProgramTimeLapseDecision runningPrograms programID =
         _                             -> throwIO $ userError ("unexpected SmartProgramResponse for time lapse:" ++ show resp)
 
 queryRunningProgramForDecision :: (FromJSON a) => RunningSmartProgramMap -> SmartProgramID -> Text -> IO a
-queryRunningProgramForDecision runningPrograms id path =
-    let serverPort = 8100
+queryRunningProgramForDecision smartProgramMap programToSendTo path =
+    let httpPort = rspPort $ fromJust (M.lookup programToSendTo smartProgramMap)
         url = http "127.0.0.1" /: path
-        queryParams = "id" =: (fromSmartProgramID id)
         body = NoReqBody
     in  runReq defaultHttpConfig $
             req
@@ -130,5 +144,5 @@ queryRunningProgramForDecision runningPrograms id path =
                 url                     -- URL
                 body                    -- Request body
                 jsonResponse            -- Response type
-                (port serverPort <> queryParams <> responseTimeout 1000000) >>= \response -> -- Options (port and query parameter)
+                (port httpPort <> responseTimeout 1000000) >>= \response -> -- Options (port and query parameter)
             pure (responseBody response)

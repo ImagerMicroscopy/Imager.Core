@@ -5,7 +5,6 @@ module Measurements.SmartProgram (
   , withSmartProgramServer
   , sendDetectedImageToSmartPrograms_Worker
   , parseSmartProgramIDsFromCode
-  , emptySmartProgramCode
 ) where
 
 import Control.Concurrent.STM
@@ -111,7 +110,7 @@ sendProgramsToSmartProgramServer code =
         url = http "127.0.0.1" /: "startprograms"
         body = ReqBodyJson code
     in  runReq defaultHttpConfig ( 
-            liftIO (putStrLn "sending") >>
+            liftIO (putStrLn "sending programs to smart program server") >>
             req
                 POST                    -- HTTP method
                 url                     -- URL
@@ -133,7 +132,7 @@ sendImagesToSmartProgramServer images ids =
         queryParams = mconcat [ "id" =: (fromSmartProgramID id) | id <- ids ]
         body = ReqBodyLbs asMsgPackLBS
     in  runReq defaultHttpConfig (
-            liftIO (putStrLn "sending") >>
+            liftIO (putStrLn "sending images to smart program server") >>
             req
                 POST                    -- HTTP method
                 url                     -- URL
@@ -163,9 +162,6 @@ sendMeasurementFinishedToSmartProgramServer =
                         (port serverPort <> responseTimeout 1000000) >>= \response -> -- Options (port and query parameter)
                     pure (responseBody response))
 
-emptySmartProgramCode :: SmartProgramCode
-emptySmartProgramCode = DAGOrchestratorCode (Array V.empty)
-
 parseSmartProgramIDsFromCode :: SmartProgramCode -> [SmartProgramID]
 parseSmartProgramIDsFromCode (DAGOrchestratorCode code) =
     case code of
@@ -183,7 +179,7 @@ parseSmartProgramIDsFromCode (ProgramRunnerCode cs) = map lspID cs
 sendDetectedImageToSmartPrograms_Worker :: ([(AcquisitionMetaData, AcquiredData)] -> [SmartProgramID] -> IO ()) -> SendToSmartProgramsChannelReader -> IO ()
 sendDetectedImageToSmartPrograms_Worker sendFunc chan =
     putStrLn "Worker starting up" >>
-    loopRead `catch` (\e -> putStrLn ("Exception caughtin image send: " ++ show (e :: SomeException)) >> throwIO e)
+    loopRead `catch` (\e -> putStrLn ("Exception caught in image send: " ++ show (e :: SomeException)) >> throwIO e)
     where
         loopRead =
             forever (

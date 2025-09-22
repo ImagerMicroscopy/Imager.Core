@@ -37,7 +37,7 @@ import SimpleJSONServer
 import Measurements.MeasurementProgram
 import Measurements.MeasurementProgramTypes
 import Measurements.MeasurementProgramVerification
-import Measurements.SmartProgram
+import Measurements.SmartProgramRunner
 import Utils.MeasurementProgramUtils
 import Utils.MiscUtils
 import Utils.WaitableChannel
