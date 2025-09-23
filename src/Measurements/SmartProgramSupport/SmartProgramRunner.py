@@ -7,6 +7,9 @@ import json
 import msgpack
 import numpy as np
 import random
+import sys
+import threading
+import time
 
 class ImagerImage:
     def __init__(self, detection_index, image, timestamp, acquisition_name, detector_name, x, y, z):
@@ -75,6 +78,16 @@ def load_plugin(plugin_path, main_module):
     sys.modules[module_name] = user_module
     spec.loader.exec_module(user_module)
     return user_module
+
+# A simple shutdown function with a small delay
+def exit_program():
+    # Wait for 10 milliseconds. This gives the main thread
+    # more than enough time to send the HTTP response.
+
+    # Imager will forcefully terminate the program if takes
+    # too long cleaning up.
+    time.sleep(0.01)
+    sys.exit()
 
 # --- Main Server Logic ---
 def create_app(plugin):
@@ -168,6 +181,22 @@ def create_app(plugin):
             return json.dumps(result), HTTPStatus.OK
         except Exception as e:
             return json.dumps({"error": f"An error occurred: {str(e)}"}), HTTPStatus.INTERNAL_SERVER_ERROR
+        
+    @app.route('/shutdown', methods=['POST'])
+    def shutdown():
+
+        try:
+            if hasattr(app.plugin, 'OnShutdownRequested'):
+                app.plugin.OnShutdownRequested()
+        except Exception as e:
+            print(str(e))
+
+        # Start the shutdown command in a separate thread.
+        threading.Thread(target=exit_program).start()
+        
+        # Return the response immediately.
+        # The new thread's sleep call guarantees this will be sent first.
+        return json.dumps(SuccessResponse()), HTTPStatus.OK
 
     return app
 

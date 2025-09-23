@@ -71,8 +71,7 @@ data ProgramEnvironment a = ProgramEnvironment {
                             }
 
 data SmartProgramCommunicationFunctions = SmartProgramCommunicationFunctions {
-                                              spcfSendMeasurementStoppedFunc :: IO ()
-                                            , spcfSendImagesFunc :: [(AcquisitionMetaData, AcquiredData)] -> [SmartProgramID] -> IO ()
+                                              spcfSendImagesFunc :: [(AcquisitionMetaData, AcquiredData)] -> [SmartProgramID] -> IO ()
                                             , spcfGetSmartProgramDoTimesDecisionFunc :: SmartProgramID -> IO SmartProgramServerResponse
                                             , spcfGetSmartProgramStageLoopDecisionFunc :: SmartProgramID -> IO SmartProgramServerResponse
                                             , spcfGetSmartProgramRelativeStageLoopDecisionFunc :: SmartProgramID -> IO SmartProgramServerResponse
@@ -441,14 +440,6 @@ instance ToJSON LaunchableSmartProgram where
                , "pythoninterpreter" .= pythoninterpreter
                , "workingdirectory"  .= workingdirectory
                ]
-
-data RunningSmartProgram = RunningSmartProgram {
-                               rspID :: !SmartProgramID
-                             , rspPort :: !Port
-                             , rspProgram :: !LaunchableSmartProgram
-                        } deriving (Show)
-
-type RunningSmartProgramMap = M.Map SmartProgramID RunningSmartProgram
 
 
 data SmartProgramServerResponse = ResponseSuccess

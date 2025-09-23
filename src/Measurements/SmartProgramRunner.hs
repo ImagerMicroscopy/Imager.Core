@@ -3,11 +3,15 @@ module Measurements.SmartProgramRunner (
   , emptySmartProgramCode
 ) where
 
+import Control.Concurrent
 import Control.Concurrent.Async
+import Control.Concurrent.MVar
 import Control.Exception
+import qualified Control.Exception.Safe as SE
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Aeson
+import Data.List
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import Data.Maybe
@@ -23,36 +27,45 @@ import System.FilePath
 import System.IO
 import System.IO.Temp
 import System.Process
+import System.Timeout
 
 import Measurements.MeasurementProgramTypes
 import Utils.MiscUtils
+
+data RunningSmartProgram = RunningSmartProgram {
+                               rspID :: !SmartProgramID
+                             , rspPort :: !Port
+                             , rspProgram :: !LaunchableSmartProgram
+                        } deriving (Show)
+
+type RunningSmartProgramMap = M.Map SmartProgramID RunningSmartProgram
 
 emptySmartProgramCode :: SmartProgramCode
 emptySmartProgramCode = ProgramRunnerCode []
 
 withRunnableSmartPrograms :: [LaunchableSmartProgram] -> (SmartProgramCommunicationFunctions -> IO ()) -> IO ()
-withRunnableSmartPrograms programs action = putStrLn "starting runnable" >> withRunnableSmartPrograms' (zip programs ports) action M.empty
-    where
-        ports = [49152 ..]
-        withRunnableSmartPrograms' :: [(LaunchableSmartProgram, Port)] -> (SmartProgramCommunicationFunctions -> IO ()) -> RunningSmartProgramMap -> IO ()
-        withRunnableSmartPrograms' ((prog, port) : progs) action accum =
-            putStrLn "will launch program" >>
-            let programID = lspID prog
-            in  withAsync (runSmartProgram prog port) $ \_ -> withRunnableSmartPrograms' progs action (M.insert programID (RunningSmartProgram programID port prog) accum)
-        withRunnableSmartPrograms' [] action smartProgramMap =
-            let commFunctions = SmartProgramCommunicationFunctions
-                    (sendMeasurementStopToRunningSmartPrograms smartProgramMap)
-                    (sendImagesToRunningSmartPrograms smartProgramMap)
-                    (getRunningSmartProgramDoTimesDecision smartProgramMap)
-                    (getRunningSmartProgramStageLoopDecision smartProgramMap)
-                    (getRunningSmartProgramRelativeStageLoopDecision smartProgramMap)
-                    (getRunningSmartProgramTimeLapseDecision smartProgramMap)
-            in  action commFunctions
+withRunnableSmartPrograms programs action =
+    sequence (take (length programs) (repeat newEmptyMVar)) >>= \programsRunningFlags ->
+    let programsPortsAndFlags = zip3 programs [49152..] programsRunningFlags
+        runningPrograms = map (\(prog, port, _) -> (lspID prog, RunningSmartProgram (lspID prog) port prog)) programsPortsAndFlags
+        smartProgramMap = M.fromList runningPrograms
+        commFunctions = SmartProgramCommunicationFunctions
+            (sendImagesToRunningSmartPrograms smartProgramMap)
+            (getRunningSmartProgramDoTimesDecision smartProgramMap)
+            (getRunningSmartProgramStageLoopDecision smartProgramMap)
+            (getRunningSmartProgramRelativeStageLoopDecision smartProgramMap)
+            (getRunningSmartProgramTimeLapseDecision smartProgramMap)
+    in  withAsync ((mapConcurrently_ runSmartProgram programsPortsAndFlags) `catch` (\e -> putStrLn ("Exception caught in withRunnableSmartPrograms: " ++ show (e :: SomeException)) >> throwIO e)) $ \_ ->
+        timeout 10000000 (mapM_ takeMVar programsRunningFlags) >>= \result ->
+        case result of
+            Nothing -> throwIO $ userError "timeout starting smart programs"
+            Just _  -> action commFunctions
 
-runSmartProgram :: LaunchableSmartProgram -> Port -> IO ()
-runSmartProgram programDetails httpPort =
+runSmartProgram :: (LaunchableSmartProgram, Port, MVar Bool) -> IO ()
+runSmartProgram (programDetails, httpPort, isRunningFlag) =
     doIt `catch` (\e -> putStrLn ("Exception caught in runSmartProgram: " ++ show (e :: SomeException)) >> throwIO e)
     where
+        withTempFileF = if (null (lspWorkingDirectory programDetails)) then withSystemTempFile else (withTempFile (lspWorkingDirectory programDetails))
         doIt =
             withTempFileF "SmartProgramUserCode.py" (\userCodeFilePath userCodeFileHandle ->
             withTempFileF "SmartProgramWrapper.py" (\wrapperCodeFilePath wrapperCodeFileHandle ->
@@ -61,20 +74,55 @@ runSmartProgram programDetails httpPort =
             putStrLn ("Starting program on port " ++ show httpPort) >>
             let interpreterPath = lspPythonInterpreter programDetails
                 processParams = (proc interpreterPath [wrapperCodeFilePath, show httpPort, userCodeFilePath]) {std_out = CreatePipe, std_err = CreatePipe}
-            in  withCreateProcess processParams (\_ (Just stdout ) (Just stderr) processHandle ->
-                withAsync (forever $ hGetLine stdout >>= \output -> putStrLn ("Output from smart program: " ++ output)) $ \_ ->
-                withAsync (forever $ hGetLine stderr >>= \output -> putStrLn ("Error output from smart program: " ++ output)) $ \_ ->
-                waitForProcess processHandle >> pure () )))
-        withTempFileF = if (null (lspWorkingDirectory programDetails)) then withSystemTempFile else (withTempFile (lspWorkingDirectory programDetails))
+                startProcess :: IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
+                startProcess = createProcess processParams
+                processHandler :: (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle) -> IO ()
+                processHandler (_, (Just stdout), (Just stderr), processHandle) =
+                    waitForStart stderr >> putMVar isRunningFlag True >>
+                    withAsync (forever $ hGetLineInterruptible stdout >>= \output -> putStrLn ("Output from smart program: " ++ output)) ( \h ->
+                    withAsync (forever $ hGetLineInterruptible stderr >>= \output -> putStrLn ("Error output from smart program: " ++ output)) ( \_ ->
+                    wait h >> pure ()))
+                stopProcess :: (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle) -> IO ()
+                stopProcess args =
+                    (sendShutdownToRunningSmartProgram httpPort) `SE.catchAny` (\_ -> pure ()) >>
+                    cleanupProcess args >> pure ()
+                waitForStart :: Handle -> IO ()
+                waitForStart h = hGetLineInterruptible h >>= \contents ->
+                                 if ("Running on http://" `isInfixOf` contents)
+                                 then pure () else putStrLn contents >> waitForStart h
+                hGetLineInterruptible :: Handle -> IO String    -- exists because hGetLine cannot be aborted by an asynchronous exception
+                hGetLineInterruptible h = hGetLineInterruptible' h []
+                    where
+                        hGetLineInterruptible' h accum = 
+                            hWaitForInput h 100 >>= \result ->
+                            case result of
+                                False -> hGetLineInterruptible' h accum
+                                True  -> hGetChar h >>= \char ->
+                                         if (char == '\n')
+                                         then pure (reverse accum)
+                                         else hGetLineInterruptible' h (char : accum)
+            in  bracket startProcess stopProcess processHandler))
     
-
 readPythonWrapperCode :: IO Text
 readPythonWrapperCode = takeDirectory <$> getExecutablePath >>= \imagerDir ->
     let filepath = imagerDir </> "SmartProgramSupport" </> "SmartProgramRunner.py"
     in  putStrLn "will read code " >> T.readFile filepath >>= \code -> putStrLn "have code" >> pure code
 
-sendMeasurementStopToRunningSmartPrograms :: RunningSmartProgramMap -> IO ()
-sendMeasurementStopToRunningSmartPrograms = undefined
+sendShutdownToRunningSmartProgram :: Port -> IO ()
+sendShutdownToRunningSmartProgram httpPort =
+    let url = http "127.0.0.1" /: "shutdown"
+        body = NoReqBody
+    in  runReq defaultHttpConfig (
+            liftIO (putStrLn "sending imaging to running program") >>
+            req
+                POST                    -- HTTP method
+                url                     -- URL
+                body                    -- Request body
+                jsonResponse            -- Response type
+                (port httpPort <> responseTimeout 1000000) >>= \response ->
+            pure (responseBody response)) >>= \result ->
+        when (not $ isSuccessResponse result) (
+            throwIO $ userError ("sending smart programs shutdown but received " ++ show result))
 
 sendImagesToRunningSmartPrograms :: RunningSmartProgramMap -> [(AcquisitionMetaData, AcquiredData)] -> [SmartProgramID] -> IO ()
 sendImagesToRunningSmartPrograms smartProgramMap images programsToSendTo =

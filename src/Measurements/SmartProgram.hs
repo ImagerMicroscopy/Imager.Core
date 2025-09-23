@@ -9,6 +9,7 @@ module Measurements.SmartProgram (
 
 import Control.Concurrent.STM
 import Control.Exception
+import qualified Control.Exception.Safe as SE
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Aeson
@@ -45,12 +46,11 @@ getAllSmartProgramIDsUsedInMeasurement me = S.toList (searchWorker S.empty me)
 withSmartProgramServer :: SmartProgramCode -> (SmartProgramCommunicationFunctions -> IO ()) -> IO ()
 withSmartProgramServer programs action = 
     sendProgramsToSmartProgramServer programs >>
-    action smartProgramServerCommunicationFunctions
+    (action smartProgramServerCommunicationFunctions) `finally` (sendMeasurementFinishedToSmartProgramServer `SE.catchAny` (\_ -> pure ()))
 
 smartProgramServerCommunicationFunctions :: SmartProgramCommunicationFunctions
 smartProgramServerCommunicationFunctions =
     SmartProgramCommunicationFunctions
-        sendMeasurementFinishedToSmartProgramServer
         sendImagesToSmartProgramServer
         getSmartProgramDoTimesDecision
         getSmartProgramStageLoopDecision

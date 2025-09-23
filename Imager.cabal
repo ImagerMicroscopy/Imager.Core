@@ -33,6 +33,7 @@ executable Imager
                      , transformers
                      , clock
                      , random
+                     , safe-exceptions
                      , serialport
                      , signal
                      , parallel

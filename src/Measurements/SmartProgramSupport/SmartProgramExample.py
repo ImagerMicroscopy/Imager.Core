@@ -33,3 +33,6 @@ def OnRelativeStageLoopDecisionRequested():
 
 def OnTimeLapseDecisionRequested():
     return ProgramRunner.ErrorResponse("not yet implemented")
+
+def OnShutdownRequested():
+    return ProgramRunner.SuccessResponse()
