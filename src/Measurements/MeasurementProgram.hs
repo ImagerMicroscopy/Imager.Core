@@ -129,12 +129,23 @@ executeMeasurementElement env _ (MEExecuteRobotProgram (RobotProgramExecutionPar
     where
         [eq] = filter ((== eqName) . equipmentName) (peEquipment env)
 
-executeMeasurementElement env ddets (MEDoTimes (NumIterationsTotal n) _ es) =
+executeMeasurementElement env ddets (MEDoTimes n maybeDecisionFromSmartProgramID es) =
+    maybeUpdateLoopCount maybeDecisionFromSmartProgramID n >>= \n' ->
     withStatusMessage env "do times" (
-        forM_ (zip [1 ..] (take n . repeat $ es)) (\(index :: Int, ses) ->
-            updateStatusMessage env (T.format "do times {} of {}" (index, n)) >>
+        forM_ (zip [1 ..] (take (fromNumIterationsTotal n') . repeat $ es)) (\(index :: Int, ses) ->
+            updateStatusMessage env (T.format "do times {} of {}" (index, (fromNumIterationsTotal n'))) >>
             executeMeasurementElements env ddets ses
         ))
+    where
+        getDoTimesDecisionFunc = spcfGetSmartProgramDoTimesDecisionFunc (peSmartProgramCommunicationFuncs env)
+        maybeUpdateLoopCount :: Maybe SmartProgramID -> NumIterationsTotal -> IO NumIterationsTotal
+        maybeUpdateLoopCount maybeID n 
+                | isNothing maybeID = pure n
+                | otherwise = waitUntilWaitableChannelIsEmpty (peSmartProgramSendChan env) >>
+                              getDoTimesDecisionFunc (fromJust maybeID) >>= \decision ->
+                                  case decision of
+                                      ResponseNoDecision         -> pure n
+                                      ResponseDoTimesDecision n' -> pure n'
 
 executeMeasurementElement env ddets (MEFastAcquisitionLoop n (detName, detParams) maybeDecisionFromSmartProgramID programIDs) =
     maybeUpdateLoopCount maybeDecisionFromSmartProgramID n >>= \n' ->

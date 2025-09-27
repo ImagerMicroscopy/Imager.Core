@@ -6,13 +6,12 @@ from http import HTTPStatus
 import json
 import msgpack
 import numpy as np
-import random
 import sys
 import threading
 import time
 
 class ImagerImage:
-    def __init__(self, detection_index, image, timestamp, acquisition_name, detector_name, x, y, z):
+    def __init__(self, detection_index, image, timestamp, acquisition_name, detector_name, x, y, z, stage_position_name):
         self.detection_index = detection_index
         self.image = image  # numpy array
         self.timestamp = timestamp  # double
@@ -21,23 +20,21 @@ class ImagerImage:
         self.x = x
         self.y = y
         self.z = z
+        self.stage_position_name = stage_position_name
 
-def RandomNamedStagePosition():
+def StagePosition(name, x, y, z):
     position = {
-        "name": "posName", "coordinates": {
-            "x": random.random(), "y": random.random(), "z": random.random(),
+        "name": name, "coordinates": {
+            "x": x, "y": y, "z": z,
             "usinghardwareautofocus": False, "hardwareautofocusoffset": 0
         }
     }
     return position
 
-def RelativeStageLoopParameters():
-    dx = 50; dy=50; dz=50
-    nNegX = 1; nNegY = 1; nNegZ = 1
-    nPosX = 1; nPosY = 1; nPosZ = 1
+def RelativeStageLoopParameters(dx, dy, dz, nNegX, nNegY, nNegZ, nPosX, nPosY, nPosZ, returnToStartingPosition):
     params = {"deltax" : dx, "deltay": dy, "deltaz": dz,
                "additionalplanesx":[nNegX, nPosX], "additionalplanesy": [nNegY, nPosY],
-               "additionalplanesz": [nNegZ, nPosZ], "returntostartingposition": True}
+               "additionalplanesz": [nNegZ, nPosZ], "returntostartingposition": returnToStartingPosition}
     return params
 
 def SuccessResponse():
@@ -48,12 +45,63 @@ def NoDecisionResponse():
     return {"type": "nodecision"}
 def DoTimesDecisionResponse(n_times):
     return {"type": "dotimesdecision", "ntotal": n_times}
-def StageLoopDecisionResponse():
-    return {"type": "stageloopdecision", "positions": [RandomNamedStagePosition(), RandomNamedStagePosition()]}
-def RelativeStageLoopDecisionResponse():
-    return {"type": "relativestageloopdecision", "params": RelativeStageLoopParameters}
-def TimeLapseDecisionResponse():
-    return {"type": "timelapsedecision", "nototal": 3, "timedelta": 1}
+def StageLoopDecisionResponse(positions):
+    return {"type": "stageloopdecision", "positions": positions}
+def RelativeStageLoopDecisionResponse(params):
+    return {"type": "relativestageloopdecision", "params": params}
+def TimeLapseDecisionResponse(ntotal, timedelta):
+    return {"type": "timelapsedecision", "ntotal": ntotal, "timedelta": timedelta}
+
+# Create a global dictionary that will group the images belonging to the same detection event,
+# calling the user-provided function only when all images belonging to the same detection event have been received.
+gIncompleteDetections = {}
+
+def HandleImageReceived(binary_data):
+    decoded_data = msgpack.unpackb(binary_data, raw=False)
+
+    # create an ImagerImage object
+    data_dict = decoded_data['message']['data']
+    binary_data = data_dict['imagedata']
+    nrows = data_dict['nrows']
+    ncols = data_dict['ncols']
+    image_1d = np.frombuffer(binary_data, dtype=np.uint16)
+    image_2d = image_1d.reshape((nrows, ncols))
+    timestamp = data_dict['timestamp']
+    detectorname = data_dict['detectorname']
+
+    metadata_dict = decoded_data['message']['metadata']
+    acquisitiontype = metadata_dict['acquisitiontype']
+    detectionindex = metadata_dict['detectionindex']
+    nImagesWithDetectionIndex = metadata_dict['nimageswithdetectionindex']
+    stage_position_name = metadata_dict['stagepositionname']
+
+    stage_position_dict = metadata_dict['stageposition']
+    stage_x = stage_position_dict['x']
+    stage_y = stage_position_dict['y']
+    stage_z = stage_position_dict['z']
+
+    imagerImage = ImagerImage(detection_index=detectionindex, image=image_2d, timestamp=timestamp,
+                                acquisition_name=acquisitiontype, detector_name=detectorname,
+                                x=stage_x, y=stage_y, z=stage_z, stage_position_name=stage_position_name)
+
+    # if there are multiple images with this detection index then make sure
+    # that they are grouped into a single function call
+    if (nImagesWithDetectionIndex > 1):
+        if detectionindex not in gIncompleteDetections:
+            gIncompleteDetections[detectionindex] = []
+        gIncompleteDetections[detectionindex].append(imagerImage)
+
+        if (len(gIncompleteDetections[detectionindex]) < nImagesWithDetectionIndex):
+            # wait for more images with the same detection index
+            return SuccessResponse()
+        else:
+            # we have received all images with this detection index
+            imagerImages = gIncompleteDetections[detectionindex]
+            del gIncompleteDetections[detectionindex]
+            return app.plugin.OnImagesReceived(imagerImages)
+    else:
+        # if there is only one image with this detection index, we can process it immediately
+        return app.plugin.OnImagesReceived([imagerImage])
 
 # --- Plugin Loading Function ---
 def load_plugin(plugin_path, main_module):
@@ -100,40 +148,11 @@ def create_app(plugin):
             return json.dumps({"error": "'OnImagesReceived' not found in plugin"}), HTTPStatus.NOT_IMPLEMENTED
 
         try:
-            print("received image")
             # Get the binary data from the request body and decode it
             binary_data = request.data
-            decoded_data = msgpack.unpackb(binary_data, raw=False)
+            response = HandleImageReceived(binary_data)
 
-            # create an ImagerImage object
-            data_dict = decoded_data['message']['data']
-            binary_data = data_dict['imagedata']
-            nrows = data_dict['nrows']
-            ncols = data_dict['ncols']
-            image_1d = np.frombuffer(binary_data, dtype=np.uint16)
-            image_2d = image_1d.reshape((nrows, ncols))
-            timestamp = data_dict['timestamp']
-            detectorname = data_dict['detectorname']
-
-            metadata_dict = decoded_data['message']['metadata']
-            acquisitiontype = metadata_dict['acquisitiontype']
-            detectionindex = metadata_dict['detectionindex']
-
-            # 3. Access the 'stageposition' members
-            stage_position_dict = metadata_dict['stageposition']
-            stage_x = stage_position_dict['x']
-            stage_y = stage_position_dict['y']
-            stage_z = stage_position_dict['z']
-
-            imagerImage = ImagerImage(detection_index=detectionindex, image=image_2d, timestamp=timestamp,
-                                      acquisition_name=acquisitiontype, detector_name=detectorname,
-                                      x=stage_x, y=stage_y, z=stage_z)
-            
-            # Call the user-defined function from the plugin
-            # The plugin will now have access to the main module via its 'ProgramRunner' attribute
-            result = app.plugin.OnImagesReceived([imagerImage])
-
-            return json.dumps(result), HTTPStatus.OK
+            return json.dumps(response), HTTPStatus.OK
         except Exception as e:
             return json.dumps({"error": f"An error occurred: {str(e)}"}), HTTPStatus.INTERNAL_SERVER_ERROR
     
@@ -143,7 +162,6 @@ def create_app(plugin):
             return json.dumps({"error": "'OnDoTimesDecisionRequested' not found in plugin"}), HTTPStatus.NOT_IMPLEMENTED
 
         try:
-            print("received do times decision request")
             result = app.plugin.OnDoTimesDecisionRequested()
             return json.dumps(result), HTTPStatus.OK
         except Exception as e:
@@ -186,8 +204,8 @@ def create_app(plugin):
     def shutdown():
 
         try:
-            if hasattr(app.plugin, 'OnShutdownRequested'):
-                app.plugin.OnShutdownRequested()
+            if hasattr(app.plugin, 'OnSmartProgramEnd'):
+                app.plugin.OnSmartProgramEnd()
         except Exception as e:
             print(str(e))
 
@@ -215,6 +233,13 @@ if __name__ == "__main__":
             sys.exit(1)
             
         app = create_app(user_plugin)
+
+        # send start signal to the smart program
+        try:
+            if hasattr(app.plugin, 'OnSmartProgramStart'):
+                app.plugin.OnSmartProgramStart()
+        except Exception as e:
+            print(str(e))
         
         # Run the server
         app.run(port=port, debug=False, threaded=False)

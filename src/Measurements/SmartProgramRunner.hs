@@ -1,6 +1,7 @@
 module Measurements.SmartProgramRunner (
     withRunnableSmartPrograms
   , emptySmartProgramCode
+  , formatExampleCodeForIgorProcedure
 ) where
 
 import Control.Concurrent
@@ -73,14 +74,15 @@ runSmartProgram (programDetails, httpPort, isRunningFlag) =
             readPythonWrapperCode >>= T.hPutStr wrapperCodeFileHandle >> hFlush wrapperCodeFileHandle >>
             putStrLn ("Starting program on port " ++ show httpPort) >>
             let interpreterPath = lspPythonInterpreter programDetails
-                processParams = (proc interpreterPath [wrapperCodeFilePath, show httpPort, userCodeFilePath]) {std_out = CreatePipe, std_err = CreatePipe}
+                processParams = (proc interpreterPath ["-u", wrapperCodeFilePath, show httpPort, userCodeFilePath]) {std_out = CreatePipe, std_err = CreatePipe}
+                -- the "-u" flag makes stdout and stderr unbuffered, so that we can read output as it is produced
                 startProcess :: IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
                 startProcess = createProcess processParams
                 processHandler :: (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle) -> IO ()
                 processHandler (_, (Just stdout), (Just stderr), processHandle) =
                     waitForStart stderr >> putMVar isRunningFlag True >>
-                    withAsync (forever $ hGetLineInterruptible stdout >>= \output -> putStrLn ("Output from smart program: " ++ output)) ( \h ->
-                    withAsync (forever $ hGetLineInterruptible stderr >>= \output -> putStrLn ("Error output from smart program: " ++ output)) ( \_ ->
+                    withAsync (readAndPrint stdout) ( \h ->
+                    withAsync (readAndPrint stderr) ( \_ ->
                     wait h >> pure ()))
                 stopProcess :: (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle) -> IO ()
                 stopProcess args =
@@ -101,7 +103,9 @@ runSmartProgram (programDetails, httpPort, isRunningFlag) =
                                          if (char == '\n')
                                          then pure (reverse accum)
                                          else hGetLineInterruptible' h (char : accum)
-            in  bracket startProcess stopProcess processHandler))
+                readAndPrint :: Handle -> IO ()
+                readAndPrint h = forever $ hGetLineInterruptible h >>= \output -> when (not (null output)) (putStrLn ("Output from smart program: " ++ output))
+                in  bracket startProcess stopProcess processHandler))
     
 readPythonWrapperCode :: IO Text
 readPythonWrapperCode = takeDirectory <$> getExecutablePath >>= \imagerDir ->
@@ -113,7 +117,7 @@ sendShutdownToRunningSmartProgram httpPort =
     let url = http "127.0.0.1" /: "shutdown"
         body = NoReqBody
     in  runReq defaultHttpConfig (
-            liftIO (putStrLn "sending imaging to running program") >>
+            liftIO (putStrLn "sending shutdown to running program") >>
             req
                 POST                    -- HTTP method
                 url                     -- URL
@@ -137,8 +141,8 @@ sendImagesToRunningSmartPrograms smartProgramMap images programsToSendTo =
                 asMsgPackLBS = mconcat (map pack asChannelMessages)
                 url = http "127.0.0.1" /: "data"
                 body = ReqBodyLbs asMsgPackLBS
-            in  runReq defaultHttpConfig (
-                    liftIO (putStrLn "sending imaging to running program") >>
+            in  putStrLn ("sending " ++ show (length images) ++ " images to smart program") >>
+                runReq defaultHttpConfig (
                     req
                         POST                    -- HTTP method
                         url                     -- URL
@@ -194,3 +198,8 @@ queryRunningProgramForDecision smartProgramMap programToSendTo path =
                 jsonResponse            -- Response type
                 (port httpPort <> responseTimeout 1000000) >>= \response -> -- Options (port and query parameter)
             pure (responseBody response)
+
+-- helper function that can be used from GHCI
+formatExampleCodeForIgorProcedure :: Text -> Text
+formatExampleCodeForIgorProcedure =
+    T.unlines . map (\l -> "\tdefaultCode += \"" <> l <> "\\n\"") . map (T.replace "\"" "\\\"") . T.lines
