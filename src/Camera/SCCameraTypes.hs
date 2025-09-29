@@ -44,8 +44,8 @@ data MeasuredImage = MeasuredImage {
                         , miData :: !(V.Vector Word16)
                       }
 
-newtype TimeAtStartOfDetection = TimeAtStartOfDetection {tasdAsTimeSpec :: TimeSpec} deriving (Show)
-newtype TimeAtStartOfExperiment = TimeAtStartOfExperiment {taseAsTimeSpec :: TimeSpec} deriving (Show)
+newtype TimeAtStartOfEvent = TimeAtStartOfEvent {taseAsTimeSpec :: TimeSpec} deriving (Show)
+newtype TimeAtStartOfExperiment = TimeAtStartOfExperiment {tasexAsTimeSpec :: TimeSpec} deriving (Show)
 newtype SecondsSinceStartOfExperiment = SecondsSinceStartOfExperiment {sseAsSeconds :: Double} deriving (Show)
 newtype SecondsSinceStartOfDetection = SecondsSinceStartOfDetection {ssdAsSeconds :: Double} deriving (Show)
 

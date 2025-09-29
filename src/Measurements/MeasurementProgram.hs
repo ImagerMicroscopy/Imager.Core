@@ -137,12 +137,16 @@ executeMeasurementElement env ddets (MEDoTimes n maybeDecisionFromSmartProgramID
             executeMeasurementElements env ddets ses
         ))
     where
+        messageChannel = peMessageChannel env
+        timeAtExpStart = peStartTime env
         getDoTimesDecisionFunc = spcfGetSmartProgramDoTimesDecisionFunc (peSmartProgramCommunicationFuncs env)
         maybeUpdateLoopCount :: Maybe SmartProgramID -> NumIterationsTotal -> IO NumIterationsTotal
         maybeUpdateLoopCount maybeID n 
                 | isNothing maybeID = pure n
                 | otherwise = waitUntilWaitableChannelIsEmpty (peSmartProgramSendChan env) >>
                               getDoTimesDecisionFunc (fromJust maybeID) >>= \decision ->
+                              TimeAtStartOfEvent <$> getTime Monotonic >>= \timeAtDecision ->
+                              addDataToChannel messageChannel (smartProgramDecisionAsMessage decision (fromJust maybeID) timeAtExpStart timeAtDecision) >>
                                   case decision of
                                       ResponseNoDecision         -> pure n
                                       ResponseDoTimesDecision n' -> pure n'
@@ -166,6 +170,8 @@ executeMeasurementElement env ddets (MEFastAcquisitionLoop n (detName, detParams
                 | isNothing maybeID = pure n
                 | otherwise = waitUntilWaitableChannelIsEmpty (peSmartProgramSendChan env) >>
                               getDoTimesDecisionFunc (fromJust maybeID) >>= \decision ->
+                              TimeAtStartOfEvent <$> getTime Monotonic >>= \timeAtDecision ->
+                              addDataToChannel messageChannel (smartProgramDecisionAsMessage decision (fromJust maybeID) startTime timeAtDecision) >>
                                   case decision of
                                       ResponseNoDecision         -> pure n
                                       ResponseDoTimesDecision n' -> pure n'
@@ -182,12 +188,16 @@ executeMeasurementElement env ddets (METimeLapse n dur maybeDecisionFromSmartPro
             updateStatusMessage env (T.format "executing time lapse {} of {}" (index, (fromNumIterationsTotal n'))) >>
             executeMeasurementElements env ddets es))
     where
+        messageChannel = peMessageChannel env
+        timeAtExpStart = peStartTime env
         getTimeLapseDecisionFunc = spcfGetSmartProgramTimeLapseDecisionFunc (peSmartProgramCommunicationFuncs env)
         maybeUpdateLoopParameters :: Maybe SmartProgramID -> WaitDuration -> NumIterationsTotal -> IO (NumIterationsTotal, WaitDuration)
         maybeUpdateLoopParameters maybeInputProgramID dur n
             | isNothing maybeInputProgramID = pure (n, dur)
             | otherwise = waitUntilWaitableChannelIsEmpty (peSmartProgramSendChan env) >>
                           getTimeLapseDecisionFunc (fromJust maybeInputProgramID) >>= \decision ->
+                          TimeAtStartOfEvent <$> getTime Monotonic >>= \timeAtDecision ->
+                          addDataToChannel messageChannel (smartProgramDecisionAsMessage decision (fromJust maybeInputProgramID) timeAtExpStart timeAtDecision) >>
                               case decision of
                                   ResponseNoDecision                -> pure (n, dur)
                                   ResponseTimeLapseDecision n' dur' -> pure (n', dur')
@@ -225,12 +235,16 @@ executeMeasurementElement env ddets (MEStageLoop sn poss maybeDecisionFromSmartP
         writeIORef (peCurrentNamedPosition env) savedPositionName)
     where
         [stageEq] = filter (\e -> hasMotorizedStage e && motorizedStageName e == sn) (peEquipment env)
+        messageChannel = peMessageChannel env
+        timeAtExpStart = peStartTime env
         getStageLoopDecisionFunc = spcfGetSmartProgramStageLoopDecisionFunc (peSmartProgramCommunicationFuncs env)
         maybeUpdateStagePositions :: Maybe SmartProgramID -> [PositionNameAndCoords] -> IO [PositionNameAndCoords]
         maybeUpdateStagePositions maybeID poss 
             | isNothing maybeID = pure poss
             | otherwise = waitUntilWaitableChannelIsEmpty (peSmartProgramSendChan env) >>
                           getStageLoopDecisionFunc (fromJust maybeID) >>= \decision ->
+                          TimeAtStartOfEvent <$> getTime Monotonic >>= \timeAtDecision ->
+                          addDataToChannel messageChannel (smartProgramDecisionAsMessage decision (fromJust maybeID) timeAtExpStart timeAtDecision) >>
                                   case decision of
                                       ResponseNoDecision              -> pure poss
                                       ResponseStageLoopDecision poss' -> pure poss'
@@ -263,12 +277,16 @@ executeMeasurementElement env ddets (MERelativeStageLoop sn params maybeDecision
     )
     where
         [stageEq] = filter (\e -> hasMotorizedStage e && motorizedStageName e == sn) (peEquipment env)
+        messageChannel = peMessageChannel env
+        timeAtExpStart = peStartTime env
         getRelativeStageLoopDecisionFunc = spcfGetSmartProgramRelativeStageLoopDecisionFunc (peSmartProgramCommunicationFuncs env)
         maybeUpdateParameters :: Maybe SmartProgramID -> RelativeStageLoopParams -> IO RelativeStageLoopParams
         maybeUpdateParameters maybeID params 
             | isNothing maybeID = pure params
             | otherwise = waitUntilWaitableChannelIsEmpty (peSmartProgramSendChan env) >>
                           getRelativeStageLoopDecisionFunc (fromJust maybeID) >>= \decision ->
+                          TimeAtStartOfEvent <$> getTime Monotonic >>= \timeAtDecision ->
+                          addDataToChannel messageChannel (smartProgramDecisionAsMessage decision (fromJust maybeID) timeAtExpStart timeAtDecision) >>
                               case decision of
                                   ResponseNoDecision                        -> pure params
                                   ResponseRelativeStageLoopDecision params' -> pure params'
@@ -393,7 +411,7 @@ executeDetection dets eqs (acqTypeNames, detParams) expStartTime detectionIndex 
             then executeFastDetectionLoop dets eqs (acqTypeName, dps) (NumIterationsTotal 1) expStartTime detectionIndex stagePositionName messageChannel (smartProgramsChannel, smartProgramIDs)
             else setMovableComponents eqs (dpMovableComponents dps) >>
                  enableLightSources eqs (dpIrradiation dps) >>
-                 TimeAtStartOfDetection <$> getTime Monotonic >>= \detStartTime ->
+                 TimeAtStartOfEvent <$> getTime Monotonic >>= \detStartTime ->
                  mapConcurrently acquireData requiredDets >>= \measuredImages ->
                  disableLightSources eqs (dpIrradiation dps) >>
                  forM_ (zip measuredImages (map detectorName requiredDets)) (\(measuredImage, detName) ->
@@ -433,7 +451,7 @@ fastStreamingAcquisition requiredDets enableLightSourcesAction disableLightSourc
     newChan >>= \chan ->
     readStagePosFunc >>= newIORef >>= \stagePosRef ->
     withAsync (stagePositionWorker readStagePosFunc stagePosRef) (\stageAs ->
-        TimeAtStartOfDetection <$> getTime Monotonic >>= \detStartTime ->
+        TimeAtStartOfEvent <$> getTime Monotonic >>= \detStartTime ->
         withAsync (acquireMultipleDetectorStreamingData requiredDets enableLightSourcesAction disableLightSourcesAction nTimesToPerform chan) (\async ->
             fetchData detStartTime stagePosRef numImagesAcquiredMap 0 async chan >>
             cancel stageAs >>
@@ -443,7 +461,7 @@ fastStreamingAcquisition requiredDets enableLightSourcesAction disableLightSourc
         numImagesPerDetectionIndex = NumImagesInDetection nRequiredDets
         numImagesAcquiredMap :: Map DetectorName Int
         numImagesAcquiredMap = M.fromList (zip (map detectorName requiredDets) (repeat 0))  -- keeps track of how many images have been acquired for each detector
-        fetchData :: TimeAtStartOfDetection -> IORef StagePosition -> Map DetectorName Int -> Int -> Async () -> Chan AsyncData -> IO ()
+        fetchData :: TimeAtStartOfEvent -> IORef StagePosition -> Map DetectorName Int -> Int -> Async () -> Chan AsyncData -> IO ()
         fetchData detStartTime posRef numImagesAcquiredMap nDetectorsFinished async chan
             | nDetectorsFinished == nRequiredDets = wait async
             | otherwise =

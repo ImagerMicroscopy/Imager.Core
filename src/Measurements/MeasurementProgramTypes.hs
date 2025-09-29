@@ -10,6 +10,7 @@ import Control.Monad
 import Data.Aeson
 import Data.Aeson.Types
 import Data.ByteString (ByteString)
+import qualified Data.ByteString.Lazy as LB
 import Data.Either
 import Data.IORef
 import Data.Map.Strict (Map)
@@ -17,6 +18,7 @@ import qualified Data.Map as M
 import Data.MessagePack
 import Data.Monoid
 import Data.Text (Text)
+import qualified Data.Text.Encoding as T
 import Data.Word
 import GHC.Generics
 import System.Clock
@@ -217,6 +219,10 @@ instance ToJSON PositionNameAndCoords where
     toEncoding (PositionNameAndCoords name coords) =
         pairs ("name" .= name <> "coordinates" .= coords)
     toJSON _ = error "no toJSON"
+instance MessagePack PositionNameAndCoords where
+    toObject (PositionNameAndCoords name coords) =
+        toObject $ M.fromList [("name" :: Text, toObject name),
+                               ("coordinates", toObject coords)]
 
 instance FromJSON RelativeStageLoopParams where
     parseJSON (Object v) =
@@ -232,7 +238,21 @@ instance ToJSON RelativeStageLoopParams where
     toEncoding (RelativeStageLoopParams dx dy dz px py pz ret) =
         pairs ("deltax" .= dx <> "deltay" .= dy <> "deltaz" .= dz <>
                "additionalplanesx" .= px <> "additionalplanesy" .= py <> "additionalplanesz" .= pz <> "returntostartingposition" .= ret)
-    toJSON _ = error "no toJSON"
+    toJSON (RelativeStageLoopParams dx dy dz px py pz ret) = object
+        [ "deltax" .= dx , "deltay" .= dy , "deltaz" .= dz,
+          "additionalplanesx" .= px , "additionalplanesy" .= py, "additionalplanesz" .= pz,
+          "returntostartingposition" .= ret
+        ]
+
+instance MessagePack RelativeStageLoopParams where
+    toObject (RelativeStageLoopParams dx dy dz px py pz ret) =
+        toObject $ M.fromList [("deltax" :: Text, toObject dx),
+                               ("deltay" :: Text, toObject dy),
+                               ("deltaz" :: Text, toObject dz),
+                               ("additionalplanesx" :: Text, toObject px),
+                               ("additionalplanesy" :: Text, toObject py),
+                               ("additionalplanesz" :: Text, toObject pz),
+                               ("returntostartingposition" :: Text, toObject ret)]
 
 instance ToJSON AcquisitionTypeName where
     toJSON (AcquisitionTypeName n) = toJSON n
@@ -303,6 +323,11 @@ data AsyncMeasurementMessage = AcquiredDataMessage {
                                    acquisitionMetaData :: AcquisitionMetaData
                                  , acquiredData :: AcquiredData
                                }
+                             | SmartProgramDecisionMessage {
+                                   spdmProgramID :: !SmartProgramID
+                                 , spdmTimeStamp :: !SecondsSinceStartOfExperiment
+                                 , spdmDecision :: !SmartProgramServerResponse
+                               }
                              deriving (Show)
 
 instance MessagePack AsyncMeasurementMessage where
@@ -311,6 +336,15 @@ instance MessagePack AsyncMeasurementMessage where
                     ("metadata" :: Text, toObject m.acquisitionMetaData),
                     ("data", toObject m.acquiredData),
                     ("type", toObject ("acquireddatamessage" :: Text))
+                 ]
+    toObject (SmartProgramDecisionMessage programID timestamp decision) =
+        let jsonPayload = object [ "decision"  .= decision
+                                 , "programid" .= programID
+                                 , "timestamp" .= sseAsSeconds timestamp
+                                 ]
+        in toObject $ M.fromList [
+                    ("payload" :: Text, toObject (T.decodeUtf8 . LB.toStrict . encode $ jsonPayload)),
+                    ("type", toObject ("smartprogramdecisionmessage" :: Text))
                  ]
 
 data AcquiredData = AcquiredData {
@@ -339,12 +373,18 @@ instance MessagePack AcquiredData where
                           ]
     fromObject _ = error "no fromObject for AcquiredData"
 
-measuredImageAsAcquiredData :: MeasuredImage -> DetectorName -> TimeAtStartOfExperiment -> TimeAtStartOfDetection -> AcquiredData
+measuredImageAsAcquiredData :: MeasuredImage -> DetectorName -> TimeAtStartOfExperiment -> TimeAtStartOfEvent -> AcquiredData
 measuredImageAsAcquiredData (MeasuredImage nRows nCols (SecondsSinceStartOfDetection secsSinceDetStart) vecData) cameraName startOfExperiment startOfDetection =
     AcquiredData nRows nCols (SecondsSinceStartOfExperiment timeStamp) cameraName (byteStringFromVector vecData) UINT16
     where
-        secondsBetweenStartOfDetAndStartOfExp = timeSpecAsSeconds (diffTimeSpec (tasdAsTimeSpec startOfDetection) (taseAsTimeSpec startOfExperiment))
+        secondsBetweenStartOfDetAndStartOfExp = timeSpecAsSeconds (diffTimeSpec (taseAsTimeSpec startOfDetection) (tasexAsTimeSpec startOfExperiment))
         timeStamp = secondsBetweenStartOfDetAndStartOfExp + secsSinceDetStart
+
+smartProgramDecisionAsMessage :: SmartProgramServerResponse -> SmartProgramID -> TimeAtStartOfExperiment -> TimeAtStartOfEvent -> AsyncMeasurementMessage
+smartProgramDecisionAsMessage response programID timeAtExpStart timeAtDecision =
+    SmartProgramDecisionMessage programID (SecondsSinceStartOfExperiment timestamp) response
+    where
+        timestamp = timeSpecAsSeconds (diffTimeSpec (taseAsTimeSpec timeAtDecision) (tasexAsTimeSpec timeAtExpStart))
 
 data AcquisitionMetaData = AcquisitionMetaData {
                                amdStagePosition :: !StagePosition
@@ -473,6 +513,51 @@ instance FromJSON SmartProgramServerResponse where
             "relativestageloopdecision" -> ResponseRelativeStageLoopDecision <$> v .: "params"
             "timelapsedecision"         -> ResponseTimeLapseDecision <$> v .: "ntotal" <*> v .: "timedelta"
             _                           -> fail "unknown SmartProgramServerResponse"
+
+instance ToJSON SmartProgramServerResponse where
+    toJSON response = object $ case response of
+        ResponseSuccess -> 
+            [ "type"   .= ("status" :: Text)
+            , "status" .= ("success" :: Text)]
+        ResponseError what ->
+            [ "type"   .= ("status" :: Text)
+            , "status" .= ("error" :: Text)
+            , "what"   .= what]
+        ResponseNoDecision ->
+            [ "type" .= ("nodecision" :: Text) ]
+        ResponseDoTimesDecision ntotal ->
+            [ "type"   .= ("dotimesdecision" :: Text)
+            , "ntotal" .= ntotal]
+        ResponseStageLoopDecision positions ->
+            [ "type"      .= ("stageloopdecision" :: Text)
+            , "positions" .= positions]
+        ResponseRelativeStageLoopDecision params ->
+            [ "type"   .= ("relativestageloopdecision" :: Text)
+            , "params" .= params]
+        ResponseTimeLapseDecision ntotal timedelta ->
+            [ "type"      .= ("timelapsedecision" :: Text)
+            , "ntotal"    .= ntotal
+            , "timedelta" .= timedelta]
+
+instance MessagePack SmartProgramServerResponse where
+    toObject ResponseSuccess = error "does not make sense to MessagePack encode ResponseSuccess"
+    toObject ResponseError{} = error "does not make sense to MessagePack encode ResponseError"
+    toObject ResponseNoDecision = 
+        toObject $ M.fromList [("responsetype" :: Text, toObject ("nodecisionresponse" :: Text))]
+    toObject (ResponseDoTimesDecision n) =
+        toObject $ M.fromList [("responsetype" :: Text, toObject ("dotimesdecisionresponse" :: Text)),
+                               ("ntotal", toObject (fromNumIterationsTotal n))]
+    toObject (ResponseStageLoopDecision poss) =
+        toObject $ M.fromList [("responsetype" :: Text, toObject ("stageloopdecisionresponse" :: Text)),
+                               ("positions", toObject poss)]
+    toObject (ResponseRelativeStageLoopDecision params) =
+        toObject $ M.fromList [("responsetype" :: Text, toObject ("relativestageloopdecisionresponse" :: Text)),
+                               ("params", toObject params)]
+    toObject (ResponseTimeLapseDecision n dur) =
+        toObject $ M.fromList [("responsetype" :: Text, toObject ("timelapsedecisionresponse" :: Text)),
+                               ("ntotal", toObject (fromNumIterationsTotal n)),
+                               ("timedelta", toObject (fromWaitDuration dur))]
+    fromObject _ = error "no fromObject for AcquiredData"
 
 
 type SendToSmartProgramsChannelWriter = WaitableChannelWriter ([SmartProgramID], (AcquisitionMetaData, AcquiredData))
