@@ -148,8 +148,8 @@ executeMeasurementElement env ddets (MEDoTimes n maybeDecisionFromSmartProgramID
                               TimeAtStartOfEvent <$> getTime Monotonic >>= \timeAtDecision ->
                               addDataToChannel messageChannel (smartProgramDecisionAsMessage decision (fromJust maybeID) timeAtExpStart timeAtDecision) >>
                                   case decision of
-                                      ResponseNoDecision         -> pure n
-                                      ResponseDoTimesDecision n' -> pure n'
+                                      ResponseNoDecision           -> pure n
+                                      ResponseDoTimesDecision n' _ -> pure n'
 
 executeMeasurementElement env ddets (MEFastAcquisitionLoop n (detName, detParams) maybeDecisionFromSmartProgramID programIDs) =
     maybeUpdateLoopCount maybeDecisionFromSmartProgramID n >>= \n' ->
@@ -173,8 +173,8 @@ executeMeasurementElement env ddets (MEFastAcquisitionLoop n (detName, detParams
                               TimeAtStartOfEvent <$> getTime Monotonic >>= \timeAtDecision ->
                               addDataToChannel messageChannel (smartProgramDecisionAsMessage decision (fromJust maybeID) startTime timeAtDecision) >>
                                   case decision of
-                                      ResponseNoDecision         -> pure n
-                                      ResponseDoTimesDecision n' -> pure n'
+                                      ResponseNoDecision           -> pure n
+                                      ResponseDoTimesDecision n' _ -> pure n'
 
 executeMeasurementElement env ddets (METimeLapse n dur maybeDecisionFromSmartProgramID es) =
     withStatusMessage env "time lapse" (
@@ -199,8 +199,8 @@ executeMeasurementElement env ddets (METimeLapse n dur maybeDecisionFromSmartPro
                           TimeAtStartOfEvent <$> getTime Monotonic >>= \timeAtDecision ->
                           addDataToChannel messageChannel (smartProgramDecisionAsMessage decision (fromJust maybeInputProgramID) timeAtExpStart timeAtDecision) >>
                               case decision of
-                                  ResponseNoDecision                -> pure (n, dur)
-                                  ResponseTimeLapseDecision n' dur' -> pure (n', dur')
+                                  ResponseNoDecision                  -> pure (n, dur)
+                                  ResponseTimeLapseDecision n' dur' _ -> pure (n', dur')
         futureDurations dur n = map ((*) (fromWaitDuration dur) . fromIntegral) [0 .. ((fromNumIterationsTotal n) - 1)]
         futureTimes :: WaitDuration -> NumIterationsTotal -> IO [TimeSpec]
         futureTimes dur n = getTime Monotonic >>= \now ->
@@ -246,8 +246,8 @@ executeMeasurementElement env ddets (MEStageLoop sn poss maybeDecisionFromSmartP
                           TimeAtStartOfEvent <$> getTime Monotonic >>= \timeAtDecision ->
                           addDataToChannel messageChannel (smartProgramDecisionAsMessage decision (fromJust maybeID) timeAtExpStart timeAtDecision) >>
                                   case decision of
-                                      ResponseNoDecision              -> pure poss
-                                      ResponseStageLoopDecision poss' -> pure poss'
+                                      ResponseNoDecision                -> pure poss
+                                      ResponseStageLoopDecision poss' _ -> pure poss'
 
 executeMeasurementElement env ddets (MERelativeStageLoop sn params maybeDecisionFromSmartProgramID es) =
     withStatusMessage env "relative stage loop" (
@@ -288,8 +288,8 @@ executeMeasurementElement env ddets (MERelativeStageLoop sn params maybeDecision
                           TimeAtStartOfEvent <$> getTime Monotonic >>= \timeAtDecision ->
                           addDataToChannel messageChannel (smartProgramDecisionAsMessage decision (fromJust maybeID) timeAtExpStart timeAtDecision) >>
                               case decision of
-                                  ResponseNoDecision                        -> pure params
-                                  ResponseRelativeStageLoopDecision params' -> pure params'
+                                  ResponseNoDecision                          -> pure params
+                                  ResponseRelativeStageLoopDecision params' _ -> pure params'
         extraPositionsBetween :: (Double, Double) -> (Double, Double) -> [(Double, Double)]
         extraPositionsBetween (xStart, yStart) (xEnd, yEnd) =
             take nAdditional $ map (\idx -> (xStart + idx * dx, yStart + idx * dy)) [1.0, 2.0.. ]

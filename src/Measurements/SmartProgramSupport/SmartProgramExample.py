@@ -37,7 +37,7 @@ def OnDoTimesDecisionRequested():
     print("Received do times decision request")
 
     ntotal = 5          # number of times to repeat in total
-    return ProgramRunner.DoTimesDecisionResponse(ntotal)
+    return ProgramRunner.DoTimesDecisionResponse(ntotal, "")
 
 def OnStageLoopDecisionRequested():
     """
@@ -53,7 +53,7 @@ def OnStageLoopDecisionRequested():
     # in this example code we return no positions since we could otherwise have
     # accidental stage movement!
     #return ProgramRunner.StageLoopDecisionResponse(positions)
-    return ProgramRunner.StageLoopDecisionResponse([])
+    return ProgramRunner.StageLoopDecisionResponse([], "")
 
 def OnRelativeStageLoopDecisionRequested():
     """
@@ -69,7 +69,7 @@ def OnRelativeStageLoopDecisionRequested():
 
     # the total number of acquisitions will be (nNegX + nPosX + 1) * (nNegY + nPosY + 1) * (nNegZ + nPosZ + 1)
     parameters = ProgramRunner.RelativeStageLoopParameters(dx, dy, dz, nNegX, nNegY, nNegZ, nPosX, nPosY, nPosZ, returnToStartingPosition)
-    return ProgramRunner.RelativeStageLoopDecisionResponse(parameters)
+    return ProgramRunner.RelativeStageLoopDecisionResponse(parameters, "")
 
 def OnTimeLapseDecisionRequested():
     """
@@ -78,7 +78,7 @@ def OnTimeLapseDecisionRequested():
     """
     ntotal = 5          # number of times to repeat in total
     timedelta = 1.0     # time between each iteration in seconds
-    return ProgramRunner.TimeLapseDecisionResponse(ntotal, timedelta)
+    return ProgramRunner.TimeLapseDecisionResponse(ntotal, timedelta, "")
 
 def OnSmartProgramEnd():
     """

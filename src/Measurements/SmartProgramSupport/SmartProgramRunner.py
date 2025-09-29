@@ -39,18 +39,24 @@ def RelativeStageLoopParameters(dx, dy, dz, nNegX, nNegY, nNegZ, nPosX, nPosY, n
 
 def SuccessResponse():
     return {"type": "status", "status": "success"}
+
 def ErrorResponse(what):
     return {"type": "status", "status": "error", "what": what}
+
 def NoDecisionResponse():
     return {"type": "nodecision"}
-def DoTimesDecisionResponse(n_times):
-    return {"type": "dotimesdecision", "ntotal": n_times}
-def StageLoopDecisionResponse(positions):
-    return {"type": "stageloopdecision", "positions": positions}
-def RelativeStageLoopDecisionResponse(params):
-    return {"type": "relativestageloopdecision", "params": params}
-def TimeLapseDecisionResponse(ntotal, timedelta):
-    return {"type": "timelapsedecision", "ntotal": ntotal, "timedelta": timedelta}
+
+def DoTimesDecisionResponse(n_times, commentStr):
+    return {"type": "dotimesdecision", "ntotal": n_times, "comment": commentStr}
+
+def StageLoopDecisionResponse(positions, commentStr):
+    return {"type": "stageloopdecision", "positions": positions, "comment": commentStr}
+
+def RelativeStageLoopDecisionResponse(params, commentStr):
+    return {"type": "relativestageloopdecision", "params": params, "comment": commentStr}
+
+def TimeLapseDecisionResponse(ntotal, timedelta, commentStr):
+    return {"type": "timelapsedecision", "ntotal": ntotal, "timedelta": timedelta, "comment": commentStr}
 
 # Create a global dictionary that will group the images belonging to the same detection event,
 # calling the user-provided function only when all images belonging to the same detection event have been received.

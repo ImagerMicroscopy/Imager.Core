@@ -485,10 +485,10 @@ instance ToJSON LaunchableSmartProgram where
 data SmartProgramServerResponse = ResponseSuccess
                                 | ResponseError !Text
                                 | ResponseNoDecision
-                                | ResponseDoTimesDecision !NumIterationsTotal
-                                | ResponseStageLoopDecision ![PositionNameAndCoords]
-                                | ResponseRelativeStageLoopDecision !RelativeStageLoopParams
-                                | ResponseTimeLapseDecision !NumIterationsTotal !WaitDuration
+                                | ResponseDoTimesDecision !NumIterationsTotal !Text
+                                | ResponseStageLoopDecision ![PositionNameAndCoords] !Text
+                                | ResponseRelativeStageLoopDecision !RelativeStageLoopParams !Text
+                                | ResponseTimeLapseDecision !NumIterationsTotal !WaitDuration !Text
                                 deriving (Show)
 
 isNoDecisionResponse :: SmartProgramServerResponse -> Bool
@@ -508,10 +508,10 @@ instance FromJSON SmartProgramServerResponse where
                                                    "success" -> pure ResponseSuccess
                                                    "error"   -> ResponseError <$> v .: "what"
             "nodecision"                -> pure ResponseNoDecision
-            "dotimesdecision"           -> ResponseDoTimesDecision <$> v .: "ntotal"
-            "stageloopdecision"         -> ResponseStageLoopDecision <$> v .: "positions"
-            "relativestageloopdecision" -> ResponseRelativeStageLoopDecision <$> v .: "params"
-            "timelapsedecision"         -> ResponseTimeLapseDecision <$> v .: "ntotal" <*> v .: "timedelta"
+            "dotimesdecision"           -> ResponseDoTimesDecision <$> v .: "ntotal" <*> v .: "comment"
+            "stageloopdecision"         -> ResponseStageLoopDecision <$> v .: "positions" <*> v .: "comment"
+            "relativestageloopdecision" -> ResponseRelativeStageLoopDecision <$> v .: "params" <*> v .: "comment"
+            "timelapsedecision"         -> ResponseTimeLapseDecision <$> v .: "ntotal" <*> v .: "timedelta" <*> v .: "comment"
             _                           -> fail "unknown SmartProgramServerResponse"
 
 instance ToJSON SmartProgramServerResponse where
@@ -525,40 +525,23 @@ instance ToJSON SmartProgramServerResponse where
             , "what"   .= what]
         ResponseNoDecision ->
             [ "type" .= ("nodecision" :: Text) ]
-        ResponseDoTimesDecision ntotal ->
-            [ "type"   .= ("dotimesdecision" :: Text)
-            , "ntotal" .= ntotal]
-        ResponseStageLoopDecision positions ->
+        ResponseDoTimesDecision ntotal comment ->
+            [ "type"    .= ("dotimesdecision" :: Text)
+            , "ntotal"  .= ntotal
+            , "comment" .= comment]
+        ResponseStageLoopDecision positions comment ->
             [ "type"      .= ("stageloopdecision" :: Text)
-            , "positions" .= positions]
-        ResponseRelativeStageLoopDecision params ->
-            [ "type"   .= ("relativestageloopdecision" :: Text)
-            , "params" .= params]
-        ResponseTimeLapseDecision ntotal timedelta ->
+            , "positions" .= positions
+            , "comment"   .= comment]
+        ResponseRelativeStageLoopDecision params comment ->
+            [ "type"    .= ("relativestageloopdecision" :: Text)
+            , "params"  .= params
+            , "comment" .= comment]
+        ResponseTimeLapseDecision ntotal timedelta comment ->
             [ "type"      .= ("timelapsedecision" :: Text)
             , "ntotal"    .= ntotal
-            , "timedelta" .= timedelta]
-
-instance MessagePack SmartProgramServerResponse where
-    toObject ResponseSuccess = error "does not make sense to MessagePack encode ResponseSuccess"
-    toObject ResponseError{} = error "does not make sense to MessagePack encode ResponseError"
-    toObject ResponseNoDecision = 
-        toObject $ M.fromList [("responsetype" :: Text, toObject ("nodecisionresponse" :: Text))]
-    toObject (ResponseDoTimesDecision n) =
-        toObject $ M.fromList [("responsetype" :: Text, toObject ("dotimesdecisionresponse" :: Text)),
-                               ("ntotal", toObject (fromNumIterationsTotal n))]
-    toObject (ResponseStageLoopDecision poss) =
-        toObject $ M.fromList [("responsetype" :: Text, toObject ("stageloopdecisionresponse" :: Text)),
-                               ("positions", toObject poss)]
-    toObject (ResponseRelativeStageLoopDecision params) =
-        toObject $ M.fromList [("responsetype" :: Text, toObject ("relativestageloopdecisionresponse" :: Text)),
-                               ("params", toObject params)]
-    toObject (ResponseTimeLapseDecision n dur) =
-        toObject $ M.fromList [("responsetype" :: Text, toObject ("timelapsedecisionresponse" :: Text)),
-                               ("ntotal", toObject (fromNumIterationsTotal n)),
-                               ("timedelta", toObject (fromWaitDuration dur))]
-    fromObject _ = error "no fromObject for AcquiredData"
-
+            , "timedelta" .= timedelta
+            , "comment"   .= comment]
 
 type SendToSmartProgramsChannelWriter = WaitableChannelWriter ([SmartProgramID], (AcquisitionMetaData, AcquiredData))
 type SendToSmartProgramsChannelReader = WaitableChannelReader ([SmartProgramID], (AcquisitionMetaData, AcquiredData))
