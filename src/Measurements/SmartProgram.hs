@@ -27,6 +27,7 @@ import GHC.Generics
 import Network.HTTP.Req
 
 import Measurements.MeasurementProgramTypes
+import Measurements.MeasurementProgramEncoding
 import Utils.WaitableChannel
 
 getAllSmartProgramIDsUsedInMeasurement :: MeasurementElement -> [SmartProgramID]

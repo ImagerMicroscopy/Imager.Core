@@ -31,6 +31,7 @@ import System.Process
 import System.Timeout
 
 import Measurements.MeasurementProgramTypes
+import Measurements.MeasurementProgramEncoding
 import Utils.MiscUtils
 
 data RunningSmartProgram = RunningSmartProgram {

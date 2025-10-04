@@ -53,8 +53,8 @@ executable Imager
                      , Utils.FilterUtils
                      , Equipment.Devices.Marzhauser
                      , Measurements.MeasurementProgram
+                     , Measurements.MeasurementProgramEncoding
                      , Measurements.MeasurementProgramTypes
-                     , Utils.MeasurementProgramUtils
                      , Measurements.MeasurementProgramVerification
                      , Measurements.SmartProgram
                      , Measurements.SmartProgramRunner
@@ -62,6 +62,7 @@ executable Imager
                      , Detectors.Detector
                      , Utils.MiscUtils
                      , Utils.DLLUtils
+                     , Utils.MeasurementProgramUtils
                      , Utils.WaitableChannel
                      , Equipment.Devices.Arduino
                      , Equipment.Devices.Asahi
