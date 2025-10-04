@@ -43,8 +43,8 @@ def SuccessResponse():
 def ErrorResponse(what):
     return {"type": "status", "status": "error", "what": what}
 
-def NoDecisionResponse():
-    return {"type": "nodecision"}
+def NoDecisionResponse(commentStr):
+    return {"type": "nodecision", "comment": commentStr}
 
 def DoTimesDecisionResponse(n_times, commentStr):
     return {"type": "dotimesdecision", "ntotal": n_times, "comment": commentStr}

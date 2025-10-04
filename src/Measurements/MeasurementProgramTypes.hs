@@ -484,7 +484,7 @@ instance ToJSON LaunchableSmartProgram where
 
 data SmartProgramServerResponse = ResponseSuccess
                                 | ResponseError !Text
-                                | ResponseNoDecision
+                                | ResponseNoDecision !Text
                                 | ResponseDoTimesDecision !NumIterationsTotal !Text
                                 | ResponseStageLoopDecision ![PositionNameAndCoords] !Text
                                 | ResponseRelativeStageLoopDecision !RelativeStageLoopParams !Text
@@ -492,8 +492,8 @@ data SmartProgramServerResponse = ResponseSuccess
                                 deriving (Show)
 
 isNoDecisionResponse :: SmartProgramServerResponse -> Bool
-isNoDecisionResponse ResponseNoDecision = True
-isNoDecisionResponse _                  = False
+isNoDecisionResponse ResponseNoDecision{} = True
+isNoDecisionResponse _                    = False
 
 isSuccessResponse :: SmartProgramServerResponse -> Bool
 isSuccessResponse ResponseSuccess = True
@@ -507,7 +507,7 @@ instance FromJSON SmartProgramServerResponse where
                                                case st of
                                                    "success" -> pure ResponseSuccess
                                                    "error"   -> ResponseError <$> v .: "what"
-            "nodecision"                -> pure ResponseNoDecision
+            "nodecision"                -> ResponseNoDecision <$> v .: "comment"
             "dotimesdecision"           -> ResponseDoTimesDecision <$> v .: "ntotal" <*> v .: "comment"
             "stageloopdecision"         -> ResponseStageLoopDecision <$> v .: "positions" <*> v .: "comment"
             "relativestageloopdecision" -> ResponseRelativeStageLoopDecision <$> v .: "params" <*> v .: "comment"
@@ -523,8 +523,9 @@ instance ToJSON SmartProgramServerResponse where
             [ "type"   .= ("status" :: Text)
             , "status" .= ("error" :: Text)
             , "what"   .= what]
-        ResponseNoDecision ->
-            [ "type" .= ("nodecision" :: Text) ]
+        ResponseNoDecision comment ->
+            [ "type" .= ("nodecision" :: Text)
+            , "comment" .= comment]
         ResponseDoTimesDecision ntotal comment ->
             [ "type"    .= ("dotimesdecision" :: Text)
             , "ntotal"  .= ntotal

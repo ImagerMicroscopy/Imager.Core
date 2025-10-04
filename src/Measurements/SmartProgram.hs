@@ -62,7 +62,7 @@ getSmartProgramDoTimesDecision programID =
     queryServerForDecision "dotimesdecision" programID >>= \resp ->
     case resp of
         r@ResponseDoTimesDecision{} -> pure r
-        ResponseNoDecision          -> pure ResponseNoDecision
+        r@ResponseNoDecision{}      -> pure r
         _                           -> throwIO $ userError ("unexpected SmartProgramResponse for do times:" ++ show resp)
 
 getSmartProgramStageLoopDecision :: SmartProgramID -> IO SmartProgramServerResponse
@@ -70,7 +70,7 @@ getSmartProgramStageLoopDecision programID =
     queryServerForDecision "stageloopdecision" programID >>= \resp ->
     case resp of
         r@ResponseStageLoopDecision{} -> pure r
-        ResponseNoDecision            -> pure ResponseNoDecision
+        r@ResponseNoDecision{}        -> pure r
         _                             -> throwIO $ userError ("unexpected SmartProgramResponse for stage loop:" ++ show resp)
 
 getSmartProgramRelativeStageLoopDecision :: SmartProgramID -> IO SmartProgramServerResponse
@@ -78,7 +78,7 @@ getSmartProgramRelativeStageLoopDecision programID =
     queryServerForDecision "relativestageloopdecision" programID >>= \resp ->
     case resp of
         r@ResponseRelativeStageLoopDecision{} -> pure r
-        ResponseNoDecision                    -> pure ResponseNoDecision
+        r@ResponseNoDecision{}                -> pure r
         _                                     -> throwIO $ userError ("unexpected SmartProgramResponse for relative stage loop:" ++ show resp)
 
 getSmartProgramTimeLapseDecision :: SmartProgramID -> IO SmartProgramServerResponse
@@ -86,7 +86,7 @@ getSmartProgramTimeLapseDecision programID =
     queryServerForDecision "timelapsedecision" programID >>= \resp ->
     case resp of
         r@ResponseTimeLapseDecision{} -> pure r
-        ResponseNoDecision            -> pure ResponseNoDecision
+        r@ResponseNoDecision{}        -> pure r
         _                             -> throwIO $ userError ("unexpected SmartProgramResponse for time lapse:" ++ show resp)
 
 queryServerForDecision :: (FromJSON a) => Text -> SmartProgramID -> IO a

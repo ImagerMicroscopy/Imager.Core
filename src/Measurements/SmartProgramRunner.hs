@@ -158,7 +158,7 @@ getRunningSmartProgramDoTimesDecision runningPrograms programID =
     queryRunningProgramForDecision runningPrograms programID "dotimesdecision" >>= \resp ->
     case resp of
         r@ResponseDoTimesDecision{} -> pure r
-        ResponseNoDecision          -> pure ResponseNoDecision
+        r@ResponseNoDecision{}      -> pure r
         _                           -> throwIO $ userError ("unexpected SmartProgramResponse for do times:" ++ show resp)
 
 getRunningSmartProgramStageLoopDecision :: RunningSmartProgramMap -> SmartProgramID -> IO SmartProgramServerResponse
@@ -166,7 +166,7 @@ getRunningSmartProgramStageLoopDecision runningPrograms programID =
     queryRunningProgramForDecision runningPrograms programID "stageloopdecision" >>= \resp ->
     case resp of
         r@ResponseStageLoopDecision{} -> pure r
-        ResponseNoDecision            -> pure ResponseNoDecision
+        r@ResponseNoDecision{}        -> pure r
         _                             -> throwIO $ userError ("unexpected SmartProgramResponse for stage loop:" ++ show resp)
 
 getRunningSmartProgramRelativeStageLoopDecision :: RunningSmartProgramMap -> SmartProgramID -> IO SmartProgramServerResponse
@@ -174,7 +174,7 @@ getRunningSmartProgramRelativeStageLoopDecision runningPrograms programID =
     queryRunningProgramForDecision runningPrograms programID "relativestageloopdecision" >>= \resp ->
     case resp of
         r@ResponseRelativeStageLoopDecision{} -> pure r
-        ResponseNoDecision                    -> pure ResponseNoDecision
+        r@ResponseNoDecision{}                -> pure r
         _                                     -> throwIO $ userError ("unexpected SmartProgramResponse for relative stage loop:" ++ show resp)
 
 getRunningSmartProgramTimeLapseDecision :: RunningSmartProgramMap -> SmartProgramID -> IO SmartProgramServerResponse
@@ -182,7 +182,7 @@ getRunningSmartProgramTimeLapseDecision runningPrograms programID =
     queryRunningProgramForDecision runningPrograms programID "timelapsedecision" >>= \resp ->
     case resp of
         r@ResponseTimeLapseDecision{} -> pure r
-        ResponseNoDecision            -> pure ResponseNoDecision
+        r@ResponseNoDecision{}        -> pure r
         _                             -> throwIO $ userError ("unexpected SmartProgramResponse for time lapse:" ++ show resp)
 
 queryRunningProgramForDecision :: (FromJSON a) => RunningSmartProgramMap -> SmartProgramID -> Text -> IO a
