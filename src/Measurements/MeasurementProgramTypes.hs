@@ -205,6 +205,7 @@ data AcquisitionMetaData = AcquisitionMetaData {
                              , amdDetectionIndex :: !DetectionIndex     -- The detection that this image logically belongs to.
                                                                         -- All images acquired in the same MEDetection will have the same detectionIndex.
                              , amdNImagesWithDetectionIndex :: !NumImagesInDetection     -- How many images there with this detectionIndex
+                             , amdDetectionElementID :: !ElementID  -- ElementID of the MEDetection that gave rise to this image
                            } deriving (Show, Generic, NFData)
 
 

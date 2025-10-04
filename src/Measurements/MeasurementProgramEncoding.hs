@@ -230,13 +230,14 @@ instance ToJSON AcquisitionMetaData
 instance FromJSON AcquisitionMetaData
 
 instance MessagePack AcquisitionMetaData where
-    toObject (AcquisitionMetaData position positionName typename detIdx nImagesInDetection) =
+    toObject (AcquisitionMetaData position positionName typename detIdx nImagesInDetection detectionElementID) =
       toObject $ M.fromList [
                  ("stageposition" :: Text, toObject position),
                  ("stagepositionname", toObject positionName),
                  ("acquisitiontype", toObject (fromAcqName typename)),
                  ("detectionindex", toObject (fromDetectionIndex detIdx)),
-                 ("nimageswithdetectionindex", toObject (fromNumImagesInDetection nImagesInDetection))
+                 ("nimageswithdetectionindex", toObject (fromNumImagesInDetection nImagesInDetection)),
+                 ("detectionelementid", toObject detectionElementID)
                ]
     fromObject _ = error "no fromObject for AcquisitionMetaData"
 
