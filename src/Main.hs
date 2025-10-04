@@ -85,7 +85,7 @@ messageHandler msg env =
 
 performAction :: Detector a => Environment a -> RequestMessage -> IO (ResponseMessage, Environment a)
 performAction env (AcquireData params) =
-    let detElem = MEDetection [AcquisitionTypeName "Default"] []
+    let detElem = MEDetection (ElementID "defaultid") [AcquisitionTypeName "Default"] []
         ddets = M.fromList [(AcquisitionTypeName "Default", params)]
     in  startAsyncAcquisition env ddets detElem emptySmartProgramCode >>= \(asyncWorker, messageChannel, statusMVar) ->
         wait asyncWorker >>

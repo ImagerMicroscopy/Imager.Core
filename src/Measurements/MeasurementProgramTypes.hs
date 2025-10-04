@@ -32,6 +32,8 @@ import Utils.WaitableChannel
 
 type Prog = [MeasurementElement]
 
+newtype ElementID = ElementID {fromElementID :: Text}
+                            deriving (Show, Eq, Generic, Ord, NFData)
 newtype AcquisitionTypeName = AcquisitionTypeName {fromAcqName :: Text} 
                             deriving (Show, Eq, Generic, Ord, NFData)
 newtype WaitDuration = WaitDuration {fromWaitDuration :: Double}
@@ -43,17 +45,17 @@ newtype DetectionIndex = DetectionIndex {fromDetectionIndex :: Int}
 newtype NumImagesInDetection = NumImagesInDetection {fromNumImagesInDetection :: Int}
                             deriving (Show, Eq, Generic, Ord, NFData)
 
-data MeasurementElement = MEDetection ![AcquisitionTypeName] ![SmartProgramID]
-                        | MEIrradiation !LSIlluminationDuration ![IrradiationParams]
-                        | MEWait !WaitDuration
-                        | MEExecuteRobotProgram !RobotProgramExecutionParams
-                        | MEDoTimes !NumIterationsTotal (Maybe SmartProgramID) !Prog
-                        | MEFastAcquisitionLoop !NumIterationsTotal !(AcquisitionTypeName, DetectionParams) 
+data MeasurementElement = MEDetection !ElementID ![AcquisitionTypeName] ![SmartProgramID]
+                        | MEIrradiation !ElementID !LSIlluminationDuration ![IrradiationParams]
+                        | MEWait !ElementID !WaitDuration
+                        | MEExecuteRobotProgram !ElementID !RobotProgramExecutionParams
+                        | MEDoTimes !ElementID !NumIterationsTotal (Maybe SmartProgramID) !Prog
+                        | MEFastAcquisitionLoop !ElementID !NumIterationsTotal !(AcquisitionTypeName, DetectionParams) 
                                                 !(Maybe SmartProgramID)     -- ask this smart program for parameters
                                                 ![SmartProgramID]           -- send acquired images to these programs
-                        | METimeLapse !NumIterationsTotal !WaitDuration !(Maybe SmartProgramID) !Prog
-                        | MEStageLoop !StageName ![PositionNameAndCoords] !(Maybe SmartProgramID) !Prog
-                        | MERelativeStageLoop !StageName !RelativeStageLoopParams !(Maybe SmartProgramID) !Prog
+                        | METimeLapse !ElementID !NumIterationsTotal !WaitDuration !(Maybe SmartProgramID) !Prog
+                        | MEStageLoop !ElementID !StageName ![PositionNameAndCoords] !(Maybe SmartProgramID) !Prog
+                        | MERelativeStageLoop !ElementID !StageName !RelativeStageLoopParams !(Maybe SmartProgramID) !Prog
                         deriving (Show)
 
 type DefinedDetections = Map AcquisitionTypeName DetectionParams

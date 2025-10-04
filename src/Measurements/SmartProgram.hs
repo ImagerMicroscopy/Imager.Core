@@ -34,15 +34,15 @@ getAllSmartProgramIDsUsedInMeasurement :: MeasurementElement -> [SmartProgramID]
 getAllSmartProgramIDsUsedInMeasurement me = S.toList (searchWorker S.empty me)
     where
         searchWorker :: S.Set SmartProgramID -> MeasurementElement -> S.Set SmartProgramID
-        searchWorker s (MEDetection _ ids) = S.fromList ids
+        searchWorker s (MEDetection _ _ ids) = S.fromList ids
         searchWorker s (MEIrradiation{}) = s
         searchWorker s (MEWait{}) = s
-        searchWorker s (MEFastAcquisitionLoop _ _ sid ids) = S.fromList ids <> if (isJust sid) then S.singleton (fromJust sid) else S.empty
+        searchWorker s (MEFastAcquisitionLoop _ _ _ sid ids) = S.fromList ids <> if (isJust sid) then S.singleton (fromJust sid) else S.empty
         searchWorker s (MEExecuteRobotProgram{}) = s
-        searchWorker s (MEDoTimes _ sid es) = mconcat (map (searchWorker s) es) <> if (isJust sid) then S.singleton (fromJust sid) else S.empty
-        searchWorker s (METimeLapse _ _ sid es) = mconcat (map (searchWorker s) es) <> if (isJust sid) then S.singleton (fromJust sid) else S.empty
-        searchWorker s (MEStageLoop _ _ sid es) = mconcat (map (searchWorker s) es) <> if (isJust sid) then S.singleton (fromJust sid) else S.empty
-        searchWorker s (MERelativeStageLoop _ _ sid es) = mconcat (map (searchWorker s) es) <> if (isJust sid) then S.singleton (fromJust sid) else S.empty
+        searchWorker s (MEDoTimes _ _ sid es) = mconcat (map (searchWorker s) es) <> if (isJust sid) then S.singleton (fromJust sid) else S.empty
+        searchWorker s (METimeLapse _ _ _ sid es) = mconcat (map (searchWorker s) es) <> if (isJust sid) then S.singleton (fromJust sid) else S.empty
+        searchWorker s (MEStageLoop _ _ _ sid es) = mconcat (map (searchWorker s) es) <> if (isJust sid) then S.singleton (fromJust sid) else S.empty
+        searchWorker s (MERelativeStageLoop _ _ _ sid es) = mconcat (map (searchWorker s) es) <> if (isJust sid) then S.singleton (fromJust sid) else S.empty
 
 withSmartProgramServer :: SmartProgramCode -> (SmartProgramCommunicationFunctions -> IO ()) -> IO ()
 withSmartProgramServer programs action = 

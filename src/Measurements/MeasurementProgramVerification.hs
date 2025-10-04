@@ -12,6 +12,7 @@ import Data.List
 import qualified Data.Map.Strict as M
 import Data.Maybe
 import Control.Monad
+import Data.List
 import Data.Text (Text)
 import qualified Data.Text as T
 
@@ -26,7 +27,7 @@ type RobotInfo = (Text, [Text]) -- robot name, robot programs
 
 validateMeasurementElementThrows :: Detector a => [a] -> [EquipmentW] -> MeasurementElement -> DefinedDetections -> IO ()
 validateMeasurementElementThrows dets eqs me ddets =
-    pure ((validateDefinedDetections dets ddets) ++ (verifyRobotElements eqs me)) >>= \result ->
+    pure ((validateDefinedDetections dets ddets) ++ (verifyMeasurementElementIDsAreUnique me) ++ (verifyRobotElements eqs me)) >>= \result ->
     when (not $ null result) (
         throwIO (userError $ head result)) >>
     case (foldMeasurementElement (validateMeasurementElement eqs ddets) me) of
@@ -44,32 +45,32 @@ validateDefinedDetections dets ddets =
 -- should not inspect contained MeasurementElements
 -- empty list for no error
 validateMeasurementElement :: [EquipmentW] -> DefinedDetections -> MeasurementElement -> [String]
-validateMeasurementElement eqs ddets (MEDetection detNames programIDs)
+validateMeasurementElement eqs ddets (MEDetection _ detNames programIDs)
     | null detNames = ["no detection specified"]
     | any (\dn -> not (M.member dn ddets)) detNames = ["one or more detection names are undefined"]
     | otherwise = concat $ (map (validateDetection eqs) dets)
     where
         dets = map (\dn -> fromJust $ M.lookup dn ddets) detNames
-validateMeasurementElement eqs _ (MEIrradiation dur ips)
+validateMeasurementElement eqs _ (MEIrradiation _ dur ips)
     | (fromLSIlluminationDuration dur < 0.0) || (fromLSIlluminationDuration dur > 60) = ["invalid irradiation duration: " ++ show dur]
     | otherwise = concat $ (map (validateIrradiation eqs) ips)
-validateMeasurementElement eqs _ (MEWait (WaitDuration dur))
+validateMeasurementElement eqs _ (MEWait _ (WaitDuration dur))
     | (dur < 0.0) || (dur > 3600) = ["invalid wait duration: " ++ show dur]
     | otherwise = []
-validateMeasurementElement eqs _ (MEExecuteRobotProgram _) = []
-validateMeasurementElement eqs _ (MEDoTimes (NumIterationsTotal n) _ es)
+validateMeasurementElement eqs _ (MEExecuteRobotProgram _ _) = []
+validateMeasurementElement eqs _ (MEDoTimes _ (NumIterationsTotal n) _ es)
     | (n < 0) || (n > (floor 10e6)) = ["invalid number of times to repeat: " ++ show n]
     | null es = ["do times loop but no actions"]
     | otherwise = []
-validateMeasurementElement eqs _ (MEFastAcquisitionLoop (NumIterationsTotal n) (detName, detParams) inputProgramID outputProgramIDs)
+validateMeasurementElement eqs _ (MEFastAcquisitionLoop _ (NumIterationsTotal n) (detName, detParams) inputProgramID outputProgramIDs)
     | (n < 0) || (n > (floor 10e6)) = ["invalid number of times to repeat: " ++ show n]
     | otherwise = validateDetection eqs detParams
-validateMeasurementElement eqs _ (METimeLapse (NumIterationsTotal n) (WaitDuration dur) _ es)
+validateMeasurementElement eqs _ (METimeLapse _ (NumIterationsTotal n) (WaitDuration dur) _ es)
     | (n < 0) || (n > (floor 10e6)) = ["invalid number of times to repeat: " ++ show n]
     | (dur < 0.0) || (dur > 3600 * 2) = ["invalid time lapse duration: " ++ show dur]
     | null es = ["timelapse loop but no elements"]
     | otherwise = []
-validateMeasurementElement eqs _ (MEStageLoop stageName pos _ es)
+validateMeasurementElement eqs _ (MEStageLoop _ stageName pos _ es)
     | null pos = ["no positions in stage loop"]
     | T.null (fromStageName stageName) = ["no stage name"]
     | stageName `notElem` stageNames = ["can't find stage named " ++ T.unpack (fromStageName stageName)]
@@ -77,7 +78,7 @@ validateMeasurementElement eqs _ (MEStageLoop stageName pos _ es)
     | otherwise = []
     where
         stageNames = map motorizedStageName (filter hasMotorizedStage eqs)
-validateMeasurementElement eqs _ (MERelativeStageLoop stageName (RelativeStageLoopParams dx dy dz (bx, ax) (by, ay) (bz, az) _) _ es)
+validateMeasurementElement eqs _ (MERelativeStageLoop _ stageName (RelativeStageLoopParams dx dy dz (bx, ax) (by, ay) (bz, az) _) _ es)
     | T.null (fromStageName stageName) = ["no stage name"]
     | stageName `notElem` stageNames = ["can't find stage named " ++ T.unpack (fromStageName stageName)]
     | null es = ["relative stage loop but no elements"]
@@ -89,16 +90,39 @@ validateMeasurementElement eqs _ (MERelativeStageLoop stageName (RelativeStageLo
     where
         stageNames = map motorizedStageName (filter hasMotorizedStage eqs)
 
+verifyMeasurementElementIDsAreUnique :: MeasurementElement -> [String] -- empty list means no error
+verifyMeasurementElementIDsAreUnique me =
+    let allElementIDs = foldMeasurementElement f me
+        nIDs = length allElementIDs
+        nUniqueIDs = length (nub allElementIDs)
+    in  if (nIDs == nUniqueIDs)
+        then []
+        else ["measurement element IDs are not unique"]
+    where
+        f :: MeasurementElement -> [ElementID]
+        f e = [getElementID e]
+
+getElementID :: MeasurementElement -> ElementID
+getElementID (MEDetection elementID _ ids) = elementID
+getElementID (MEIrradiation elementID _ _) = elementID
+getElementID (MEWait elementID _) = elementID
+getElementID (MEFastAcquisitionLoop elementID _ _ _ _) = elementID
+getElementID (MEExecuteRobotProgram elementID _) = elementID
+getElementID (MEDoTimes elementID _ _ _) = elementID
+getElementID (METimeLapse elementID _ _ _ _) = elementID
+getElementID (MEStageLoop elementID _ _ _ _) = elementID
+getElementID (MERelativeStageLoop elementID _ _ _ _) = elementID
+
 verifyRobotElements :: [EquipmentW] -> MeasurementElement -> [String]
 verifyRobotElements eqs me = filter (not . null) . map (verifyRobotElement eqs) $ allRobotMeasurementElements
     where
         allRobotMeasurementElements = foldMeasurementElement f me
             where
-                f m@(MEExecuteRobotProgram RobotProgramExecutionParams{}) = [m]
+                f m@(MEExecuteRobotProgram _ RobotProgramExecutionParams{}) = [m]
                 f _ = []
         allRobotDescriptions = concat (map availableRobots eqs)
         verifyRobotElement :: [EquipmentW] -> MeasurementElement -> String
-        verifyRobotElement eqs (MEExecuteRobotProgram (RobotProgramExecutionParams eqName robotName progName args)) =
+        verifyRobotElement eqs (MEExecuteRobotProgram _ (RobotProgramExecutionParams eqName robotName progName args)) =
             if (eqExists && robotExists && programExists)
                 then []
                 else "invalid execute robot program element"
@@ -116,10 +140,10 @@ foldMeasurementElement :: (Monoid a) => (MeasurementElement -> a) -> Measurement
 foldMeasurementElement f me = foldMeasurementElement' f mempty me
     where
         foldMeasurementElement' :: (Monoid a) => (MeasurementElement -> a) -> a -> MeasurementElement -> a
-        foldMeasurementElement' f ac m@(MEDoTimes _ _ es)             = mconcat (ac : f m : childVals f es)
-        foldMeasurementElement' f ac m@(METimeLapse _ _ _ es)         = mconcat (ac : f m : childVals f es)
-        foldMeasurementElement' f ac m@(MEStageLoop _ _ _ es)         = mconcat (ac : f m : childVals f es)
-        foldMeasurementElement' f ac m@(MERelativeStageLoop _ _ _ es) = mconcat (ac : f m : childVals f es)
+        foldMeasurementElement' f ac m@(MEDoTimes _ _ _ es)             = mconcat (ac : f m : childVals f es)
+        foldMeasurementElement' f ac m@(METimeLapse _ _ _ _ es)         = mconcat (ac : f m : childVals f es)
+        foldMeasurementElement' f ac m@(MEStageLoop _ _ _ _ es)         = mconcat (ac : f m : childVals f es)
+        foldMeasurementElement' f ac m@(MERelativeStageLoop _ _ _ _ es) = mconcat (ac : f m : childVals f es)
         foldMeasurementElement' f ac m = ac `mappend` (f m)
         childVals :: (Monoid a) => (MeasurementElement -> a) -> [MeasurementElement] -> [a]
         childVals f mes = map (foldMeasurementElement f) mes

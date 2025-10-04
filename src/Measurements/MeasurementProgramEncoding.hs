@@ -27,28 +27,36 @@ instance FromJSON MeasurementElement where
     parseJSON (Object v) =
         v .: "elementtype" >>= \(typ :: Text) ->
         case typ of
-          "detection"   -> MEDetection <$> v .: "detectionnames" <*> v .: "smartprogramids"
-          "irradiation" -> MEIrradiation <$> v .: "duration" <*> v .: "irradiation"
-          "wait"        -> MEWait <$> v .: "duration"
-          "executerobotprogram" -> MEExecuteRobotProgram <$> v .: "programparameters"
-          "dotimes"     -> MEDoTimes <$> v .: "ntotal" <*> v .: "smartprogramid" <*> v .: "elements"
-          "timelapse"   -> METimeLapse <$> v .: "ntotal" <*> v .: "timedelta" <*> v .: "smartprogramid" <*> v .: "elements"
+          "detection"   -> MEDetection <$> v .: "elementid" <*> v .: "detectionnames" <*> v .: "smartprogramids"
+          "irradiation" -> MEIrradiation <$> v .: "elementid" <*> v .: "duration" <*> v .: "irradiation"
+          "wait"        -> MEWait <$> v .: "elementid" <*> v .: "duration"
+          "executerobotprogram" -> MEExecuteRobotProgram <$> v .: "elementid" <*> v .: "programparameters"
+          "dotimes"     -> MEDoTimes <$> v .: "elementid" <*> v .: "ntotal" <*> v .: "smartprogramid" <*> v .: "elements"
+          "timelapse"   -> METimeLapse <$> v .: "elementid" <*> v .: "ntotal" <*> v .: "timedelta" <*> v .: "smartprogramid" <*> v .: "elements"
           -- no FromJSON instance for MEFastAcquisitionLoop because it is automatically applied
-          "stageloop"   -> MEStageLoop <$> v .: "stagename" <*> v .: "positions" <*> v .: "smartprogramid" <*> v .: "elements"
-          "relativestageloop" -> MERelativeStageLoop <$> v .: "stagename" <*> v .: "params" <*> v .: "smartprogramid" <*> v .: "elements"
+          "stageloop"   -> MEStageLoop <$> v .: "elementid" <*> v .: "stagename" <*> v .: "positions" <*> v .: "smartprogramid" <*> v .: "elements"
+          "relativestageloop" -> MERelativeStageLoop <$> v .: "elementid" <*> v .: "stagename" <*> v .: "params" <*> v .: "smartprogramid" <*> v .: "elements"
           _             -> fail "can't decode measurement element type"
     parseJSON _ = fail "can't decode measurement element"
 instance ToJSON MeasurementElement where
-  toEncoding (MEDetection dets programIDs) = pairs ("elementtype" .= ("detection" :: Text) <> "detectionnames" .= dets <> "smartprogramids" .= programIDs)
-  toEncoding (MEIrradiation dur ip) = pairs ("elementtype" .= ("irradiation" :: Text) <> "duration" .= dur <> "irradiation" .= ip)
-  toEncoding (MEWait d) = pairs ("elementtype" .= ("wait" :: Text) <> "duration" .= d)
-  toEncoding (MEExecuteRobotProgram params) = pairs ("elementtype" .= ("executerobotprogram" :: Text) <> "programparameters" .= params)
-  toEncoding (MEDoTimes n ids es) = pairs ("elementtype" .= ("dotimes" :: Text) <> "ntotal" .= n <> "smartprogramid" .= ids <> "elements" .= es)
-  toEncoding (METimeLapse n td ids  es) = pairs ("elementtype" .= ("timelapse" :: Text) <> "ntotal" .= n <> "timedelta" .= td <> "smartprogramid" .= ids <>  "elements" .= es)
-  toEncoding (MEFastAcquisitionLoop n det inputProgramID programIDs) = pairs ("elementtype" .= ("fastacquisitionloop" :: Text) <> "ntotal" .= n <> "detection" .= det <> "smartprogramid" .= inputProgramID <> "smartprogramids" .= programIDs)
-  toEncoding (MEStageLoop n pos ids  es) = pairs ("elementtype" .= ("stageloop" :: Text) <> "stagename" .= n <> "positions" .= pos <> "smartprogramid" .= ids <> "elements" .= es)
-  toEncoding (MERelativeStageLoop n ps ids  es) = pairs ("elementtype" .= ("relativestageloop" :: Text) <> "stagename" .= n <> "params" .= ps <> "smartprogramid" .= ids <> "elements" .= es)
+  toEncoding (MEDetection eid dets programIDs) = pairs ("elementtype" .= ("detection" :: Text) <> "elementid" .= eid <> "detectionnames" .= dets <> "smartprogramids" .= programIDs)
+  toEncoding (MEIrradiation eid dur ip) = pairs ("elementtype" .= ("irradiation" :: Text) <> "elementid" .= eid <> "duration" .= dur <> "irradiation" .= ip)
+  toEncoding (MEWait eid d) = pairs ("elementtype" .= ("wait" :: Text) <> "elementid" .= eid <> "duration" .= d)
+  toEncoding (MEExecuteRobotProgram eid params) = pairs ("elementtype" .= ("executerobotprogram" :: Text) <> "elementid" .= eid <> "programparameters" .= params)
+  toEncoding (MEDoTimes eid n ids es) = pairs ("elementtype" .= ("dotimes" :: Text) <> "elementid" .= eid <> "ntotal" .= n <> "smartprogramid" .= ids <> "elements" .= es)
+  toEncoding (METimeLapse eid n td ids  es) = pairs ("elementtype" .= ("timelapse" :: Text) <> "elementid" .= eid <> "ntotal" .= n <> "timedelta" .= td <> "smartprogramid" .= ids <>  "elements" .= es)
+  toEncoding (MEFastAcquisitionLoop eid n det inputProgramID programIDs) = pairs ("elementtype" .= ("fastacquisitionloop" :: Text) <> "elementid" .= eid <> "ntotal" .= n <> "detection" .= det <> "smartprogramid" .= inputProgramID <> "smartprogramids" .= programIDs)
+  toEncoding (MEStageLoop eid n pos ids  es) = pairs ("elementtype" .= ("stageloop" :: Text) <> "elementid" .= eid <> "stagename" .= n <> "positions" .= pos <> "smartprogramid" .= ids <> "elements" .= es)
+  toEncoding (MERelativeStageLoop eid n ps ids  es) = pairs ("elementtype" .= ("relativestageloop" :: Text) <> "elementid" .= eid <> "stagename" .= n <> "params" .= ps <> "smartprogramid" .= ids <> "elements" .= es)
   toJSON _ = error "no toJSON"
+
+instance ToJSON ElementID where
+    toJSON (ElementID i) = toJSON i
+instance FromJSON ElementID where
+    parseJSON = fmap ElementID . parseJSON
+instance MessagePack ElementID where
+    toObject (ElementID i) = toObject i
+    fromObject o = ElementID <$> (fromObject o)    
 
 instance FromJSON DetectionParams where
     parseJSON (Object v) =
