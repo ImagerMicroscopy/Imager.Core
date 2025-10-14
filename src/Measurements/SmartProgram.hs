@@ -25,6 +25,9 @@ import qualified Data.Set as S
 import qualified Data.Vector as V
 import GHC.Generics
 import Network.HTTP.Req
+import qualified Data.ByteString.Lazy.Char8 as LBS
+
+
 
 import Measurements.MeasurementProgramTypes
 import Measurements.MeasurementProgramEncoding
@@ -111,7 +114,7 @@ sendProgramsToSmartProgramServer code =
         url = http "127.0.0.1" /: "nodesubmission" /: "set_dags"
         body = ReqBodyJson code
     in  runReq defaultHttpConfig ( 
-            liftIO (putStrLn "sending programs to smart program server") >>
+            liftIO (LBS.putStrLn (encode code)) >>
             req
                 POST                    -- HTTP method
                 url                     -- URL
