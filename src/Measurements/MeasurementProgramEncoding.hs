@@ -122,7 +122,10 @@ instance FromJSON PositionNameAndCoords where
 instance ToJSON PositionNameAndCoords where
     toEncoding (PositionNameAndCoords name coords) =
         pairs ("name" .= name <> "coordinates" .= coords)
-    toJSON _ = error "no toJSON"
+    toJSON (PositionNameAndCoords name coords) =
+        object [ "name" .= name
+               , "coordinates" .= coords
+               ]
 instance MessagePack PositionNameAndCoords where
     toObject (PositionNameAndCoords name coords) =
         toObject $ M.fromList [("name" :: Text, toObject name),

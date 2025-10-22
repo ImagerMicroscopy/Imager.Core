@@ -25,6 +25,9 @@ import qualified Data.Set as S
 import qualified Data.Vector as V
 import GHC.Generics
 import Network.HTTP.Req
+import qualified Data.ByteString.Lazy.Char8 as LBS
+
+
 
 import Measurements.MeasurementProgramTypes
 import Measurements.MeasurementProgramEncoding
@@ -92,9 +95,9 @@ getSmartProgramTimeLapseDecision programID =
 
 queryServerForDecision :: (FromJSON a) => Text -> SmartProgramID -> IO a
 queryServerForDecision path id =
-    let serverPort = 8100
-        url = http "127.0.0.1" /: path
-        queryParams = "id" =: (fromSmartProgramID id)
+    let serverPort = 5100
+        url = http "127.0.0.1" /: "decisions" /: "get_decision" /: path
+        queryParams = "dagid" =: (fromSmartProgramID id)
         body = NoReqBody
     in  runReq defaultHttpConfig $
             req
@@ -107,11 +110,11 @@ queryServerForDecision path id =
 
 sendProgramsToSmartProgramServer :: SmartProgramCode -> IO ()
 sendProgramsToSmartProgramServer code =
-    let serverPort = 8100
-        url = http "127.0.0.1" /: "startprograms"
+    let serverPort = 5100
+        url = http "127.0.0.1" /: "nodesubmission" /: "set_dags"
         body = ReqBodyJson code
     in  runReq defaultHttpConfig ( 
-            liftIO (putStrLn "sending programs to smart program server") >>
+            liftIO (LBS.putStrLn (encode code)) >>
             req
                 POST                    -- HTTP method
                 url                     -- URL
@@ -128,9 +131,9 @@ sendImagesToSmartProgramServer images ids =
     let allMessages = map (uncurry AcquiredDataMessage)  images
         asChannelMessages = map (ChannelMessage 0) allMessages
         asMsgPackLBS = mconcat (map pack asChannelMessages)
-        serverPort = 8100
-        url = http "127.0.0.1" /: "data"
-        queryParams = mconcat [ "id" =: (fromSmartProgramID id) | id <- ids ]
+        serverPort = 5100
+        url = http "127.0.0.1" /: "submit_data"
+        queryParams = mconcat [ "dagid" =: (fromSmartProgramID id) | id <- ids ]
         body = ReqBodyLbs asMsgPackLBS
     in  runReq defaultHttpConfig (
             liftIO (putStrLn "sending images to smart program server") >>
@@ -139,7 +142,7 @@ sendImagesToSmartProgramServer images ids =
                 url                     -- URL
                 body                    -- Request body
                 jsonResponse            -- Response type
-                (port serverPort <> queryParams <> responseTimeout 1000000) >>= \response -> -- Options (port and query parameter)
+                (port serverPort <> queryParams <> responseTimeout 10000000) >>= \response -> -- Options (port and query parameter)
             pure (responseBody response)) >>= \result ->
         when (not $ isSuccessResponse result) (
             throwIO $ userError ("sending smart programs image but received " ++ show result))
@@ -151,7 +154,7 @@ sendMeasurementFinishedToSmartProgramServer =
     sendMessage `catch` (\e -> putStrLn ("Exception caught in stop send: " ++ show (e :: SomeException)))
     where
         sendMessage =
-            let serverPort = 8100
+            let serverPort = 5100
                 url = http "127.0.0.1" /: "measurementfinished"
                 body = NoReqBody
             in  runReq defaultHttpConfig (
