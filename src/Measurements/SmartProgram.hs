@@ -2,6 +2,7 @@
 
 module Measurements.SmartProgram (
     getAllSmartProgramIDsUsedInMeasurement
+  , getUpdatedAcquisitionDecision
   , withSmartProgramServer
   , sendDetectedImageToSmartPrograms_Worker
   , parseSmartProgramIDsFromCode
@@ -60,6 +61,26 @@ smartProgramServerCommunicationFunctions =
         getSmartProgramStageLoopDecision
         getSmartProgramRelativeStageLoopDecision
         getSmartProgramTimeLapseDecision
+
+
+getUpdatedAcquisitionDecision :: SmartProgramID -> ElementID -> DefinedDetections -> IO (Maybe DefinedDetections)
+getUpdatedAcquisitionDecision programID elementID ddets = do
+    let serverPort = 5100
+        url = http "127.0.0.1" /: "updateacquisitionparams"
+        queryParams = "dagid" =: fromSmartProgramID programID  <> 
+                      "elementid" =: fromElementID elementID
+        body = ReqBodyJson ddets
+
+    runReq defaultHttpConfig $ do
+        liftIO $ LBS.putStrLn (encode ddets)
+        response <- req
+            POST
+            url
+            body
+            lbsResponse  
+            (port serverPort <> queryParams <> responseTimeout 1000000)
+        let result = responseBody response
+        pure (decode result :: Maybe DefinedDetections)
 
 getSmartProgramDoTimesDecision :: SmartProgramID -> IO SmartProgramServerResponse
 getSmartProgramDoTimesDecision programID = 

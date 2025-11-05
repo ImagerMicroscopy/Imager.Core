@@ -30,6 +30,7 @@ instance FromJSON MeasurementElement where
           "detection"   -> MEDetection <$> v .: "elementid" <*> v .: "detectionnames" <*> v .: "smartprogramids"
           "irradiation" -> MEIrradiation <$> v .: "elementid" <*> v .: "duration" <*> v .: "irradiation"
           "wait"        -> MEWait <$> v .: "elementid" <*> v .: "duration"
+          "updateacquisition" ->  MEUpdateAcquisition <$> v .: "elementid" <*> v .: "smartprogramid"
           "executerobotprogram" -> MEExecuteRobotProgram <$> v .: "elementid" <*> v .: "programparameters"
           "dotimes"     -> MEDoTimes <$> v .: "elementid" <*> v .: "ntotal" <*> v .: "smartprogramid" <*> v .: "elements"
           "timelapse"   -> METimeLapse <$> v .: "elementid" <*> v .: "ntotal" <*> v .: "timedelta" <*> v .: "smartprogramid" <*> v .: "elements"
@@ -88,8 +89,12 @@ instance ToJSON IrradiationParams where
     toEncoding (IrradiationParams eName lName channel power) =
         pairs ("equipmentname" .= eName <> "lightsourcename" .= lName
             <> "lightsourcechannel" .= channel <> "lightsourcepower" .= power)
-    toJSON _ = error "no toJSON"
-
+    toJSON (IrradiationParams eName lName channel power) =
+        object [ "equipmentname" .= eName
+               , "lightsourcename" .= lName
+               , "lightsourcechannel" .= channel
+               , "lightsourcepower" .= power
+               ]
 instance FromJSON RobotProgramExecutionParams where
     parseJSON (Object v) =
         RobotProgramExecutionParams <$> v .: "equipmentname"
@@ -112,8 +117,10 @@ instance FromJSON MovableComponentParams where
 instance ToJSON MovableComponentParams where
     toEncoding (MovableComponentParams eName settings) =
         pairs ("equipmentname" .= eName <> "movablecomponentsettings" .= settings)
-    toJSON _ = error "no toJSON"
-
+    toJSON (MovableComponentParams eName settings) =
+        object [ "equipmentname" .= eName
+               , "movablecomponentsettings" .= settings
+               ]
 instance FromJSON PositionNameAndCoords where
     parseJSON (Object v) =
         PositionNameAndCoords <$> v .: "name"
