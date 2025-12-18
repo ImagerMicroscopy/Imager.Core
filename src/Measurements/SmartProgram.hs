@@ -49,10 +49,27 @@ getAllSmartProgramIDsUsedInMeasurement me = S.toList (searchWorker S.empty me)
         searchWorker s (MEStageLoop _ _ _ sid es) = mconcat (map (searchWorker s) es) <> if (isJust sid) then S.singleton (fromJust sid) else S.empty
         searchWorker s (MERelativeStageLoop _ _ _ sid es) = mconcat (map (searchWorker s) es) <> if (isJust sid) then S.singleton (fromJust sid) else S.empty
 
-withSmartProgramServer :: SmartProgramCode -> (SmartProgramCommunicationFunctions -> IO ()) -> IO ()
-withSmartProgramServer programs action = 
-    sendProgramsToSmartProgramServer programs >>
-    (action smartProgramServerCommunicationFunctions) `finally` (sendMeasurementFinishedToSmartProgramServer `SE.catchAny` (\_ -> pure ()))
+-- withSmartProgramServer programs action = 
+--     sendProgramsToSmartProgramServer programs >>
+--     (action smartProgramServerCommunicationFunctions) `finally` (sendMeasurementFinishedToSmartProgramServer `SE.catchAny` (\_ -> pure ()))
+withSmartProgramServer:: SmartProgramCode-> (SmartProgramCommunicationFunctions -> IO ())-> IO ()
+withSmartProgramServer programs action = do
+    when (programLength > 0) $
+      ( do
+          sendProgramsToSmartProgramServer programs
+          action smartProgramServerCommunicationFunctions
+      )
+      `finally` (sendMeasurementFinishedToSmartProgramServer
+                    `SE.catchAny` (\_ -> pure ()))
+
+    action smartProgramServerCommunicationFunctions
+  where
+    programLength :: Int
+    programLength = case programs of
+      ProgramRunnerCode xs -> length xs
+      DAGOrchestratorCode (Array a) -> V.length a
+      DAGOrchestratorCode _ ->
+        error "Invariant violation: DAGOrchestratorCode must be a JSON Array"
 
 smartProgramServerCommunicationFunctions :: SmartProgramCommunicationFunctions
 smartProgramServerCommunicationFunctions =
