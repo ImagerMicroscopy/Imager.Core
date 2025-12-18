@@ -1,4 +1,6 @@
 {-# LANGUAGE RecordWildCards, ScopedTypeVariables, OverloadedStrings, NumDecimals #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Redundant <$>" #-}
 module Measurements.MeasurementProgram (
     executeMeasurement
   , executeDetection
@@ -41,16 +43,21 @@ import Equipment.Equipment
 import Equipment.EquipmentTypes
 import Measurements.MeasurementProgramTypes
 import Measurements.MeasurementProgramVerification
-import Measurements.SmartProgram
+import Measurements.SmartProgram (getUpdatedAcquisitionDecision)
 import Camera.SCCameraTypes
 import Measurements.SmartProgram
 import Measurements.SmartProgramRunner
 import Utils.MeasurementProgramUtils
 import Utils.MiscUtils
 import Utils.WaitableChannel
+import Data.Aeson (encode)
+import qualified Data.ByteString.Lazy.Char8 as LB
 
 executeMeasurement :: Detector a => ([a], [EquipmentW], MessageChannel, MVar [Text]) -> MeasurementElement -> DefinedDetections -> SmartProgramCode -> IO ()
-executeMeasurement (detectors, equipment, messageChannel, statusMVar) me ddets smartProgramCode =
+executeMeasurement (detectors, equipment, messageChannel, statusMVar) me defineddets smartProgramCode = do
+    ddets <- newIORef defineddets
+    ddetsWithoutCommonIO <- newIORef ddetsWithoutCommon 
+
     withAsync (forever $ resetSystemSleepTimer >> threadDelay (round 60.0e6)) (\_ ->
         newIORef (DetectionIndex 0) >>= \detectionIdxRef ->
         newIORef "" >>= \stagePositionNameRef ->
@@ -61,19 +68,19 @@ executeMeasurement (detectors, equipment, messageChannel, statusMVar) me ddets s
                 env = ProgramEnvironment detectors startTime equipment detectionIdxRef stagePositionNameRef smartProgramIDs messageChannel statusMVar smartProgramCommunicationFuncs smartProgramsChannelWriter  
             in  forM_ equipment (flushSerialPorts) >>
                 forM_ (M.toList commonDetectorProperties) (\(detName, opts) ->
-                    mapM_ (setDetectorOption (namedDetector detName)) opts) >>
-                (executeMeasurementElement env ddetsWithoutCommon (insertFastAcquisitionLoops ddetsWithoutCommon me)
+                    mapM_ (setDetectorOption (namedDetector detName)) opts) >> 
+                (executeMeasurementElement env ddets ddetsWithoutCommonIO (insertFastAcquisitionLoops ddetsWithoutCommon me)
                     `catch` (\e -> deactivateUsedLightSources >>
                                 mapM_ stopRobot eqWithUsedRobots >>
                                 putStrLn (displayException e) >>
                                 throwIO (e :: SomeException))))
     where
         namedDetector n = head (filter ((==) n . detectorName) detectors)
-        eqsUsedAsLightSource = eqNamesUsedAsLightSourceIn ddets me
+        eqsUsedAsLightSource = eqNamesUsedAsLightSourceIn defineddets me
         deactivateUsedLightSources = mapM_ deactivateLightSource (filter (\e -> equipmentName e `elem` eqsUsedAsLightSource) equipment)
         eqWithUsedRobots = let usedRobotEqNames = equipmentNamesWithRobotsUsedInME me
                            in  filter (\e -> (equipmentName e) `elem` usedRobotEqNames) equipment
-        (ddetsWithoutCommon, commonDetectorProperties) =  removeCommonDetectorProperties ddets
+        (ddetsWithoutCommon, commonDetectorProperties) =  removeCommonDetectorProperties defineddets
 
 removeCommonDetectorProperties :: DefinedDetections -> (DefinedDetections, Map DetectorName [DetectorProperty])
 removeCommonDetectorProperties ddets = (ddetsWithoutCommon, commonDetectorProperties)
@@ -95,46 +102,74 @@ removeCommonDetectorProperties ddets = (ddetsWithoutCommon, commonDetectorProper
         removeCommon commonmap dtorparams =
             map (\(DetectorParams name opts) -> DetectorParams name (filter (`notElem` (fromJust $ M.lookup name commonmap)) opts)) dtorparams
 
-executeMeasurementElements :: Detector a => ProgramEnvironment a -> DefinedDetections -> [MeasurementElement] -> IO ()
-executeMeasurementElements env ddets es = mapM_ (executeMeasurementElement env ddets) es
+executeMeasurementElements :: Detector a => ProgramEnvironment a -> IORef DefinedDetections -> IORef DefinedDetections -> [MeasurementElement] -> IO ()
+executeMeasurementElements env fullddets ddets es = mapM_ (executeMeasurementElement env fullddets ddets) es
 
-executeMeasurementElement :: Detector a => ProgramEnvironment a -> DefinedDetections -> MeasurementElement -> IO ()
-executeMeasurementElement env ddets (MEDetection elementID detNames smartProgramIDs) =
+executeMeasurementElement :: Detector a => ProgramEnvironment a ->IORef DefinedDetections -> IORef DefinedDetections -> MeasurementElement -> IO ()
+executeMeasurementElement env _ defineddets (MEDetection elementID detNames smartProgramIDs) =
     withStatusMessage env "Detection" (
         readIORef (peDetectionIndexRef env) >>= \detIdx ->
+        readIORef defineddets >>= \ddets -> 
         readIORef (peCurrentNamedPosition env) >>= \stagePositionName ->
-        executeDetection detectors eqs (detNames, detParams) startTime detIdx stagePositionName elementID messageChannel (sendToSmartProgramsChannel, smartProgramIDs)) >>
+        executeDetection detectors eqs (detNames, map (\dn -> fromJust $ M.lookup dn ddets) detNames) startTime detIdx stagePositionName elementID messageChannel (sendToSmartProgramsChannel, smartProgramIDs)) >>
         modifyIORef (peDetectionIndexRef env) (DetectionIndex . (+1) . fromDetectionIndex)
     where
       eqs = peEquipment env
       detectors = peDetectors env
       messageChannel = peMessageChannel env
       startTime = peStartTime env
-      detParams = map (\dn -> fromJust $ M.lookup dn ddets) detNames
+
       sendToSmartProgramsChannel = peSmartProgramSendChan env
 
-executeMeasurementElement env _ (MEIrradiation _ dur ips) =
+executeMeasurementElement env fullddets ddets (MEUpdateAcquisition elementID programID acquisitionName) =
+    withStatusMessage env "Updating Acquisition" $ do
+        toChangeDetsMap <- readIORef fullddets
+        waitUntilWaitableChannelIsEmpty (peSmartProgramSendChan env) 
+        maybeUpdated <- getUpdatedAcquisitionDecision (fromJust programID)  elementID  toChangeDetsMap (fromJust acquisitionName)
+
+        let definedDetsMap = fromMaybe toChangeDetsMap maybeUpdated
+        writeIORef fullddets definedDetsMap
+
+        case maybeUpdated of
+            Just updated -> do
+                let (ddetsWithoutCommon, commonDetectorProperties) =
+                        removeCommonDetectorProperties updated
+                writeIORef ddets ddetsWithoutCommon
+
+                let detectors = peDetectors env  
+                    namedDetector n = head (filter ((== n) . detectorName) detectors)
+
+                forM_ (M.toList commonDetectorProperties) $ \(detName, opts) ->
+                    forM_ opts $ \opt ->
+                        setDetectorOption (namedDetector detName) opt
+
+            Nothing ->
+                putStrLn "No update to acquisition decision was available."
+
+
+
+executeMeasurementElement env _ _ (MEIrradiation _ dur ips) =
     withStatusMessage env (T.format "irradiating {} s" (T.Only (fromLSIlluminationDuration dur))) (
         executeIrradiation eqs ips dur)
     where
       eqs = peEquipment env
 
-executeMeasurementElement env _ (MEWait _ (WaitDuration dur)) =
+executeMeasurementElement env _ _ (MEWait _ (WaitDuration dur)) =
     withStatusMessage env (T.format "waiting {} s" (T.Only dur)) (
         threadDelay (round $ dur * 1e6))
 
-executeMeasurementElement env _ (MEExecuteRobotProgram _ (RobotProgramExecutionParams eqName robotName progName progArgs)) =
+executeMeasurementElement env _ _ (MEExecuteRobotProgram _ (RobotProgramExecutionParams eqName robotName progName progArgs)) =
     withStatusMessage env (T.format "executing program {} on {}/{}" (fromRobotProgramName progName, fromRobotName robotName,  fromEqName eqName)) (
         executeRobotProgram eq robotName progName progArgs)
     where
         [eq] = filter ((== eqName) . equipmentName) (peEquipment env)
 
-executeMeasurementElement env ddets (MEDoTimes _ n maybeDecisionFromSmartProgramID es) =
+executeMeasurementElement env fullddets ddets (MEDoTimes _ n maybeDecisionFromSmartProgramID es) =
     maybeUpdateLoopCount maybeDecisionFromSmartProgramID n >>= \n' ->
     withStatusMessage env "do times" (
         forM_ (zip [1 ..] (take (fromNumIterationsTotal n') . repeat $ es)) (\(index :: Int, ses) ->
             updateStatusMessage env (T.format "do times {} of {}" (index, (fromNumIterationsTotal n'))) >>
-            executeMeasurementElements env ddets ses
+            executeMeasurementElements env fullddets ddets ses
         ))
     where
         messageChannel = peMessageChannel env
@@ -151,7 +186,7 @@ executeMeasurementElement env ddets (MEDoTimes _ n maybeDecisionFromSmartProgram
                                       ResponseNoDecision _         -> pure n
                                       ResponseDoTimesDecision n' _ -> pure n'
 
-executeMeasurementElement env ddets (MEFastAcquisitionLoop detectionID n (detName, detParams) maybeDecisionFromSmartProgramID programIDs) =
+executeMeasurementElement env fullddets ddets (MEFastAcquisitionLoop detectionID n (detName, detParams) maybeDecisionFromSmartProgramID programIDs) =
     maybeUpdateLoopCount maybeDecisionFromSmartProgramID n >>= \n' ->
     withStatusMessage env (T.format "fast acquisition ({} images)" (T.Only (fromNumIterationsTotal n'))) (
         readIORef (peDetectionIndexRef env) >>= \detectionIndex ->
@@ -176,7 +211,7 @@ executeMeasurementElement env ddets (MEFastAcquisitionLoop detectionID n (detNam
                                       ResponseNoDecision _         -> pure n
                                       ResponseDoTimesDecision n' _ -> pure n'
 
-executeMeasurementElement env ddets (METimeLapse _ n dur maybeDecisionFromSmartProgramID es) =
+executeMeasurementElement env fullddets ddets (METimeLapse _ n dur maybeDecisionFromSmartProgramID es) =
     withStatusMessage env "time lapse" (
         maybeUpdateLoopParameters maybeDecisionFromSmartProgramID dur n >>= \(n', dur') ->
         futureTimes dur' n' >>= \fts ->
@@ -186,7 +221,7 @@ executeMeasurementElement env ddets (METimeLapse _ n dur maybeDecisionFromSmartP
             updateStatusMessage env (T.format "next time lapse ({} of {}) at {}" (index, (fromNumIterationsTotal n'), timeStr)) >>
             waitUntil ts >>
             updateStatusMessage env (T.format "executing time lapse {} of {}" (index, (fromNumIterationsTotal n'))) >>
-            executeMeasurementElements env ddets es))
+            executeMeasurementElements env fullddets ddets es))
     where
         messageChannel = peMessageChannel env
         timeAtExpStart = peStartTime env
@@ -224,14 +259,14 @@ executeMeasurementElement env ddets (METimeLapse _ n dur maybeDecisionFromSmartP
                             in threadDelay (fromIntegral (max (ns `div` 1000) 0))
                        else return ()
 
-executeMeasurementElement env ddets (MEStageLoop _ sn poss maybeDecisionFromSmartProgramID es) =
+executeMeasurementElement env fullddets ddets (MEStageLoop _ sn poss maybeDecisionFromSmartProgramID es) =
     withStatusMessage env "stage loop" (
         readIORef (peCurrentNamedPosition env) >>= \savedPositionName -> -- restore previous name in case of nested stage loops
         maybeUpdateStagePositions maybeDecisionFromSmartProgramID poss >>= \poss' ->
         forM_ (zip [1..] poss') (\(index :: Int, (PositionNameAndCoords posName pos)) ->
             updateStatusMessage env (T.format "stage position {} of {} ({})" (index, (length poss'), posName)) >>
             writeIORef (peCurrentNamedPosition env) posName >>
-            setStagePosition stageEq pos >> executeMeasurementElements env ddets es) >>
+            setStagePosition stageEq pos >> executeMeasurementElements env fullddets ddets es) >>
         writeIORef (peCurrentNamedPosition env) savedPositionName)
     where
         [stageEq] = filter (\e -> hasMotorizedStage e && motorizedStageName e == sn) (peEquipment env)
@@ -249,7 +284,7 @@ executeMeasurementElement env ddets (MEStageLoop _ sn poss maybeDecisionFromSmar
                                       ResponseNoDecision _              -> pure poss
                                       ResponseStageLoopDecision poss' _ -> pure poss'
 
-executeMeasurementElement env ddets (MERelativeStageLoop _ sn params maybeDecisionFromSmartProgramID es) =
+executeMeasurementElement env fullddets ddets (MERelativeStageLoop _ sn params maybeDecisionFromSmartProgramID es) =
     withStatusMessage env "relative stage loop" (
         maybeUpdateParameters maybeDecisionFromSmartProgramID params >>= \params' ->
         getStagePosition stageEq >>= \(startPosition@(StagePosition startX startY startZ usingAF afOffset)) ->
@@ -269,7 +304,7 @@ executeMeasurementElement env ddets (MERelativeStageLoop _ sn params maybeDecisi
                     let zCoords = map ((+) upZ . (*) dz . fromIntegral) [negate bz .. az]
                     in  forM_ zCoords (\z ->
                             setStagePosition stageEq (StagePosition upX upY z upAF upOffset) >> -- predetermined pfs
-                            executeMeasurementElements env ddets es
+                            executeMeasurementElements env fullddets ddets es
                         ))) >>
             forM_ extraPositionsFromEnd (\(x, y) ->
                 setStagePosition stageEq (StagePosition x y startZ usingAF afOffset)) >>
@@ -302,92 +337,7 @@ executeMeasurementElement env ddets (MERelativeStageLoop _ sn params maybeDecisi
                 dy = distanceY / fromIntegral (nAdditional + 1)
                 maxDistanceBetweenIntermediatePoints = 2000 -- need an extra position every this many microns when proceeding to the first point
 
-cyclePositions xCoords yCoords zCoords z_list n stageEq usingAF afOffset bz az dz env ddtes es  =
-      if n/=length(z_list)
-        then
-          let
-              x_pos = xCoords!!n
-              y_pos = yCoords!!n
-              ind_n = z_list!!n
-              z_pos = zCoords!!ind_n
-              upd_n = n+1
 
-          in print upd_n >> setStagePosition stageEq (StagePosition   x_pos y_pos z_pos usingAF afOffset)  >>  getStagePosition stageEq >>= \(StagePosition upX upY upZ upAF upOffset) ->
-              let zVals = map ((+) upZ . (*) dz . fromIntegral) [negate bz .. az]
-              in (forM_ zVals (\z ->
-                      setStagePosition stageEq (StagePosition upX upY z upAF upOffset) >>  executeMeasurementElements env ddtes es )) >>  getStagePosition stageEq >>= \(StagePosition currX currY currZ upAF upOffset) ->
-                      let
-                          new_zlist =   getZposition  currZ zCoords n
-                      in cyclePositions xCoords yCoords new_zlist z_list upd_n stageEq usingAF afOffset bz az dz env ddtes es
-        else
-          return ()
-
-getZposition upZ zCoords n =
-    let   (x,_:ys) = splitAt n zCoords
-    in (x ++ [upZ] ++ ys)
-
-callGrid ax ay bx by dx dy startX startY =
-    let xC = map ((+) startX . (*)  dx . fromIntegral) [negate ax .. bx]
-        yC = map ((+) startY . (*)  dy . fromIntegral) [negate ay .. by]
-        grid =  [ [x,y] | x <- xC, y <- yC ]
-        walk_x = [startX]
-        walk_y = [startY]
-        z_list = [0]
-        visited_new = assignVisit startX startY (replicate (length(grid)) 0) grid
-
-    in walkGrid startX startY grid visited_new walk_x walk_y z_list
-
-walkGrid xpos ypos grid visited walk_x walk_y z_list = 
-    if all (==1) visited
-    then
-        let x  = walk_x
-            y  = walk_y
-        in (x,y , z_list)
-    else
-        let (closest_neighbour, updated_visit, updated_walk_x , updated_walk_y, updated_z_list) = getClosestNeighbour xpos ypos grid visited walk_x walk_y z_list
-        in walkGrid (closest_neighbour!!0) (closest_neighbour!!1) grid  updated_visit updated_walk_x  updated_walk_y  updated_z_list
-
-getClosestNeighbour x_pos y_pos grid visited walked_list_x walked_list_y z_list  =
-    let dist_x = [abs(x!!0 - x_pos) | x <- grid]
-        dist_y = [abs(y!!1 - y_pos) | y <- grid]
-        manhattan_transform = [if (( sum([dist_x!!n , dist_y!!n ])/= 0 ) && visited!!n==0 ) then sum([dist_x!!n , dist_y!!n ]) else 1e100 | n <- [0..length(dist_x)-1] ]
-        closest_neighbours  = [[(grid!!n)!!0,(grid!!n)!!1] | n <- [0..length(manhattan_transform)-1],  ((manhattan_transform!!n == minimum(manhattan_transform)) && (visited!!n==0 ))]
-
-        closest_neighbour = (getLowestCol ( getLowestRow closest_neighbours ) )!!0
-        updated_visit = assignVisit (closest_neighbour!!0) (closest_neighbour!!1) visited grid
-        min_val = getClosestZPos  walked_list_x  walked_list_y  (closest_neighbour!!0)  (closest_neighbour!!1)
-
-        updated_walked_list_x = walked_list_x ++ [closest_neighbour!!0]
-        updated_walked_list_y = walked_list_y ++ [closest_neighbour!!1]
-
-        updated_z_list = z_list ++ min_val
-
-    in (closest_neighbour, updated_visit, updated_walked_list_x, updated_walked_list_y , updated_z_list )
-
-assignVisit x_pos y_pos visited grid =
-    let ind_pos = [n  | n <- [0..length(grid)-1], (((grid!!n)!!0 == x_pos) && ((grid!!n)!!1 == y_pos) )]!!0
-        (x,_:ys) = splitAt ind_pos visited
-    in (x ++ [1] ++ ys)
-
-
-getClosestZPos walked_list_x  walked_list_y  x_pos y_pos =
-    let
-        dist_x = [abs(x- x_pos) | x <-  walked_list_x]
-        dist_y = [abs(y- y_pos) | y <-  walked_list_y]
-        manhattan_transform = [sum([dist_x!!n , dist_y!!n ])  | n <- [0..length(dist_x)-1] ]
-        minvalue = minimum( manhattan_transform)
-        min_arg = fromJust (elemIndex  minvalue manhattan_transform)
-    in [min_arg]
-
-getLowestRow neighbours =
-    let lowest_row = minimum([x!!0 | x <- neighbours])
-    in [x | x <- neighbours, x!!0 == lowest_row]
-
-getLowestCol neighbours =
-    let lowest_col = minimum([x!!1 | x <- neighbours])
-    in [x | x <- neighbours, x!!1 == lowest_col]
-
-getXYCoords xC yC = [ [xC!!n,yC!!n] | n <- [0..length(xC)-1] ]
 
 
 insertFastAcquisitionLoops :: DefinedDetections -> MeasurementElement -> MeasurementElement
@@ -401,31 +351,37 @@ insertFastAcquisitionLoops d m = m
 executeDetection :: Detector a => [a] -> [EquipmentW] -> ([AcquisitionTypeName], [DetectionParams]) -> TimeAtStartOfExperiment -> 
                                   DetectionIndex -> Text -> ElementID -> MessageChannel -> (SendToSmartProgramsChannelWriter, [SmartProgramID]) -> IO ()
 executeDetection dets eqs (acqTypeNames, detParams) expStartTime detectionIndex stagePositionName detectionElementID
-                 messageChannel (smartProgramsChannel, smartProgramIDs) =
-    getStagePositionSafe eqs >>= \stagePos ->
-    forM_ (zip acqTypeNames detParams) (\(acqTypeName, dps) ->
-        setDetectorProperties dets (dpDetectors dps) >>
+                 messageChannel (smartProgramsChannel, smartProgramIDs) = do
+
+    stagePos <- getStagePositionSafe eqs
+
+    forM_ (zip acqTypeNames detParams) $ \(acqTypeName, dps) -> do
+        setDetectorProperties dets (dpDetectors dps)
         let requiredDetNames = map dtpDetectorName (dpDetectors dps)
-            requiredDets = filter (\d -> (detectorName d) `elem` requiredDetNames) dets
-        in  mapM isConfiguredForHardwareTriggering requiredDets >>= \hasTriggering ->
-            if (or hasTriggering)
-            then executeFastDetectionLoop dets eqs (acqTypeName, dps) (NumIterationsTotal 1) expStartTime
-                                          detectionIndex stagePositionName detectionElementID messageChannel 
-                                          (smartProgramsChannel, smartProgramIDs)
-            else setMovableComponents eqs (dpMovableComponents dps) >>
-                 enableLightSources eqs (dpIrradiation dps) >>
-                 TimeAtStartOfEvent <$> getTime Monotonic >>= \detStartTime ->
-                 mapConcurrently acquireData requiredDets >>= \measuredImages ->
-                 disableLightSources eqs (dpIrradiation dps) >>
-                 forM_ (zip measuredImages (map detectorName requiredDets)) (\(measuredImage, detName) ->
-                     let acquiredData = measuredImageAsAcquiredData measuredImage detName expStartTime detStartTime
-                         metadata = AcquisitionMetaData stagePos stagePositionName acqTypeName detectionIndex nImagesMeasuredInThisDetection detectionElementID
-                     in  (acquiredData `deepseq` (addDataToChannel messageChannel (AcquiredDataMessage metadata acquiredData))) >>
-                         when (not $ null smartProgramIDs) (
-                            writeWriteableChannel smartProgramsChannel (smartProgramIDs, (metadata, acquiredData)))))
-    where
-        nImagesMeasuredInThisDetection :: NumImagesInDetection
-        nImagesMeasuredInThisDetection = NumImagesInDetection $ foldl' (\idx detParam -> idx + length (dpDetectors detParam)) 0 detParams
+            requiredDets = filter (\d -> detectorName d `elem` requiredDetNames) dets
+        hasTriggering <- mapM isConfiguredForHardwareTriggering requiredDets
+        if or hasTriggering
+            then executeFastDetectionLoop dets eqs (acqTypeName, dps) (NumIterationsTotal 1)
+                                          expStartTime detectionIndex stagePositionName detectionElementID
+                                          messageChannel (smartProgramsChannel, smartProgramIDs)
+            else do
+                setMovableComponents eqs (dpMovableComponents dps)
+                enableLightSources eqs (dpIrradiation dps)
+                detStartTime <- TimeAtStartOfEvent <$> getTime Monotonic
+                measuredImages <- mapConcurrently acquireData requiredDets
+                disableLightSources eqs (dpIrradiation dps)
+                forM_ (zip measuredImages (map detectorName requiredDets)) $ \(measuredImage, detName) -> do
+                    let acquiredData = measuredImageAsAcquiredData measuredImage detName expStartTime detStartTime
+                        metadata = AcquisitionMetaData stagePos stagePositionName acqTypeName detectionIndex
+                                                           nImagesMeasuredInThisDetection detectionElementID
+                    acquiredData `deepseq` addDataToChannel messageChannel (AcquiredDataMessage metadata acquiredData)
+                    when (not $ null smartProgramIDs) $
+                        writeWriteableChannel smartProgramsChannel (smartProgramIDs, (metadata, acquiredData))
+  where
+    nImagesMeasuredInThisDetection :: NumImagesInDetection
+    nImagesMeasuredInThisDetection = NumImagesInDetection $
+        foldl' (\idx detParam -> idx + length (dpDetectors detParam)) 0 detParams
+
 
 setDetectorProperties :: Detector a => [a] -> [DetectorParams] -> IO ()
 setDetectorProperties dets dps =

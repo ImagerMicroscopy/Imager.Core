@@ -2,10 +2,12 @@
 
 module Measurements.SmartProgram (
     getAllSmartProgramIDsUsedInMeasurement
+  , getUpdatedAcquisitionDecision
   , withSmartProgramServer
   , sendDetectedImageToSmartPrograms_Worker
   , parseSmartProgramIDsFromCode
 ) where
+import System.Clock
 
 import Control.Concurrent.STM
 import Control.Exception
@@ -61,6 +63,27 @@ smartProgramServerCommunicationFunctions =
         getSmartProgramRelativeStageLoopDecision
         getSmartProgramTimeLapseDecision
 
+
+getUpdatedAcquisitionDecision :: SmartProgramID -> ElementID -> DefinedDetections -> AcquisitionTypeName -> IO (Maybe DefinedDetections)
+getUpdatedAcquisitionDecision programID elementID ddets acqName= do
+    let serverPort = 5100
+        url = http "127.0.0.1" /: "updateacquisitionparams"
+        queryParams = "dagid" =: fromSmartProgramID programID  <> 
+                      "elementid" =: fromElementID elementID <>
+                      "acquisitionname" =: fromAcqName acqName
+        body = ReqBodyJson ddets
+
+    runReq defaultHttpConfig $ do
+        liftIO $ LBS.putStrLn (encode ddets)
+        response <- req
+            POST
+            url
+            body
+            lbsResponse  
+            (port serverPort <> queryParams <> responseTimeout 1000000)
+        let result = responseBody response
+        pure (decode result :: Maybe DefinedDetections)
+
 getSmartProgramDoTimesDecision :: SmartProgramID -> IO SmartProgramServerResponse
 getSmartProgramDoTimesDecision programID = 
     queryServerForDecision "dotimesdecision" programID >>= \resp ->
@@ -94,19 +117,26 @@ getSmartProgramTimeLapseDecision programID =
         _                             -> throwIO $ userError ("unexpected SmartProgramResponse for time lapse:" ++ show resp)
 
 queryServerForDecision :: (FromJSON a) => Text -> SmartProgramID -> IO a
-queryServerForDecision path id =
+queryServerForDecision path id = do
     let serverPort = 5100
         url = http "127.0.0.1" /: "decisions" /: "get_decision" /: path
         queryParams = "dagid" =: (fromSmartProgramID id)
         body = NoReqBody
-    in  runReq defaultHttpConfig $
-            req
-                GET                     -- HTTP method
-                url                     -- URL
-                body                    -- Request body
-                jsonResponse            -- Response type
-                (port serverPort <> queryParams <> responseTimeout 1000000) >>= \response -> -- Options (port and query parameter)
-            pure (responseBody response)
+
+    start <- getTime Monotonic
+
+    result <- runReq defaultHttpConfig $
+        req GET url body jsonResponse
+            (port serverPort <> queryParams <> responseTimeout 1000000)
+
+    end <- getTime Monotonic
+
+    let diffNs = toNanoSecs (diffTimeSpec end start)
+        diffMs = fromIntegral diffNs / 1e6 :: Double
+
+    putStrLn $ "Request took " ++ show diffMs ++ " ms"
+
+    pure (responseBody result)
 
 sendProgramsToSmartProgramServer :: SmartProgramCode -> IO ()
 sendProgramsToSmartProgramServer code =
