@@ -78,8 +78,9 @@ validateMeasurementElement eqs _ (MEStageLoop _ stageName pos _ es)
     | otherwise = []
     where
         stageNames = map motorizedStageName (filter hasMotorizedStage eqs)
-validateMeasurementElement eqs _ (MEUpdateAcquisition  _ programID)
+validateMeasurementElement eqs _ (MEUpdateAcquisition  _ programID acquisitionName )
     | null programID = ["no program id"]
+    | null acquisitionName = ["no acquisition found to update"]
     | otherwise = []
     
 validateMeasurementElement eqs _ (MERelativeStageLoop _ stageName (RelativeStageLoopParams dx dy dz (bx, ax) (by, ay) (bz, az) _) _ es)
@@ -116,7 +117,7 @@ getElementID (MEDoTimes elementID _ _ _) = elementID
 getElementID (METimeLapse elementID _ _ _ _) = elementID
 getElementID (MEStageLoop elementID _ _ _ _) = elementID
 getElementID (MERelativeStageLoop elementID _ _ _ _) = elementID
-getElementID (MEUpdateAcquisition elementID _ ) = elementID
+getElementID (MEUpdateAcquisition elementID _ _ ) = elementID
 
 
 verifyRobotElements :: [EquipmentW] -> MeasurementElement -> [String]

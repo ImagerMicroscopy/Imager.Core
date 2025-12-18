@@ -121,11 +121,11 @@ executeMeasurementElement env _ defineddets (MEDetection elementID detNames smar
 
       sendToSmartProgramsChannel = peSmartProgramSendChan env
 
-executeMeasurementElement env fullddets ddets (MEUpdateAcquisition elementID programID) =
+executeMeasurementElement env fullddets ddets (MEUpdateAcquisition elementID programID acquisitionName) =
     withStatusMessage env "Updating Acquisition" $ do
         toChangeDetsMap <- readIORef fullddets
         waitUntilWaitableChannelIsEmpty (peSmartProgramSendChan env) 
-        maybeUpdated <- getUpdatedAcquisitionDecision (fromJust programID)  elementID  toChangeDetsMap
+        maybeUpdated <- getUpdatedAcquisitionDecision (fromJust programID)  elementID  toChangeDetsMap (fromJust acquisitionName)
 
         let definedDetsMap = fromMaybe toChangeDetsMap maybeUpdated
         writeIORef fullddets definedDetsMap

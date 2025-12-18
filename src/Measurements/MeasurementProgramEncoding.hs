@@ -30,7 +30,7 @@ instance FromJSON MeasurementElement where
           "detection"   -> MEDetection <$> v .: "elementid" <*> v .: "detectionnames" <*> v .: "smartprogramids"
           "irradiation" -> MEIrradiation <$> v .: "elementid" <*> v .: "duration" <*> v .: "irradiation"
           "wait"        -> MEWait <$> v .: "elementid" <*> v .: "duration"
-          "updateacquisition" ->  MEUpdateAcquisition <$> v .: "elementid" <*> v .: "smartprogramid"
+          "updateacquisition" ->  MEUpdateAcquisition <$> v .: "elementid"  <*> v .: "smartprogramid"  <*> v .: "detectionname"
           "executerobotprogram" -> MEExecuteRobotProgram <$> v .: "elementid" <*> v .: "programparameters"
           "dotimes"     -> MEDoTimes <$> v .: "elementid" <*> v .: "ntotal" <*> v .: "smartprogramid" <*> v .: "elements"
           "timelapse"   -> METimeLapse <$> v .: "elementid" <*> v .: "ntotal" <*> v .: "timedelta" <*> v .: "smartprogramid" <*> v .: "elements"

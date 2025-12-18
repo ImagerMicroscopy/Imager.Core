@@ -56,7 +56,7 @@ data MeasurementElement = MEDetection !ElementID ![AcquisitionTypeName] ![SmartP
                         | METimeLapse !ElementID !NumIterationsTotal !WaitDuration !(Maybe SmartProgramID) !Prog
                         | MEStageLoop !ElementID !StageName ![PositionNameAndCoords] !(Maybe SmartProgramID) !Prog
                         | MERelativeStageLoop !ElementID !StageName !RelativeStageLoopParams !(Maybe SmartProgramID) !Prog
-                        | MEUpdateAcquisition !ElementID !(Maybe SmartProgramID) 
+                        | MEUpdateAcquisition !ElementID !(Maybe SmartProgramID) !(Maybe AcquisitionTypeName)
                         deriving (Show)
 
 type DefinedDetections = Map AcquisitionTypeName DetectionParams
