@@ -26,7 +26,12 @@ import Data.Word
 import System.Clock
 import System.Environment
 import System.FilePath
-
+import Control.Exception (bracket, catch, SomeException)
+import Control.Concurrent (threadDelay)
+import System.IO (hClose)
+import System.Environment (getExecutablePath)
+import System.FilePath (takeDirectory, (</>))
+import System.Process
 import Camera.SCCameraTypes
 import CuvettorTypes
 import Detectors.Detector
@@ -53,24 +58,93 @@ serverSettings = defaultSettings {ssBindToAllInterfaces = False,
                                   ssMaxMessageSize = round 2e6}
 
 main :: IO ()
-main =
-    getExecutablePath >>= \exePath ->
-    DT.trace (show exePath)  readAvailableEquipment >>= \descs ->
-    withEquipmentAndPluginCameras descs $ \(availableEquipment, availablePluginCams) ->
-      
-      newMessageChannel >>= \asyncMessageChannel ->
-      newMVar [] >>= \asyncStatusMessagesMVar ->
-      async (return ()) >>= \asyncProgramWorker ->
-      wait asyncProgramWorker >>
+main = do
+  exePath <- getExecutablePath
+  DT.trace (show exePath) readAvailableEquipment >>= \descs ->
+    withEquipmentAndPluginCameras descs $ \(availableEquipment, availablePluginCams) -> do
 
-      
-      getDetectorWavelengths (head availablePluginCams) >>= \wl ->
-      return (byteStringFromVector wl) >>= \encodedWl ->
-      putStrLn "ready to measure!" >>
-      putStrLn "HOLD CONTROL-C UNTIL YOU SEE \"USER INTERRUPT\" BEFORE CLOSING THIS WINDOW" >>
-      let env = Environment availableEquipment availablePluginCams encodedWl
-                        asyncMessageChannel asyncStatusMessagesMVar asyncProgramWorker
-      in  wait =<< async (runServer 3200 messageHandler env serverSettings)
+      exePath <- getExecutablePath
+      let rootDir = takeDirectory exePath
+      let configPath = rootDir </> "config.json"
+      cfg <- loadConfig configPath
+
+      bracket (startPythonBackend (pythonpath cfg) (fromexternal cfg)) stopPythonBackend $ \_maybePythonPH -> do
+
+        asyncMessageChannel <- newMessageChannel
+        asyncStatusMessagesMVar <- newMVar []
+
+        bracket (async (return ())) cancel $ \asyncProgramWorker -> do
+
+          wl <- getDetectorWavelengths (head availablePluginCams)
+          let encodedWl = byteStringFromVector wl
+          printImagerBanner
+          putStrLn "ready to measure!"
+          putStrLn "HOLD CONTROL-C UNTIL YOU SEE \"USER INTERRUPT\" BEFORE CLOSING THIS WINDOW"
+
+
+          let env = Environment availableEquipment availablePluginCams encodedWl
+                asyncMessageChannel asyncStatusMessagesMVar asyncProgramWorker
+            in  wait =<< async (runServer 3200 messageHandler env serverSettings)
+
+loadConfig :: FilePath -> IO AppConfig
+loadConfig path = do
+  result <- eitherDecodeFileStrict' path
+  case result of
+    Left err   -> error ("Config error: " ++ err)
+    Right cfg  -> pure cfg
+
+printImagerBanner :: IO ()
+printImagerBanner =
+  putStrLn $ unlines
+    [ ""
+    , " ██╗███╗   ███╗ █████╗  ██████╗ ███████╗██████╗ "
+    , " ██║████╗ ████║██╔══██╗██╔════╝ ██╔════╝██╔══██╗"
+    , " ██║██╔████╔██║███████║██║  ███╗█████╗  ██████╔╝"
+    , " ██║██║╚██╔╝██║██╔══██║██║   ██║██╔══╝  ██╔══██╗"
+    , " ██║██║ ╚═╝ ██║██║  ██║╚██████╔╝███████╗██║  ██║"
+    , " ╚═╝╚═╝     ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝"
+    , ""
+    ]
+
+startPythonBackend :: FilePath -> Bool -> IO (Maybe ProcessHandle)
+startPythonBackend pythonPath runLocal = 
+  if runLocal
+    then do
+      result <- try $ createProcess
+          (proc pythonPath
+              [ "-m", "uvicorn"
+              , "main:app"
+              , "--host", "127.0.0.1"
+              , "--port", "5100"
+              , "--timeout-keep-alive", "600"
+              , "--log-level", "warning"
+              ])
+              { cwd          = Just "SmartProgramPython"
+              , std_out      = Inherit
+              , std_err      = Inherit
+              , std_in       = NoStream
+              , create_group = True
+              }
+
+      case result of
+          Left ex -> do
+            putStrLn $ "WARNING: Python backend failed to start: " ++ show (ex :: IOException)
+            putStrLn "Continuing without Python backend..."
+            return Nothing
+          Right (_, _, _, ph) -> do
+            putStrLn "Python backend started successfully."
+            return (Just ph)
+    else
+      pure Nothing
+stopPythonBackend :: Maybe ProcessHandle -> IO ()
+stopPythonBackend Nothing = do
+  putStrLn "Python backend was not started, no cleanup needed."
+  return ()
+stopPythonBackend (Just ph) = do
+  putStrLn "Stopping Python backend..."
+  terminateProcess ph
+  exitCode <- waitForProcess ph
+  putStrLn $ "Python backend stopped with: " ++ show exitCode
 
 messageHandler :: Detector a => MessageHandler (Environment a)
 messageHandler msg env =

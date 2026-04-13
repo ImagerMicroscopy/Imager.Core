@@ -54,15 +54,14 @@ getAllSmartProgramIDsUsedInMeasurement me = S.toList (searchWorker S.empty me)
 --     (action smartProgramServerCommunicationFunctions) `finally` (sendMeasurementFinishedToSmartProgramServer `SE.catchAny` (\_ -> pure ()))
 withSmartProgramServer:: SmartProgramCode-> (SmartProgramCommunicationFunctions -> IO ())-> IO ()
 withSmartProgramServer programs action = do
-    when (programLength > 0) $
-      ( do
-          sendProgramsToSmartProgramServer programs
-          action smartProgramServerCommunicationFunctions
-      )
-      `finally` (sendMeasurementFinishedToSmartProgramServer
-                    `SE.catchAny` (\_ -> pure ()))
-
-    action smartProgramServerCommunicationFunctions
+    if programLength > 0
+        then do
+            sendProgramsToSmartProgramServer programs
+            action smartProgramServerCommunicationFunctions
+                `finally` (sendMeasurementFinishedToSmartProgramServer
+                            `SE.catchAny` (\_ -> pure ()))
+        else 
+            action smartProgramServerCommunicationFunctions
   where
     programLength :: Int
     programLength = case programs of

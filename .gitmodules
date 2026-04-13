@@ -1,0 +1,3 @@
+[submodule "build/SmartProgramPython"]
+	path = build/SmartProgramPython
+	url = https://github.com/ImagerMicroscopy/Imager.Smart

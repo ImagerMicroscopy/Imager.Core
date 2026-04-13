@@ -45,6 +45,17 @@ newtype DetectionIndex = DetectionIndex {fromDetectionIndex :: Int}
 newtype NumImagesInDetection = NumImagesInDetection {fromNumImagesInDetection :: Int}
                             deriving (Show, Eq, Generic, Ord, NFData)
 
+
+
+
+data AppConfig = AppConfig
+  { 
+    pythonpath   :: FilePath,
+    fromexternal :: Bool
+  } deriving (Show, Generic)
+
+instance FromJSON AppConfig
+
 data MeasurementElement = MEDetection !ElementID ![AcquisitionTypeName] ![SmartProgramID]
                         | MEIrradiation !ElementID !LSIlluminationDuration ![IrradiationParams]
                         | MEWait !ElementID !WaitDuration

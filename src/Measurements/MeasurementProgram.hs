@@ -58,22 +58,28 @@ executeMeasurement (detectors, equipment, messageChannel, statusMVar) me defined
     ddets <- newIORef defineddets
     ddetsWithoutCommonIO <- newIORef ddetsWithoutCommon 
 
-    withAsync (forever $ resetSystemSleepTimer >> threadDelay (round 60.0e6)) (\_ ->
-        newIORef (DetectionIndex 0) >>= \detectionIdxRef ->
-        newIORef "" >>= \stagePositionNameRef ->
-        TimeAtStartOfExperiment <$> getTime Monotonic >>= \startTime ->
-        withSmartPrograms smartProgramCode $ \smartProgramCommunicationFuncs ->
-        withWaitableChannel (sendDetectedImageToSmartPrograms_Worker (spcfSendImagesFunc smartProgramCommunicationFuncs)) $ \smartProgramsChannelWriter ->
-            let smartProgramIDs = parseSmartProgramIDsFromCode smartProgramCode
-                env = ProgramEnvironment detectors startTime equipment detectionIdxRef stagePositionNameRef smartProgramIDs messageChannel statusMVar smartProgramCommunicationFuncs smartProgramsChannelWriter  
-            in  forM_ equipment (flushSerialPorts) >>
-                forM_ (M.toList commonDetectorProperties) (\(detName, opts) ->
-                    mapM_ (setDetectorOption (namedDetector detName)) opts) >> 
-                (executeMeasurementElement env ddets ddetsWithoutCommonIO (insertFastAcquisitionLoops ddetsWithoutCommon me)
-                    `catch` (\e -> deactivateUsedLightSources >>
-                                mapM_ stopRobot eqWithUsedRobots >>
-                                putStrLn (displayException e) >>
-                                throwIO (e :: SomeException))))
+    withAsync (forever $ resetSystemSleepTimer >> threadDelay (round 60.0e6)) $ \_ -> do
+        detectionIdxRef      <- newIORef (DetectionIndex 0)
+        stagePositionNameRef <- newIORef ""
+        startTime            <- TimeAtStartOfExperiment <$> getTime Monotonic
+        
+        
+        withSmartPrograms smartProgramCode $ \smartProgramCommunicationFuncs -> do
+            withWaitableChannel (sendDetectedImageToSmartPrograms_Worker (spcfSendImagesFunc smartProgramCommunicationFuncs)) $ \smartProgramsChannelWriter -> do
+
+                let smartProgramIDs = parseSmartProgramIDsFromCode smartProgramCode
+                    env = ProgramEnvironment detectors startTime equipment detectionIdxRef stagePositionNameRef smartProgramIDs messageChannel statusMVar smartProgramCommunicationFuncs smartProgramsChannelWriter  
+                
+                forM_ equipment flushSerialPorts
+                forM_ (M.toList commonDetectorProperties) $ \(detName, opts) ->
+                    mapM_ (setDetectorOption (namedDetector detName)) opts
+                
+                executeMeasurementElement env ddets ddetsWithoutCommonIO (insertFastAcquisitionLoops ddetsWithoutCommon me)
+                    `catch` (\e -> do
+                        deactivateUsedLightSources
+                        mapM_ stopRobot eqWithUsedRobots
+                        putStrLn (displayException e)
+                        throwIO (e :: SomeException))
     where
         namedDetector n = head (filter ((==) n . detectorName) detectors)
         eqsUsedAsLightSource = eqNamesUsedAsLightSourceIn defineddets me
