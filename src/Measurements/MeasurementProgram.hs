@@ -166,9 +166,16 @@ executeMeasurementElement env _ _ (MEWait _ (WaitDuration dur)) =
 
 executeMeasurementElement env _ _ (MEExecuteRobotProgram _ (RobotProgramExecutionParams eqName robotName callParams)) =
     withStatusMessage env (T.format "executing program {} on {}/{}" ((fromRobotProgramName . rpcpProgramName) callParams, fromRobotName robotName,  fromEqName eqName)) (
-        executeRobotProgram eq robotName callParams)
+        executeRobotProgram eq robotName callParams >>
+        waitForRobotProgramCompletion)
     where
         [eq] = filter ((== eqName) . equipmentName) (peEquipment env)
+        waitForRobotProgramCompletion =
+            robotIsExecuting eq robotName >>= \result ->
+            case result of
+                Left errMsg -> throwIO (userError ("error executing robot program: " ++ T.unpack errMsg))
+                Right False -> pure ()
+                Right True  -> threadDelay (round 0.1e6) >> waitForRobotProgramCompletion
 
 executeMeasurementElement env fullddets ddets (MEDoTimes _ n maybeDecisionFromSmartProgramID es) =
     maybeUpdateLoopCount maybeDecisionFromSmartProgramID n >>= \n' ->

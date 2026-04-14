@@ -620,6 +620,7 @@ checkErrorWithCallback errFunc f =
     f >>= \result ->
     when (result /= 0) (
         allocaArray0 bufSize (\strPtr ->
+            poke strPtr 0 >>
             errFunc strPtr (fromIntegral bufSize) >>
             T.unpack . T.decodeUtf8 <$> B.packCString strPtr) >>=
             throwIO . userError
