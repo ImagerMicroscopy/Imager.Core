@@ -64,6 +64,7 @@ instance FromJSON RobotProgramArgumentDescription where
                 increment <- v .: "increment"
                 return $ ContinuousRobotProgramArgumentDescription argumentName minValue maxValue increment
             _ -> fail "Unknown argument type"
+    parseJSON _ = fail "Expected an Object for RobotProgramArgumentDescription"
 
 instance ToJSON RobotProgramArgument where
     toJSON (DiscreteRobotProgramArgument arg) =
@@ -79,3 +80,5 @@ instance FromJSON RobotProgramArgument where
         case argType of
             "discrete"  -> DiscreteRobotProgramArgument <$> v .: "argument"
             "continuous" -> ContinuousRobotProgramArgument <$> v .: "argument"
+            _ -> fail "Unknown robotprogramargumenttype"
+    parseJSON _ = fail "Expected an Object for RobotProgramArgument"
