@@ -9,6 +9,8 @@ import Equipment.EquipmentTypes
 
 data EquipmentW = forall e. (Equipment e) => EquipmentW e
 
+type ErrorMessage = Text
+
 class Equipment e where
     equipmentName :: e -> EqName
     flushSerialPorts :: e -> IO ()
@@ -30,7 +32,8 @@ class Equipment e where
 
     availableRobots :: e -> [RobotDescription]
     executeRobotProgram :: e -> RobotName -> RobotProgramCallParams -> IO ()
-    stopRobot :: e -> IO ()
+    robotIsExecuting :: e -> RobotName -> IO (Either ErrorMessage Bool)
+    stopRobots :: e -> IO ()
 
     availableLightSources _ = []
     activateLightSource e _ _ = error ("calling activateLightSource on " ++ show (fromEqName (equipmentName e)))
@@ -50,7 +53,8 @@ class Equipment e where
     
     availableRobots e = []
     executeRobotProgram e _ _ = error ("calling default executeRobotProgram implementation on "  ++ show (fromEqName (equipmentName e)))
-    stopRobot e = error ("calling default stopRobot on " ++ show (fromEqName (equipmentName e)))
+    robotIsExecuting e _ = error ("calling default robotIsExecuting implementation on "  ++ show (fromEqName (equipmentName e)))
+    stopRobots e = error ("calling default stopRobots on " ++ show (fromEqName (equipmentName e)))
 
 instance Equipment EquipmentW where
     equipmentName (EquipmentW e) = equipmentName e
@@ -69,4 +73,5 @@ instance Equipment EquipmentW where
     setStagePosition (EquipmentW e) = setStagePosition e
     availableRobots (EquipmentW e) = availableRobots e
     executeRobotProgram (EquipmentW e) = executeRobotProgram e
-    stopRobot (EquipmentW e) = stopRobot e
+    robotIsExecuting (EquipmentW e) = robotIsExecuting e
+    stopRobots (EquipmentW e) = stopRobots e

@@ -67,7 +67,8 @@ data EquipmentPlugin = EquipmentPlugin {
                          
                          , epListRobots :: [RobotDescription]
                          , epExecuteRobotProgram :: RobotName -> RobotProgramCallParams -> IO ()
-                         , epStopRobot :: IO ()
+                         , epRobotIsExecuting :: RobotName -> IO (Either ErrorMessage Bool)
+                         , epStopRobots :: IO ()
 
                          , epListConnectedCameras :: [DetectorName]
                          , epGetCameraOptions :: DetectorName -> IO [DetectorProperty]
@@ -97,7 +98,8 @@ instance Equipment EquipmentPlugin where
     setStagePosition = epSetStagePositionFunc
     availableRobots = epListRobots
     executeRobotProgram = epExecuteRobotProgram
-    stopRobot = epStopRobot
+    robotIsExecuting = epRobotIsExecuting
+    stopRobots = epStopRobots
 
 data PluginDetector = PluginDetector {
                           pdCamName :: !DetectorName
@@ -167,7 +169,8 @@ type ListRobotsFunc = StringListFunc
 type ListRobotProgramsFunc = CString -> Ptr CString -> IO CInt
 type ReleaseRobotProgramsInfoFunc = FunPtr (CString -> IO ())
 type ExecuteRobotProgramFunc = CString -> CString -> IO CInt
-type StopRobotFunc = IO CInt
+type RobotIsExecutingFunc = CString -> Ptr CInt -> CString -> CInt -> IO CInt
+type StopRobotsFunc = IO CInt
 
 type ListConnectedCameraNamesFunc = StringListFunc
 type GetCameraOptionsFunc = CString -> Ptr CString -> IO CInt
@@ -207,7 +210,8 @@ foreign import ccall "dynamic" mkListRobotsFunc :: FunPtr ListRobotsFunc -> List
 foreign import ccall "dynamic" mkListRobotProgramsFunc :: FunPtr ListRobotProgramsFunc -> ListRobotProgramsFunc
 foreign import ccall "dynamic" mkReleaseRobotProgramsInfoFunc :: FunPtr ReleaseRobotProgramsInfoFunc -> ReleaseRobotProgramsInfoFunc
 foreign import ccall "dynamic" mkExecuteRobotProgramFunc :: FunPtr ExecuteRobotProgramFunc -> ExecuteRobotProgramFunc
-foreign import ccall "dynamic" mkStopRobotFunc :: FunPtr StopRobotFunc -> StopRobotFunc
+foreign import ccall "dynamic" mkRobotIsExecutingFunc :: FunPtr RobotIsExecutingFunc -> RobotIsExecutingFunc
+foreign import ccall "dynamic" mkStopRobotsFunc :: FunPtr StopRobotsFunc -> StopRobotsFunc
 
 foreign import ccall "dynamic" mkListConnectedCameraNamesFunc :: FunPtr StringListFunc -> ListConnectedCameraNamesFunc
 foreign import ccall "dynamic" mkGetCameraOptionsFunc :: FunPtr GetCameraOptionsFunc -> GetCameraOptionsFunc
@@ -251,7 +255,8 @@ loadPlugin pluginConfigDir libName =
     loadFunc modu "ListRobotPrograms" mkListRobotProgramsFunc >>= \listRobotProgramsF ->
     loadFuncPtr modu "ReleaseRobotProgramsInfo" >>= \releaseRobotProgramsInfoF ->
     loadFunc modu "ExecuteRobotProgram" mkExecuteRobotProgramFunc >>= \executeRobotProgramF ->
-    loadFunc modu "StopRobot" mkStopRobotFunc >>= \stopRobotF ->
+    loadFunc modu "RobotIsExecuting" mkRobotIsExecutingFunc >>= \robotIsExecutingF ->
+    loadFunc modu "StopRobots" mkStopRobotsFunc >>= \stopRobotsF ->
 
     loadFunc modu "ListConnectedCameraNames" mkListConnectedCameraNamesFunc >>= \listConnectedCameraNamesF ->
     loadFunc modu "GetCameraOptions" mkGetCameraOptionsFunc >>= \getCameraOptionsF ->
@@ -292,7 +297,8 @@ loadPlugin pluginConfigDir libName =
                                 (handleGetStagePosition getStagePosF) (handleSetStagePosition setStagePosF)
                                 robots
                                 (executeRobotProgram executeRobotProgramF)
-                                (stopRobot stopRobotF)
+                                (robotIsExecuting robotIsExecutingF)
+                                (stopRobots stopRobotsF)
                                 connectedCameraNames
                                 (getCameraOptions getLastSCCamErrorF getCameraOptionsF releaseOptionsDataF)
                                 (setCameraOption getLastSCCamErrorF setCameraOptionF)
@@ -447,8 +453,23 @@ loadPlugin pluginConfigDir libName =
             B.useAsCString (LB.toStrict $ encode callParams) $ \encodedCallParamsPtr ->
             checkError (f rNamePtr encodedCallParamsPtr)
         
-        stopRobot :: StopRobotFunc -> IO ()
-        stopRobot f = checkError f
+        robotIsExecuting :: RobotIsExecutingFunc -> RobotName -> IO (Either ErrorMessage Bool)
+        robotIsExecuting f rName =
+            B.useAsCString (T.encodeUtf8 (fromRobotName rName)) $ \rNamePtr ->
+            alloca $ \isExecutingPtr ->
+            allocaArray0  bufLen $ \errMsgPtr ->
+            poke errMsgPtr 0 >>
+            checkError (f rNamePtr isExecutingPtr errMsgPtr (fromIntegral bufLen)) >>
+            peek isExecutingPtr >>= \isExecuting ->
+            (T.pack <$> peekCString errMsgPtr) >>= \errMsg ->
+            if (T.null errMsg)
+                then pure (Right (isExecuting /= 0))
+                else pure (Left errMsg)
+            where
+                bufLen = 512
+        
+        stopRobots :: StopRobotsFunc -> IO ()
+        stopRobots f = checkError f
         
         listConnectedCameras ::  ListConnectedCameraNamesFunc -> IO [DetectorName]
         listConnectedCameras f = map DetectorName <$> (handleStringListFuncT f)
@@ -598,7 +619,7 @@ checkErrorWithCallback :: GetLastSCCamErrorFunc -> IO CInt -> IO ()
 checkErrorWithCallback errFunc f =
     f >>= \result ->
     when (result /= 0) (
-        allocaArray bufSize (\strPtr ->
+        allocaArray0 bufSize (\strPtr ->
             errFunc strPtr (fromIntegral bufSize) >>
             T.unpack . T.decodeUtf8 <$> B.packCString strPtr) >>=
             throwIO . userError

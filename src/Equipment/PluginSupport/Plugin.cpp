@@ -230,7 +230,16 @@ int ExecuteRobotProgram(char* robotName, char* encodedProgramCallParams) {
     });
 }
 
-int StopRobot() {
+int RobotIsExecuting(char* robotName, int* isExecuting, char* possibleErrorMessage, int maxNBytesForErrorMessage) {
+    return HandleExceptions([&]() {
+        // set *isExecuting to 1 if the robot is currently executing a program, 0 otherwise.
+        // possibleErrorMessage may contain an error message, in which case the measurement program will be aborted.
+        *isExecuting = 0;
+        possibleErrorMessage[0] = 0;   // set to an error message if needed, making sure not to exceed maxNBytesForErrorMessage
+    });
+}
+
+int StopRobots() {
     return HandleExceptions([&]() {
 
     });

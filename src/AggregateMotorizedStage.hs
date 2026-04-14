@@ -61,7 +61,7 @@ instance Equipment AllButMotorizedStageEquipment where
 
     availableRobots e = availableRobots (abmsEq e)
     executeRobotProgram e = executeRobotProgram (abmsEq e)
-    stopRobot e = stopRobot (abmsEq e)
+    stopRobots e = stopRobots (abmsEq e)
 
 aggregateMotorizedStagesIfNeeded :: [EquipmentW] -> [EquipmentW]
 aggregateMotorizedStagesIfNeeded eqs

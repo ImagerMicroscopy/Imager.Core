@@ -92,5 +92,5 @@ instance Equipment DummyRobot where
                                                                     DiscreteRobotProgramArgumentDescription "prog2_stringarg" ["stringarg1", "stringarg2"]]
     executeRobotProgram _ rName (RobotProgramCallParams progName args) =
         putStrLn ("Execute on " ++ (show $ fromRobotName rName) ++ " program " ++ (show $ progName) ++ " with args " ++ (show args))
-    stopRobot _ = putStrLn "want to stop robot"
+    stopRobots _ = putStrLn "want to stop robot"
       

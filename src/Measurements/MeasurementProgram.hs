@@ -77,7 +77,7 @@ executeMeasurement (detectors, equipment, messageChannel, statusMVar) me defined
                 executeMeasurementElement env ddets ddetsWithoutCommonIO (insertFastAcquisitionLoops ddetsWithoutCommon me)
                     `catch` (\e -> do
                         deactivateUsedLightSources
-                        mapM_ stopRobot eqWithUsedRobots
+                        mapM_ stopRobots eqWithUsedRobots
                         putStrLn (displayException e)
                         throwIO (e :: SomeException))
     where

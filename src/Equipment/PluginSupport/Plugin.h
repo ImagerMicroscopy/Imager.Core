@@ -57,7 +57,8 @@ extern "C" {
     LIBSPEC int ListRobotPrograms(char* robotName, char** encodedProgramsInfoPtr);
     LIBSPEC void ReleaseRobotProgramsInfo(char* info);
     LIBSPEC int ExecuteRobotProgram(char* robotName, char* encodedProgramCallParams);
-    LIBSPEC int StopRobot();
+    LIBSPEC int RobotIsExecuting(char* robotName, int* isExecuting, char* possibleErrorMessage, int maxNBytesForErrorMessage);
+    LIBSPEC int StopRobots();
 
     // Cameras
     LIBSPEC int ListConnectedCameraNames(char **namesPtr, int nNames, int maxNBytesPerName, int *nNamesReturned);

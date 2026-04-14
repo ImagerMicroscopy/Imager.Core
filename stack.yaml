@@ -8,7 +8,7 @@ packages:
     - .
 
 extra-deps:
-    - serialport-0.5.5
+    - serialport-0.6.0
 
 # Override default flag values for local packages and extra-deps
 flags: {}
@@ -29,7 +29,7 @@ extra-package-dbs: []
 
 # Extra directories used by stack for building
 # extra-include-dirs: [/path/to/dir]
-extra-lib-dirs: [./hslibs]
+# extra-lib-dirs: [./hslibs]
 
 # Allow a newer minor version of GHC than the snapshot specifies
 # compiler-check: newer-minor
