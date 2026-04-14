@@ -164,9 +164,9 @@ executeMeasurementElement env _ _ (MEWait _ (WaitDuration dur)) =
     withStatusMessage env (T.format "waiting {} s" (T.Only dur)) (
         threadDelay (round $ dur * 1e6))
 
-executeMeasurementElement env _ _ (MEExecuteRobotProgram _ (RobotProgramExecutionParams eqName robotName progName progArgs)) =
-    withStatusMessage env (T.format "executing program {} on {}/{}" (fromRobotProgramName progName, fromRobotName robotName,  fromEqName eqName)) (
-        executeRobotProgram eq robotName progName progArgs)
+executeMeasurementElement env _ _ (MEExecuteRobotProgram _ (RobotProgramExecutionParams eqName robotName callParams)) =
+    withStatusMessage env (T.format "executing program {} on {}/{}" ((fromRobotProgramName . rpcpProgramName) callParams, fromRobotName robotName,  fromEqName eqName)) (
+        executeRobotProgram eq robotName callParams)
     where
         [eq] = filter ((== eqName) . equipmentName) (peEquipment env)
 
@@ -504,7 +504,7 @@ equipmentNamesWithRobotsUsedInME :: MeasurementElement -> [EqName]
 equipmentNamesWithRobotsUsedInME = foldMeasurementElement f
     where
         f :: MeasurementElement -> [EqName]
-        f (MEExecuteRobotProgram _ (RobotProgramExecutionParams eqName _ _ _)) = [eqName]
+        f (MEExecuteRobotProgram _ (RobotProgramExecutionParams eqName _ _)) = [eqName]
         f _ = []
 
 withStatusMessage :: ProgramEnvironment a -> LT.Text -> IO b -> IO b

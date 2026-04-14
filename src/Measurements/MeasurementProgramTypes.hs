@@ -123,8 +123,7 @@ data MovableComponentParams = MovableComponentParams {
 data RobotProgramExecutionParams = RobotProgramExecutionParams {
                                        rpepEquipmentName :: !EqName
                                      , rpepRobotName :: !RobotName
-                                     , rprpProgramName :: !RobotProgramName
-                                     , rprpProgramArguments :: ![RobotProgramArgument]
+                                     , rpepProgramCallParams :: !RobotProgramCallParams
                                    } deriving (Show)
 
 data PositionNameAndCoords = PositionNameAndCoords !Text !StagePosition

@@ -66,7 +66,7 @@ data EquipmentPlugin = EquipmentPlugin {
                          , epSetStagePositionFunc :: StagePosition -> IO ()
                          
                          , epListRobots :: [RobotDescription]
-                         , epExecuteRobotProgram :: RobotName -> RobotProgramName -> [RobotProgramArgument] -> IO ()
+                         , epExecuteRobotProgram :: RobotName -> RobotProgramCallParams -> IO ()
                          , epStopRobot :: IO ()
 
                          , epListConnectedCameras :: [DetectorName]
@@ -164,10 +164,9 @@ type GetStagePositionFunc = Ptr CDouble -> Ptr CDouble -> Ptr CDouble -> Ptr CIn
 type SetStagePositionFunc = CDouble -> CDouble -> CDouble -> CInt -> CInt -> IO CInt
 
 type ListRobotsFunc = StringListFunc
-type ListRobotProgramFunc = StringListFuncWithName
-type ListRobotProgramArgumentsInfoFunc = CString -> CString -> Ptr CString -> IO CInt
-type ReleaseRobotProgramArgumentsInfoFunc = FunPtr (CString -> IO ())
-type ExecuteRobotProgramFunc = CString -> CString -> CString -> IO CInt
+type ListRobotProgramsFunc = CString -> Ptr CString -> IO CInt
+type ReleaseRobotProgramsInfoFunc = FunPtr (CString -> IO ())
+type ExecuteRobotProgramFunc = CString -> CString -> IO CInt
 type StopRobotFunc = IO CInt
 
 type ListConnectedCameraNamesFunc = StringListFunc
@@ -205,9 +204,8 @@ foreign import ccall "dynamic" mkGetStagePositionFunc :: FunPtr GetStagePosition
 foreign import ccall "dynamic" mkSetStagePositionFunc :: FunPtr SetStagePositionFunc -> SetStagePositionFunc
 
 foreign import ccall "dynamic" mkListRobotsFunc :: FunPtr ListRobotsFunc -> ListRobotsFunc
-foreign import ccall "dynamic" mkListRobotProgramFunc :: FunPtr ListRobotProgramFunc -> ListRobotProgramFunc
-foreign import ccall "dynamic" mkListRobotProgramArgumentsInfoFunc :: FunPtr ListRobotProgramArgumentsInfoFunc -> ListRobotProgramArgumentsInfoFunc
-foreign import ccall "dynamic" mkReleaseRobotProgramArgumentsInfoFunc :: FunPtr ReleaseRobotProgramArgumentsInfoFunc -> ReleaseRobotProgramArgumentsInfoFunc
+foreign import ccall "dynamic" mkListRobotProgramsFunc :: FunPtr ListRobotProgramsFunc -> ListRobotProgramsFunc
+foreign import ccall "dynamic" mkReleaseRobotProgramsInfoFunc :: FunPtr ReleaseRobotProgramsInfoFunc -> ReleaseRobotProgramsInfoFunc
 foreign import ccall "dynamic" mkExecuteRobotProgramFunc :: FunPtr ExecuteRobotProgramFunc -> ExecuteRobotProgramFunc
 foreign import ccall "dynamic" mkStopRobotFunc :: FunPtr StopRobotFunc -> StopRobotFunc
 
@@ -250,9 +248,8 @@ loadPlugin pluginConfigDir libName =
     loadFunc modu "SetStagePosition" mkSetStagePositionFunc >>= \setStagePosF ->
 
     loadFunc modu "ListRobots" mkListRobotsFunc >>= \listRobotsF ->
-    loadFunc modu "ListRobotPrograms" mkListRobotProgramFunc >>= \listRobotProgramsF ->
-    loadFunc modu "ListRobotProgramArgumentsInfo" mkListRobotProgramArgumentsInfoFunc >>= \listRobotProgramsArgumentsInfoF ->
-    loadFuncPtr modu "ReleaseRobotProgramArgumentsInfo" >>= \releaseRobotProgramArgumentsInfoF ->
+    loadFunc modu "ListRobotPrograms" mkListRobotProgramsFunc >>= \listRobotProgramsF ->
+    loadFuncPtr modu "ReleaseRobotProgramsInfo" >>= \releaseRobotProgramsInfoF ->
     loadFunc modu "ExecuteRobotProgram" mkExecuteRobotProgramFunc >>= \executeRobotProgramF ->
     loadFunc modu "StopRobot" mkStopRobotFunc >>= \stopRobotF ->
 
@@ -285,7 +282,7 @@ loadPlugin pluginConfigDir libName =
     ((/=) 0) <$> readSingleIntPtr hasStageF >>= \hasStage ->
     (if hasStage then (StageName <$> readIdentifier stageNameF) else (pure $ StageName "")) >>= \stageName ->
     (if hasStage then (readSupportedAxesFunc suppAxesF) else pure []) >>= \supportedAxes ->
-    listRobots (listRobotsF, listRobotProgramsF, listRobotProgramsArgumentsInfoF, releaseRobotProgramArgumentsInfoF) >>= \robots ->
+    listRobots (listRobotsF, listRobotProgramsF, releaseRobotProgramsInfoF) >>= \robots ->
     listConnectedCameras listConnectedCameraNamesF >>= \connectedCameraNames ->
     
     let ep = EquipmentPlugin eqName shutdownF lightSources (handleActivateLightSource activateLightSourceF)
@@ -429,36 +426,26 @@ loadPlugin pluginConfigDir libName =
             \(StagePosition x y z useAF afOffset) ->
                 checkError (f (CDouble x) (CDouble y) (CDouble z) (if (useAF) then 1 else 0) (fromIntegral afOffset))
         
-        listRobots :: (ListRobotsFunc, ListRobotProgramFunc, ListRobotProgramArgumentsInfoFunc, ReleaseRobotProgramArgumentsInfoFunc) -> IO [RobotDescription]
-        listRobots (listRobotsF, listRobotProgramsF, listRobotProgramsArgumentsInfoF, releaseRobotProgramArgumentsInfoF) =
+        listRobots :: (ListRobotsFunc, ListRobotProgramsFunc, ReleaseRobotProgramsInfoFunc) -> IO [RobotDescription]
+        listRobots (listRobotsF, listRobotProgramsF, releaseRobotProgramsInfoF) =
             map RobotName <$> (handleStringListFuncT listRobotsF) >>= \robotNames ->
             forM robotNames (\robotName ->
-                map RobotProgramName <$> handleStringListFuncWithNameT listRobotProgramsF (fromRobotName robotName) >>= \programNames ->
-                    forM programNames (\programName ->
-                        listRobotProgramArgumentsInfo (listRobotProgramsArgumentsInfoF, releaseRobotProgramArgumentsInfoF) robotName programName >>= \argInfos ->
-                        pure (RobotProgram programName argInfos)
-                    ) >>= \programInfos ->
-                    pure (RobotDescription robotName programInfos))
-            where
-                listRobotProgramArgumentsInfo :: (ListRobotProgramArgumentsInfoFunc, ReleaseRobotProgramArgumentsInfoFunc) -> RobotName -> RobotProgramName -> IO [RobotProgramArgumentDescription]
-                listRobotProgramArgumentsInfo (f, releaseF) robotName programName =
-                    (B.useAsCString . T.encodeUtf8 . fromRobotName) robotName $ \rName ->
-                    (B.useAsCString . T.encodeUtf8 . fromRobotProgramName) programName $ \pName ->
-                    alloca $ \strPtr ->
-                    poke strPtr nullPtr >>
-                    checkError (f rName pName strPtr) >>
-                    peek strPtr >>= newForeignPtr releaseF >>= \fPtr ->
-                    withForeignPtr fPtr (\dataPtr ->
+                (B.useAsCString . T.encodeUtf8 . fromRobotName) robotName $ \rName ->
+                alloca $ \strPtr ->
+                poke strPtr nullPtr >>
+                checkError (listRobotProgramsF rName strPtr) >>
+                peek strPtr >>= newForeignPtr releaseRobotProgramsInfoF >>= \fPtr ->
+                withForeignPtr fPtr (\dataPtr ->
                         decodeStrict' <$> B.unsafePackCString dataPtr >>= \decoded ->
                         when ((not . isJust) decoded) (print decoded) >>
-                        pure (fromJust decoded))
+                        pure (fromJust decoded)) >>= \programInfo ->
+                        pure (RobotDescription robotName programInfo))
 
-        executeRobotProgram ::  ExecuteRobotProgramFunc -> RobotName -> RobotProgramName -> [RobotProgramArgument] -> IO ()
-        executeRobotProgram f rName pName pArgs =
+        executeRobotProgram :: ExecuteRobotProgramFunc -> RobotName -> RobotProgramCallParams -> IO ()
+        executeRobotProgram f rName callParams =
             B.useAsCString (T.encodeUtf8 (fromRobotName rName)) $ \rNamePtr ->
-            B.useAsCString (T.encodeUtf8 (fromRobotProgramName pName)) $ \pNamePtr ->
-            (B.useAsCString . B.toStrict . encode) pArgs $ \encodedArgs ->
-            checkError (f rNamePtr pNamePtr encodedArgs)
+            B.useAsCString (LB.toStrict $ encode callParams) $ \encodedCallParamsPtr ->
+            checkError (f rNamePtr encodedCallParamsPtr)
         
         stopRobot :: StopRobotFunc -> IO ()
         stopRobot f = checkError f

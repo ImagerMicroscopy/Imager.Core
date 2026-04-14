@@ -69,9 +69,18 @@ data RobotProgramArgumentDescription = DiscreteRobotProgramArgumentDescription {
                                        }
                                     deriving (Show)
 
-data RobotProgramArgument = DiscreteRobotProgramArgument {drpaValue :: !Text}
-                          | ContinuousRobotProgramArgument {crpaValue :: !Double}
+data RobotProgramArgument = DiscreteRobotProgramArgument {
+                                drpaArgumentName :: !Text
+                              , drpaValue :: !Text}
+                          | ContinuousRobotProgramArgument {
+                              crpaArgumentName :: !Text
+                            , crpaValue :: !Double}
                           deriving (Show)
+
+data RobotProgramCallParams = RobotProgramCallParams {
+                                  rpcpProgramName :: !RobotProgramName
+                                , rpcpArguments :: ![RobotProgramArgument]
+                              } deriving (Show)
 
 data StagePosition = StagePosition {
                          spX :: !Double

@@ -129,7 +129,7 @@ verifyRobotElements eqs me = filter (not . null) . map (verifyRobotElement eqs) 
                 f _ = []
         allRobotDescriptions = concat (map availableRobots eqs)
         verifyRobotElement :: [EquipmentW] -> MeasurementElement -> String
-        verifyRobotElement eqs (MEExecuteRobotProgram _ (RobotProgramExecutionParams eqName robotName progName args)) =
+        verifyRobotElement eqs (MEExecuteRobotProgram _ (RobotProgramExecutionParams eqName robotName (RobotProgramCallParams progName args))) =
             if (eqExists && robotExists && programExists)
                 then []
                 else "invalid execute robot program element"

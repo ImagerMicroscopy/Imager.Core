@@ -54,10 +54,9 @@ extern "C" {
 
     // Robots
     LIBSPEC int ListRobots(char** namesPtr, int nNames, int maxNBytesPerName, int* nNamesReturned);
-    LIBSPEC int ListRobotPrograms(char* robotName, char** namesPtr, int nNames, int maxNBytesPerName, int* nNamesReturned);
-    LIBSPEC int ListRobotProgramArgumentsInfo(char* robotName, char* programName, char** encodedArgumentsPtr);
-    LIBSPEC void ReleaseRobotProgramArgumentsInfo(char* data);
-    LIBSPEC int ExecuteRobotProgram(char* robotName, char* programName, char* programArguments);
+    LIBSPEC int ListRobotPrograms(char* robotName, char** encodedProgramsInfoPtr);
+    LIBSPEC void ReleaseRobotProgramsInfo(char* info);
+    LIBSPEC int ExecuteRobotProgram(char* robotName, char* encodedProgramCallParams);
     LIBSPEC int StopRobot();
 
     // Cameras

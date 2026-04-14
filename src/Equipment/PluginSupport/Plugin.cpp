@@ -8,7 +8,10 @@
 #include <string>
 #include <vector>
 
-const char* gEquipmentName = "MyEquipment";        // adjust to the name of your equipment
+#include "RobotProgramArguments.h"
+#include "CameraPropertiesEncoding.h"
+
+const char* gEquipmentName = IMAGER_EQUIPMENT_NAME;   // set in the build configuration file.
 
 // Use this function pointer to print output in the Imager console window
 std::function<void(const char*)> gPrinter;
@@ -37,7 +40,7 @@ int HandleExceptions(const std::function<void()>& func) {
 int StoreStringListInBuffers(const std::vector<std::string>& stringList, char** stringBuffers, int nBuffers, int maxNBytesPerName);
 
 int InitImagerPlugin(char* configurationDirPath, void(*printer)(const char*)) {
-    // configurationDirPath is a path to a folder where you can read or write configuration data
+    // configurationDirPath is a path to a folder where you can read or write configuration data.
     // use the name of your plugin as the base name (without extension) of the config file.
     // printer is a function pointer that you can use to print output in the main program window.
     return HandleExceptions([&]() {
@@ -200,29 +203,30 @@ int ListRobots(char** namesPtr, int nNames, int maxNBytesPerName, int* nNamesRet
     });
 }
 
-int ListRobotPrograms(char* robotName, char** namesPtr, int nNames, int maxNBytesPerName, int* nNamesReturned) {
+int ListRobotPrograms(char* robotName, char** encodedProgramsInfoPtr) {
     return HandleExceptions([&] {
-        std::vector<std::string> programNames; // = <a call to a function you created>
-        *nNamesReturned = StoreStringListInBuffers(programNames, namesPtr, nNames, maxNBytesPerName);
-        if (*nNamesReturned != programNames.size()) {
-            throw std::runtime_error("Could not return all available robot programs");
-        }
+        // fictional example
+        // RobotProgramDescription valveSelectionProgram("Valve selection");
+        // valveSelectionProgram.addArgument({"Valve", {"HIGH", "LOW"} });
+        
+        // RobotProgramDescription pressureProgram("Pressure");
+        // pressureProgram.addArgument({"Pressure", 0.0, 2.0, 0.1});
+
+        // std::string encoded = EncodeRobotProgramsAsJSON({ valveSelectionProgram, pressureProgram });
+        // *encodedArgumentsPtr = new char[encoded.size() + 1];
+        // memcpy(*encodedArgumentsPtr, encoded.data(), encoded.size() + 1);
     });
 }
 
-int ListRobotProgramArgumentsInfo(char* robotName, char* programName, char** encodedArgumentsPtr) {
-    return HandleExceptions([&]() {
-
-    });
+void ReleaseRobotProgramsInfo(char* info) {
+    delete[] info;
 }
 
-void ReleaseRobotProgramArgumentsInfo(char* data) {
-
-}
-
-int ExecuteRobotProgram(char* robotName, char* programName, char* programArguments) {
+int ExecuteRobotProgram(char* robotName, char* encodedProgramCallParams) {
     return HandleExceptions([&]() {
-
+        RobotProgramExecutionParams callParams(encodedProgramCallParams);
+        const std::string& programName = callParams.programName();
+        const std::map<std::string, RobotProgramExecutionArgument>& arguments = callParams.arguments();
     });
 }
 

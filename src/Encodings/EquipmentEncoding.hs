@@ -36,8 +36,20 @@ instance FromJSON RobotProgramName where
 instance ToJSON RobotDescription where
     toJSON d = object ["robotname" .= rdName d, "robotprograms" .= rdRobotPrograms d]
 
+instance FromJSON RobotDescription where
+    parseJSON (Object v) = RobotDescription
+        <$> v .: "robotname"
+        <*> v .: "robotprograms"
+    parseJSON _ = fail "Expected an Object for RobotDescription"
+
 instance ToJSON RobotProgram where
     toJSON p = object ["programname" .= rpName p, "programarguments" .= rpArguments p]
+
+instance FromJSON RobotProgram where
+    parseJSON (Object v) = RobotProgram
+        <$> v .: "programname"
+        <*> v .: "programarguments"
+    parseJSON _ = fail "Expected an Object for RobotProgram"
 
 instance ToJSON RobotProgramArgumentDescription where
     toJSON a@DiscreteRobotProgramArgumentDescription{} = object ["type" .= ("discreteargument" :: Text),
@@ -67,18 +79,31 @@ instance FromJSON RobotProgramArgumentDescription where
     parseJSON _ = fail "Expected an Object for RobotProgramArgumentDescription"
 
 instance ToJSON RobotProgramArgument where
-    toJSON (DiscreteRobotProgramArgument arg) =
+    toJSON (DiscreteRobotProgramArgument argName argValue) =
         object ["robotprogramargumenttype" .= ("discrete" :: Text),
-                "argument" .= arg]
-    toJSON (ContinuousRobotProgramArgument arg) =
+                "argumentname" .= argName,
+                "argument" .= argValue]
+    toJSON (ContinuousRobotProgramArgument argName argValue) =
         object ["robotprogramargumenttype" .= ("continuous" :: Text),
-                "argument" .= arg]
+                "argumentname" .= argName,
+                "argument" .= argValue]
 
 instance FromJSON RobotProgramArgument where
     parseJSON (Object v) = 
         v .: "robotprogramargumenttype" >>= \(argType :: Text) ->
         case argType of
-            "discrete"  -> DiscreteRobotProgramArgument <$> v .: "argument"
-            "continuous" -> ContinuousRobotProgramArgument <$> v .: "argument"
+            "discrete"  -> DiscreteRobotProgramArgument <$> v .: "argumentname" <*> v .: "argument"
+            "continuous" -> ContinuousRobotProgramArgument <$> v .: "argumentname" <*> v .: "argument"
             _ -> fail "Unknown robotprogramargumenttype"
     parseJSON _ = fail "Expected an Object for RobotProgramArgument"
+
+instance ToJSON RobotProgramCallParams where
+    toJSON p = object ["programname" .= rpcpProgramName p,
+                       "arguments" .= rpcpArguments p]
+
+instance FromJSON RobotProgramCallParams where
+    parseJSON (Object v) = RobotProgramCallParams
+        <$> v .: "programname"
+        <*> v .: "arguments"
+    parseJSON _ = fail "Expected an Object for RobotProgramCallParams"
+

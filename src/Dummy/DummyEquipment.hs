@@ -90,6 +90,7 @@ instance Equipment DummyRobot where
                                                                     ContinuousRobotProgramArgumentDescription "prog1_numarg" 0 100 1]
             program2 = RobotProgram (RobotProgramName "program 2") [ContinuousRobotProgramArgumentDescription "prog2_numarg" (-10) (-10) 0,
                                                                     DiscreteRobotProgramArgumentDescription "prog2_stringarg" ["stringarg1", "stringarg2"]]
-    executeRobotProgram _ rName pName args = putStrLn ("Execute on " ++ (show $ fromRobotName rName) ++ " program " ++ (show $ fromRobotProgramName pName) ++ " with args " ++ (show args))
+    executeRobotProgram _ rName (RobotProgramCallParams progName args) =
+        putStrLn ("Execute on " ++ (show $ fromRobotName rName) ++ " program " ++ (show $ progName) ++ " with args " ++ (show args))
     stopRobot _ = putStrLn "want to stop robot"
-                                                                 
+      

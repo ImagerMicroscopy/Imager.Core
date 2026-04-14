@@ -29,7 +29,7 @@ class Equipment e where
     setStagePosition :: e -> StagePosition -> IO ()
 
     availableRobots :: e -> [RobotDescription]
-    executeRobotProgram :: e -> RobotName -> RobotProgramName -> [RobotProgramArgument] -> IO ()
+    executeRobotProgram :: e -> RobotName -> RobotProgramCallParams -> IO ()
     stopRobot :: e -> IO ()
 
     availableLightSources _ = []
@@ -49,7 +49,7 @@ class Equipment e where
     setStagePosition e _ = error ("calling setStagePosition on " ++ show (fromEqName (equipmentName e)))
     
     availableRobots e = []
-    executeRobotProgram e _ _ _ = error ("calling default executeRobotProgram implementation on "  ++ show (fromEqName (equipmentName e)))
+    executeRobotProgram e _ _ = error ("calling default executeRobotProgram implementation on "  ++ show (fromEqName (equipmentName e)))
     stopRobot e = error ("calling default stopRobot on " ++ show (fromEqName (equipmentName e)))
 
 instance Equipment EquipmentW where
