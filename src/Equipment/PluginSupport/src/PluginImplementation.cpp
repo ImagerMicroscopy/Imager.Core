@@ -1,5 +1,7 @@
 #include "PluginImplementation.h"
 
+#include "ImagerPluginCore/PluginManager.h"
+
 void InitPlugin(const std::filesystem::path& configDirPath) {
     // Imager is starting up. Create all objects and perform all work
     // needed to start operation.

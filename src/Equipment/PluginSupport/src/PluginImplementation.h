@@ -6,8 +6,6 @@
 #include <string>
 #include <vector>
 
-#include "DeviceTemplates.h"
-
 void InitPlugin(const std::filesystem::path& configDirPath);
 
 void ShutdownPlugin();

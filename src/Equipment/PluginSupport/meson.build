@@ -17,10 +17,8 @@ endif
 json_dep = dependency('nlohmann_json')
 queue_dep = dependency('concurrentqueue')
 
-# Core sources that provide common plugin functionality (shared across all plugins)
-# These should not be modified by plugin developers
-#subdir('ImagerPluginCore')
-core_inc = include_directories('ImagerPluginCore')
+# Add an include dir so that we can use ImagerPluginCore/ syntax to access its headers
+core_inc = include_directories('.')
 
 # Define the shared library (DLL) target for the plugin
 shared_library(plugin_name,
