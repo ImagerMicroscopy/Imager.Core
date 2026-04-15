@@ -13,8 +13,6 @@
 #include <optional>
 #include <vector>
 
-//#include "atomicops.h"
-#include "concurrentqueue.h"
 #include "blockingconcurrentqueue.h"
 
 #include "CameraPropertiesEncoding.h"

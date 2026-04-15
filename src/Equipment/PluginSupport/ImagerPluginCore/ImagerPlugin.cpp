@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <filesystem>
 #include <functional>
 #include <stdexcept>
 #include <string>
@@ -17,8 +18,10 @@ const char* gEquipmentName = IMAGER_EQUIPMENT_NAME;   // set in the build config
 
 // Forward declarations of functions that must be
 // defined in the actual plugin implementation.
-void InitPlugin();
+void InitPlugin(const std::filesystem::path& configDirPath);
 void ShutdownPlugin();
+
+std::string gLastError = std::string(); // only used for cameras for now.
 
 // A suggested utility function that provides a wrapper between C++ exceptions
 // and the return-code based C interface. Use it like so:
@@ -55,7 +58,7 @@ int InitImagerPlugin(char* configurationDirPath, void(*printer)(const char*)) {
     return HandleExceptions([&]() {
         PluginManager::Manager().setPrinter(printer);
 
-        InitPlugin();
+        InitPlugin(std::filesystem::path(configurationDirPath));
 
         PluginManager::Manager().Print("Successfully initialized\n");
     });
@@ -342,73 +345,158 @@ int StopRobots() {
 
 int ListConnectedCameraNames(char **namesPtr, int nNames, int maxNBytesPerName, int *nNamesReturned) {
     return HandleExceptions([&]() {
-        *nNamesReturned = 0;
+        PluginManager& manager = PluginManager::Manager();
+        auto cameras = manager.getAvailableCameras();
+        std::vector<std::string> cameraNames;
+        for (const auto& cam : cameras) {
+            cameraNames.push_back(cam->getIdentifierStr());
+        }
+        *nNamesReturned = StoreStringListInBuffers(cameraNames, namesPtr, nNames, maxNBytesPerName);
+        if (*nNamesReturned != cameraNames.size()) {
+            throw std::runtime_error("Could not return all available cameras");
+        }
     });
 }
 
 int GetCameraOptions(char* cameraName, char** encodedOptionsPtr) {
     return HandleExceptions([&]() {
-        // The camera options need to be encoded as JSON. See CameraPropertiesEncoding.cpp/.h.
-        // Essence of a possible implementation:
-        // std::vector<CameraProperty> properties = camPtr->getCameraProperties();
-        // std::vector<nlohmann::json> encodedProps;
-        // for (const auto& p : properties) {
-        //     encodedProps.push_back(p.encodeAsJSONObject());
-        // }
-        // nlohmann::json object;
-        // object["properties"] = encodedProps;
-        // std::string serialized = object.dump();
-        // *encodedOptionsPtr = new char[serialized.size() + 1];
-        // memcpy(*encodedOptionsPtr, serialized.data(), serialized.size() + 1);
+        *encodedOptionsPtr = nullptr;
+        PluginManager& manager = PluginManager::Manager();
+        std::shared_ptr<BaseCameraClass> camPtr = manager.getCameraByName(cameraName);
+        std::vector<CameraProperty> properties = camPtr->getCameraProperties();
+        std::vector<nlohmann::json> encodedProps;
+        for (const auto& p : properties) {
+            encodedProps.push_back(p.encodeAsJSONObject());
+        }
+        nlohmann::json object;
+        object["properties"] = encodedProps;
+        std::string serialized = object.dump();
+        *encodedOptionsPtr = new char[serialized.size() + 1];
+        memcpy(*encodedOptionsPtr, serialized.data(), serialized.size() + 1);
     });
 }
 
 void ReleaseOptionsData(char* data) {
     // Release the data the plugin returned in GetCameraOptions(). This function will be called automatically when Imager
-    // has received the data. Possible implementation:
-    // delete[] data;
+    // has received the data.
+    delete[] data;
 }
 
 int SetCameraOption(char* cameraName, char* encodedOption) {
     return HandleExceptions([&]() {
-        
+        PluginManager& manager = PluginManager::Manager();
+        std::shared_ptr<BaseCameraClass> camPtr = manager.getCameraByName(cameraName);
+        camPtr->setCameraProperties({ CameraProperty::decodeFromJSONObject(nlohmann::json::parse(encodedOption)) });
     });
 }
 
 int GetFrameRate(char* cameraName, double* frameRate) {
-    return -1;
+    return HandleExceptions([&]() {
+        PluginManager& manager = PluginManager::Manager();
+        std::shared_ptr<BaseCameraClass> camPtr = manager.getCameraByName(cameraName);
+        *frameRate = camPtr->getFrameRate();
+    });
 }
 
 int IsConfiguredForHardwareTriggering(char* cameraName, int* isConfiguredForHardwareTriggering) {
-    return -1;
+    return HandleExceptions([&]() {
+        PluginManager& manager = PluginManager::Manager();
+        std::shared_ptr<BaseCameraClass> camPtr = manager.getCameraByName(cameraName);
+        *isConfiguredForHardwareTriggering = camPtr->isConfiguredForHardwareTriggering() ? 1 : 0;
+    });
 }
 
+// These keep track of images that have been acquired and not yet released by Imager.
+// We need to keep track of them on the plugin side so we can free the memory when Imager is done with them.
+std::vector<std::shared_ptr<std::uint16_t>> gImagesInFlight;
+std::mutex gImagesInFlightMutex;
+
 int AcquireSingleImage(char* cameraName, uint16_t** imagePtr, int* nRows, int* nCols) {
-    return -1;
+    return HandleExceptions([&]() {
+        PluginManager& manager = PluginManager::Manager();
+        std::shared_ptr<BaseCameraClass> camPtr = manager.getCameraByName(cameraName);
+
+        std::shared_ptr<std::uint16_t> imageData;
+        std::tie(imageData, *nRows, *nCols) = camPtr->acquireSingleImage();
+        *imagePtr = imageData.get();
+        {
+            std::lock_guard<std::mutex> lock(gImagesInFlightMutex);
+            gImagesInFlight.push_back(imageData);
+        }
+    });
 }
 
 int StartAsyncAcquisition(char* cameraName) {
-    return -1;
+    return HandleExceptions([&]() {
+        PluginManager& manager = PluginManager::Manager();
+        std::shared_ptr<BaseCameraClass> camPtr = manager.getCameraByName(cameraName);
+
+        StartBoundedAsyncAcquisition(cameraName, std::numeric_limits<std::uint64_t>::max());
+    });
 }
 
 int StartBoundedAsyncAcquisition(char* cameraName, uint64_t nImagesToAcquire) {
-    return -1;
+   return HandleExceptions([&]() {
+        PluginManager& manager = PluginManager::Manager();
+        std::shared_ptr<BaseCameraClass> camPtr = manager.getCameraByName(cameraName);
+
+        camPtr->startAsyncAcquisition(BaseCameraClass::AcqFillAndStop, nImagesToAcquire);
+    });
 }
 
 int GetOldestImageAsyncAcquired(char* cameraName, uint32_t timeoutMillis, uint16_t** imagePtr, int* nRows, int* nCols, double* timeStamp) {
-    return -1;
+    return HandleExceptions([&]() {
+        PluginManager& manager = PluginManager::Manager();
+        std::shared_ptr<BaseCameraClass> camPtr = manager.getCameraByName(cameraName);
+
+        std::shared_ptr<std::uint16_t> imageData;
+        std::optional<std::tuple<std::shared_ptr<std::uint16_t>, int, int, double>> result = camPtr->getOldestImageAsyncAcquiredWithTimeout(timeoutMillis);
+        if (result.has_value()) {
+            std::tie(imageData, *nRows, *nCols, *timeStamp) = result.value();
+            *imagePtr = imageData.get();
+            {
+                std::lock_guard<std::mutex> lock(gImagesInFlightMutex);
+                gImagesInFlight.push_back(imageData);
+            }
+        } else {
+            *imagePtr = nullptr;
+            *nRows = -1;
+            *nCols = -1;
+            *timeStamp = -1;
+        }
+    });
 }
 
 void ReleaseImageData(uint16_t* imagePtr) {
-    
+    HandleExceptions([&]() {
+        std::lock_guard<std::mutex> lock(gImagesInFlightMutex);
+        auto it = std::find_if(gImagesInFlight.begin(), gImagesInFlight.end(), [=](const std::shared_ptr<std::uint16_t>& ptr) -> bool {
+            return (ptr.get() == imagePtr);
+        });
+        if (it == gImagesInFlight.end()) {
+            throw std::runtime_error("trying to release unknown image pointer");
+        }
+        gImagesInFlight.erase(it);
+    });
 }
 
 int AbortAsyncAcquisition(char* cameraName) {
-    return -1;
+    return HandleExceptions([&]() {
+        PluginManager& manager = PluginManager::Manager();
+        std::shared_ptr<BaseCameraClass> camPtr = manager.getCameraByName(cameraName);
+
+        camPtr->abortAsyncAcquisitionIfRunning();
+    });
 }
 
 void GetLastSCCamError(char* msgBuf, size_t bufSize) {
-    msgBuf[0] = 0;
+    if (bufSize > 1) {
+        size_t nBytesToCopy = std::min(gLastError.length(), bufSize - 1);
+        memcpy(msgBuf, gLastError.c_str(), nBytesToCopy);
+        msgBuf[nBytesToCopy] = 0;
+    } else if (bufSize == 1) {
+        msgBuf[0] = 0;
+    }
 }
 
 // A utility function to store a list of strings in buffers passed by Imager. Returns the number of items actually stored.

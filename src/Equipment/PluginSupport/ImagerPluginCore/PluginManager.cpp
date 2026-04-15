@@ -46,3 +46,12 @@ std::shared_ptr<Robot> PluginManager::getRobotByName(const std::string& name) {
     }
     return *it;
 }
+
+std::shared_ptr<BaseCameraClass> PluginManager::getCameraByName(const std::string& name) {
+    auto it = std::find_if(_availableCameras.begin(), _availableCameras.end(),
+        [&](const std::shared_ptr<BaseCameraClass>& cam) { return cam->getIdentifierStr() == name; });
+    if (it == _availableCameras.end()) {
+        throw std::runtime_error("Camera not found: " + name);
+    }
+    return *it;
+}

@@ -6,6 +6,7 @@
 #include <string>
 
 #include "DeviceTemplates.h"
+#include "BaseCameraClass.h"
 
 class PluginManager {
 public:
@@ -33,6 +34,10 @@ public:
         _availableRobots.push_back(robot);
     }
 
+    void addCamera(std::shared_ptr<BaseCameraClass> camera) {
+        _availableCameras.push_back(camera);
+    }
+
     std::vector<std::shared_ptr<LightSource>> getAvailableLightSources() {return _availableLightSources;}
     std::shared_ptr<LightSource> getLightSourceByName(const std::string& name);
 
@@ -47,6 +52,9 @@ public:
 
     std::vector<std::shared_ptr<Robot>> getAvailableRobots() {return _availableRobots;}
     std::shared_ptr<Robot> getRobotByName(const std::string& name);
+
+    std::vector<std::shared_ptr<BaseCameraClass>> getAvailableCameras() {return _availableCameras;}
+    std::shared_ptr<BaseCameraClass> getCameraByName(const std::string& name);
 
     void setPrinter(void (*printer)(const char*)) {
         if (_printer != nullptr) {
@@ -71,6 +79,9 @@ private:
     std::vector<std::shared_ptr<ContinuouslyMovableComponent>> _availableContinuouslyMovableComponents;
     std::vector<std::shared_ptr<MotorizedStage>> _availableMotorizedStages;
     std::vector<std::shared_ptr<Robot>> _availableRobots;
+
+    std::vector<std::shared_ptr<BaseCameraClass>> _availableCameras;
+
     void (*_printer)(const char*) = nullptr;
 };
 
