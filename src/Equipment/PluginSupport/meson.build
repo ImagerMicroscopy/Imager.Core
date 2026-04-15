@@ -13,9 +13,9 @@ if host_machine.cpu_family() != 'x86_64'
   error('This plugin must be built for 64-bit architecture. Please configure your build system for x64.')
 endif
 
-# Fetch nlohmann_json dependency 
-# (Automatically resolved by subprojects/nlohmann_json.wrap)
+# Fetch dependencies
 json_dep = dependency('nlohmann_json')
+queue_dep = dependency('concurrentqueue')
 
 # Core sources that provide common plugin functionality (shared across all plugins)
 # These should not be modified by plugin developers
@@ -26,6 +26,9 @@ core_inc = include_directories('ImagerPluginCore')
 shared_library(plugin_name,
   # Source files for the plugin implementation
   # It should not be necessary to edit or modify these
+  'ImagerPluginCore/BaseCameraClass.cpp',
+  'ImagerPluginCore/CameraUtils.cpp',
+  'ImagerPluginCore/ImageProcessingUtils.cpp',
   'ImagerPluginCore/ImagerPlugin.cpp',
   'ImagerPluginCore/CameraPropertiesEncoding.cpp',
   'ImagerPluginCore/PluginManager.cpp',
@@ -36,7 +39,7 @@ shared_library(plugin_name,
   
   include_directories : core_inc,
   #link_with : [core_lib],
-  dependencies : [json_dep],
+  dependencies : [json_dep, queue_dep],
   name_suffix : 'imagerplugin', # Change the output file extension
   cpp_args : ['-DNOMINMAX', '-DIMAGER_EQUIPMENT_NAME="' + plugin_name + '"'],
-)
+  )
