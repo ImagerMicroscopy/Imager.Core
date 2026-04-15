@@ -1,5 +1,7 @@
 #include "PluginManager.h"
+
 #include <algorithm>
+#include <mutex>
 #include <stdexcept>
 
 std::shared_ptr<LightSource> PluginManager::getLightSourceByName(const std::string& name) {
@@ -54,4 +56,21 @@ std::shared_ptr<BaseCameraClass> PluginManager::getCameraByName(const std::strin
         throw std::runtime_error("Camera not found: " + name);
     }
     return *it;
+}
+
+void PluginManager::setPrinter(void (*printer)(const char*)) {
+    if (_printer != nullptr) {
+        throw std::logic_error("Plugin printer function already set");
+    }
+    _printer = printer;
+}
+
+void PluginManager::Print(const std::string& message) {
+    if (_printer) {
+        static std::mutex printMutex;
+        std::lock_guard<std::mutex> lock(printMutex);
+        _printer(message.c_str());
+    } else {
+        throw std::logic_error("Plugin printer function not set");
+    }
 }

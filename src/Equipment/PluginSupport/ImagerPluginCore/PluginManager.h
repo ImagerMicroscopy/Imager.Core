@@ -56,20 +56,9 @@ public:
     std::vector<std::shared_ptr<BaseCameraClass>> getAvailableCameras() {return _availableCameras;}
     std::shared_ptr<BaseCameraClass> getCameraByName(const std::string& name);
 
-    void setPrinter(void (*printer)(const char*)) {
-        if (_printer != nullptr) {
-            throw std::logic_error("Plugin printer function already set");
-        }
-        _printer = printer;
-    }
+    void setPrinter(void (*printer)(const char*));
 
-    void Print(const std::string& message) {
-        if (_printer) {
-            _printer(message.c_str());
-        } else {
-            throw std::logic_error("Plugin printer function not set");
-        }
-    }
+    void Print(const std::string& message);
 private:
     PluginManager() = default;
     ~PluginManager() = default;
