@@ -1,7 +1,8 @@
 #define COMPILING_IMAGERPLUGIN
 
-#include "Plugin.h"
+#include "ImagerPlugin.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <functional>
 #include <stdexcept>
@@ -10,11 +11,14 @@
 
 #include "RobotProgramArguments.h"
 #include "CameraPropertiesEncoding.h"
+#include "PluginManager.h"
 
 const char* gEquipmentName = IMAGER_EQUIPMENT_NAME;   // set in the build configuration file.
 
-// Use this function pointer to print output in the Imager console window
-std::function<void(const char*)> gPrinter;
+// Forward declarations of functions that must be
+// defined in the actual plugin implementation.
+void InitPlugin();
+void ShutdownPlugin();
 
 // A suggested utility function that provides a wrapper between C++ exceptions
 // and the return-code based C interface. Use it like so:
@@ -26,14 +30,19 @@ int HandleExceptions(const std::function<void()>& func) {
         func();
     }
     catch (const std::exception& e) {
-		gPrinter(e.what());
+		PluginManager::Manager().Print(e.what());
         return -1;
     }
     catch (...) {
-		gPrinter("unknown exception");
+		PluginManager::Manager().Print("unknown exception");
         return -2;
     }
     return 0;
+}
+
+template<typename T>
+T Limit(T a, T b, T c) {
+    return std::max(a, std::min(b, c));
 }
 
 // A utility function to store a list of strings in buffers passed by Imager. Returns the number of items actually stored.
@@ -44,16 +53,16 @@ int InitImagerPlugin(char* configurationDirPath, void(*printer)(const char*)) {
     // use the name of your plugin as the base name (without extension) of the config file.
     // printer is a function pointer that you can use to print output in the main program window.
     return HandleExceptions([&]() {
-        gPrinter = printer;
+        PluginManager::Manager().setPrinter(printer);
 
-        // any initialization your plugin needs
+        InitPlugin();
 
-        printf("Successfully initialized\n");
+        PluginManager::Manager().Print("Successfully initialized\n");
     });
 }
 
 void ShutdownImagerPlugin() {
-    // any cleanup your plugin needs
+    ShutdownPlugin();
 }
 
 int ImagerPluginAPIVersion(int* version) {
@@ -72,7 +81,13 @@ int EquipmentName(char* name, int maxNBytesPerName) {
 
 int ListAvailableLightSources(char **namesPtr, int nNames, int maxNBytesPerName, int *nNamesReturned) {
     return HandleExceptions([&]() {
-        std::vector<std::string> lsNames; // = <a call to a function you created>
+        PluginManager& manager = PluginManager::Manager();
+        auto lightSources = manager.getAvailableLightSources();
+        std::vector<std::string> lsNames;
+        for (const auto& ls : lightSources) {
+            lsNames.push_back(ls->getName());
+        }
+        
         *nNamesReturned = StoreStringListInBuffers(lsNames, namesPtr, nNames, maxNBytesPerName);
         if (*nNamesReturned != lsNames.size()) {
             throw std::runtime_error("Could not return all available light sources");
@@ -83,39 +98,56 @@ int ListAvailableLightSources(char **namesPtr, int nNames, int maxNBytesPerName,
 int ListAvailableChannels(char *lightSourceName, char **namesPtr, int nNames, int maxNBytesPerName,
                           int *nNamesReturned, int *canControlPower, int *allowMultipleChannelsAtOnce) {
     return HandleExceptions([&]() {
-        std::vector<std::string> channels; // = <a call to a function you created>
+        PluginManager& manager = PluginManager::Manager();
+        auto lightSource = manager.getLightSourceByName(lightSourceName);
+
+        std::vector<std::string> channels = lightSource->getChannels();
         *nNamesReturned = StoreStringListInBuffers(channels, namesPtr, nNames, maxNBytesPerName);
         if (*nNamesReturned != channels.size()) {
             throw std::runtime_error(std::string("Could not return all available channels for light source ") + lightSourceName);
         }
-        *canControlPower = 1;   // set to 1 if the power can be controlled, 0 otherwise
-        *allowMultipleChannelsAtOnce = 1;   // set to 1 if multiple channels can be active simultaneously, 0 otherwise
+        *canControlPower = lightSource->canControlPower() ? 1 : 0; 
+        *allowMultipleChannelsAtOnce = lightSource->allowMultipleChannelsAtOnce() ? 1 : 0;
     });
 }
 
 int ActivateLightSource(char *lightSourceName, char **channelNames, double *illuminationPowers, int nChannels) {
     return HandleExceptions([&]() {
-        std::vector<std::string> channelNamesV;
-        std::vector<double> illuminationPowersV;
+        PluginManager& manager = PluginManager::Manager();
+        auto lightSource = manager.getLightSourceByName(lightSourceName);
+
+        std::vector<LightSource::ChannelSetting> channelSettings;
         for (int i = 0; i < nChannels; i++) {
-            channelNamesV.emplace_back(lightSourceName);
-            illuminationPowersV.push_back(illuminationPowers[i]);
+            if (channelNames[i] == nullptr) {
+                throw std::runtime_error("Null channel name provided");
+            }
+            channelSettings.emplace_back(channelNames[i], Limit(illuminationPowers[i], 0.0, 100.0));
         }
-        // call a function created passing channelNamesV and illuminationPowersV
+
+        lightSource->activate(channelSettings);
     });
 }
 
 int DeactivateLightSource() {
     return HandleExceptions([&]() {
-        // call a function you created
+        PluginManager& manager = PluginManager::Manager();
+        auto lightSources = manager.getAvailableLightSources();
+        for (const auto& ls : lightSources) {
+            ls->deactivate();
+        }
     });
 }
 
 int ListDiscreteMovableComponents(char **namesPtr, int nNames, int maxNBytesPerName, int *nNamesReturned) {
     return HandleExceptions([&]() {
-        std::vector<std::string> components; // = <a call to a function you created>
-        *nNamesReturned = StoreStringListInBuffers(components, namesPtr, nNames, maxNBytesPerName);
-        if (*nNamesReturned != components.size()) {
+        PluginManager& manager = PluginManager::Manager();
+        auto components = manager.getAvailableDiscreteMovableComponents();
+        std::vector<std::string> componentNames;
+        for (const auto& comp : components) {
+            componentNames.push_back(comp->getName());
+        }
+        *nNamesReturned = StoreStringListInBuffers(componentNames, namesPtr, nNames, maxNBytesPerName);
+        if (*nNamesReturned != componentNames.size()) {
             throw std::runtime_error("Could not return all available discrete movable components");
         }
     });
@@ -123,9 +155,14 @@ int ListDiscreteMovableComponents(char **namesPtr, int nNames, int maxNBytesPerN
 
 int ListContinuouslyMovableComponents(char **namesPtr, int nNames, int maxNBytesPerName, int *nNamesReturned) {
     return HandleExceptions([&]() {
-        std::vector<std::string> components; // = <a call to a function you created>
-        *nNamesReturned = StoreStringListInBuffers(components, namesPtr, nNames, maxNBytesPerName);
-        if (*nNamesReturned != components.size()) {
+        PluginManager& manager = PluginManager::Manager();
+        auto components = manager.getAvailableContinuouslyMovableComponents();
+        std::vector<std::string> componentNames;
+        for (const auto& comp : components) {
+            componentNames.push_back(comp->getName());
+        }
+        *nNamesReturned = StoreStringListInBuffers(componentNames, namesPtr, nNames, maxNBytesPerName);
+        if (*nNamesReturned != componentNames.size()) {
             throw std::runtime_error("Could not return all available continously movable components");
         }
     });
@@ -134,7 +171,9 @@ int ListContinuouslyMovableComponents(char **namesPtr, int nNames, int maxNBytes
 int ListDiscreteMovableComponentSettings(char *discreteComponentName, char **namesPtr, int nNames,
                                          int maxNBytesPerName, int *nNamesReturned) {
     return HandleExceptions([&]() {
-        std::vector<std::string> settings; // = <a call to a function you created>
+        PluginManager& manager = PluginManager::Manager();
+        auto component = manager.getDiscreteMovableComponentByName(discreteComponentName);
+        std::vector<std::string> settings = component->getSettings();
         *nNamesReturned = StoreStringListInBuffers(settings, namesPtr, nNames, maxNBytesPerName);
         if (*nNamesReturned != settings.size()) {
             throw std::runtime_error("Could not return all available continously movable components");
@@ -144,28 +183,51 @@ int ListDiscreteMovableComponentSettings(char *discreteComponentName, char **nam
 
 int ListContinuouslyMovableComponentRange(char *discreteComponentName, double *minValue, double *maxValue,
     double *increment) {
-        // set minValue, maxValue, and increment as appropriate
-    return 0;
+    return HandleExceptions([&]() {
+        PluginManager& manager = PluginManager::Manager();
+        auto component = manager.getContinuouslyMovableComponentByName(discreteComponentName);
+        *minValue = component->getMinValue();
+        *maxValue = component->getMaxValue();
+        *increment = component->getIncrement();
+    });
 }
 
 int SetMovableComponents(int nDiscreteComponentNames, char **discreteComponentNames, char **discreteSettings,
                          int nContinuousComponentNames, char **continuousComponentNames, double *continuousSettings) {
     return HandleExceptions([&]() {
-        // adjust components as appropriate
+        PluginManager& manager = PluginManager::Manager();
+
+        for (int i = 0; i < nDiscreteComponentNames; i++) {
+            if (discreteComponentNames[i] == nullptr || discreteSettings[i] == nullptr) {
+                throw std::runtime_error("Null discrete component name or setting provided");
+            }
+            auto component = manager.getDiscreteMovableComponentByName(discreteComponentNames[i]);
+            component->setTo(discreteSettings[i]);
+        }
+
+        for (int i = 0; i < nContinuousComponentNames; i++) {
+            if (continuousComponentNames[i] == nullptr) {
+                throw std::runtime_error("Null continuous component name provided");
+            }
+            auto component = manager.getContinuouslyMovableComponentByName(continuousComponentNames[i]);
+            component->setTo(continuousSettings[i]);
+        }
     });
 }
 
 int HasMotorizedStage(int *hasIt) {
     return HandleExceptions([&] {
-        *hasIt = 0;     // set to 1 as needed
+        *hasIt = (PluginManager::Manager().getAvailableMotorizedStages().empty() ? 0 : 1);
     });
 }
 
 int MotorizedStageName(char *name, int maxNBytesPerName) {
     return HandleExceptions([&] {
-        std::string stageName; // <fill in or get from a call to your function
-        if (stageName.size() > maxNBytesPerName - 1) {
-            throw std::runtime_error("Unable to fit stage name in buffer");
+        PluginManager& manager = PluginManager::Manager();
+        auto stages = manager.getAvailableMotorizedStages();
+        std::string stageName;
+        if (!stages.empty()) {
+            stageName = stages.front()->getName();
         }
         snprintf(name, maxNBytesPerName, "%s", stageName.c_str());
     });
@@ -173,29 +235,52 @@ int MotorizedStageName(char *name, int maxNBytesPerName) {
 
 int SupportedStageAxes(int *x, int *y, int *z) {
     return HandleExceptions([&] {
-        *x = 0; *y = 0; *z = 0;
-        // set these to 1 if the stage axis is supported
+        PluginManager& manager = PluginManager::Manager();
+        auto stages = manager.getAvailableMotorizedStages();
+        if (!stages.empty()) {
+            *x = stages.front()->supportsX() ? 1 : 0;
+            *y = stages.front()->supportsY() ? 1 : 0;
+            *z = stages.front()->supportsZ() ? 1 : 0;
+        }
+        else {
+            *x = *y = *z = 0;
+        }
     });
 }
 
 int GetStagePosition(double *x, double *y, double *z, int *usingHardwareAF, int *afOffset) {
     return HandleExceptions([&] {
-        // replace these values with those of your hardware
-        *x = -1.0; *y = -1.0; *z = -1.0;
-        *usingHardwareAF = 0;
-        *afOffset = 0;
+        PluginManager& manager = PluginManager::Manager();
+        auto stages = manager.getAvailableMotorizedStages();
+        if (!stages.empty()) {
+            std::tie(*x, *y, *z, *usingHardwareAF, *afOffset)= stages.front()->getPosition();
+        } else {
+            *x = -1.0; *y = -1.0; *z = -1.0; *usingHardwareAF = 0; *afOffset = 0;
+        }
     });
 }
 
 int SetStagePosition(double x, double y, double z, int usingHardwareAF, int afOffset) {
     return HandleExceptions([&] {
-        // set your hardware to these parameters
+        PluginManager& manager = PluginManager::Manager();
+        auto stages = manager.getAvailableMotorizedStages();
+        if (!stages.empty()) {
+            stages.front()->setPosition({x, y, z, usingHardwareAF != 0, afOffset});
+        } else {
+            throw std::runtime_error("No motorized stage available");
+        }
     });
 }
 
 int ListRobots(char** namesPtr, int nNames, int maxNBytesPerName, int* nNamesReturned) {
     return HandleExceptions([&] {
-        std::vector<std::string> robotNames; // = <a call to a function you created>
+        PluginManager& manager = PluginManager::Manager();
+        auto robots = manager.getAvailableRobots();
+
+        std::vector<std::string> robotNames;
+        for (const auto& robot : robots) {
+            robotNames.push_back(robot->getName());
+        }
         *nNamesReturned = StoreStringListInBuffers(robotNames, namesPtr, nNames, maxNBytesPerName);
         if (*nNamesReturned != robotNames.size()) {
             throw std::runtime_error("Could not return all available robots");
@@ -205,16 +290,12 @@ int ListRobots(char** namesPtr, int nNames, int maxNBytesPerName, int* nNamesRet
 
 int ListRobotPrograms(char* robotName, char** encodedProgramsInfoPtr) {
     return HandleExceptions([&] {
-        // fictional example
-        // RobotProgramDescription valveSelectionProgram("Valve selection");
-        // valveSelectionProgram.addArgument({"Valve", {"HIGH", "LOW"} });
-        
-        // RobotProgramDescription pressureProgram("Pressure");
-        // pressureProgram.addArgument({"Pressure", 0.0, 2.0, 0.1});
-
-        // std::string encoded = EncodeRobotProgramsAsJSON({ valveSelectionProgram, pressureProgram });
-        // *encodedArgumentsPtr = new char[encoded.size() + 1];
-        // memcpy(*encodedArgumentsPtr, encoded.data(), encoded.size() + 1);
+        PluginManager& manager = PluginManager::Manager();
+        auto robot = manager.getRobotByName(robotName);
+        std::vector<RobotProgramDescription> programDescriptions = robot->getProgramDescriptions();
+        std::string encoded = EncodeRobotProgramsAsJSON(programDescriptions);
+        *encodedProgramsInfoPtr = new char[encoded.size() + 1];
+        memcpy(*encodedProgramsInfoPtr, encoded.data(), encoded.size() + 1);
     });
 }
 
@@ -224,9 +305,10 @@ void ReleaseRobotProgramsInfo(char* info) {
 
 int ExecuteRobotProgram(char* robotName, char* encodedProgramCallParams) {
     return HandleExceptions([&]() {
+        PluginManager& manager = PluginManager::Manager();
+        auto robot = manager.getRobotByName(robotName);
         RobotProgramExecutionParams callParams(encodedProgramCallParams);
-        const std::string& programName = callParams.programName();
-        const std::map<std::string, RobotProgramExecutionArgument>& arguments = callParams.arguments();
+        robot->executeProgram(callParams);
     });
 }
 
@@ -234,14 +316,27 @@ int RobotIsExecuting(char* robotName, int* isExecuting, char* possibleErrorMessa
     return HandleExceptions([&]() {
         // set *isExecuting to 1 if the robot is currently executing a program, 0 otherwise.
         // possibleErrorMessage may contain an error message, in which case the measurement program will be aborted.
-        *isExecuting = 0;
         possibleErrorMessage[0] = 0;   // set to an error message if needed, making sure not to exceed maxNBytesForErrorMessage
+        PluginManager& manager = PluginManager::Manager();
+        auto robot = manager.getRobotByName(robotName);
+        auto executingStatus = robot->isExecuting();
+        if (std::holds_alternative<bool>(executingStatus)) {
+            *isExecuting = std::get<bool>(executingStatus) ? 1 : 0;
+        }
+        else {
+            std::string errorMessage = std::get<std::string>(executingStatus);
+            snprintf(possibleErrorMessage, maxNBytesForErrorMessage, "%s", errorMessage.c_str());
+        }
     });
 }
 
 int StopRobots() {
     return HandleExceptions([&]() {
-
+        PluginManager& manager = PluginManager::Manager();
+        auto robots = manager.getAvailableRobots();
+        for (const auto& robot : robots) {
+            robot->stop();
+        }
     });
 }
 

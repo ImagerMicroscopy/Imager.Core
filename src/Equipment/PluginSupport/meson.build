@@ -1,6 +1,6 @@
 project('ImagerPlugin', 'cpp',
   version : '0.1',
-  default_options : ['warning_level=3', 'cpp_std=c++17']
+  default_options : ['warning_level=3', 'cpp_std=c++20']
 )
 
 # --- USER SETTINGS ---
@@ -17,17 +17,26 @@ endif
 # (Automatically resolved by subprojects/nlohmann_json.wrap)
 json_dep = dependency('nlohmann_json')
 
+# Core sources that provide common plugin functionality (shared across all plugins)
+# These should not be modified by plugin developers
+#subdir('ImagerPluginCore')
+core_inc = include_directories('ImagerPluginCore')
+
 # Define the shared library (DLL) target for the plugin
 shared_library(plugin_name,
-  'Plugin.cpp',
-  'CameraPropertiesEncoding.cpp',
-  'RobotProgramArguments.cpp',
-
-  # --- USER SETTINGS ---
-  # Add your own source files here
-  # ---------------------
-
-  dependencies : json_dep,
+  # Source files for the plugin implementation
+  # It should not be necessary to edit or modify these
+  'ImagerPluginCore/ImagerPlugin.cpp',
+  'ImagerPluginCore/CameraPropertiesEncoding.cpp',
+  'ImagerPluginCore/PluginManager.cpp',
+  'ImagerPluginCore/RobotProgramArguments.cpp',
+  
+  # Add your plugin source files here
+  'src/PluginImplementation.cpp',
+  
+  include_directories : core_inc,
+  #link_with : [core_lib],
+  dependencies : [json_dep],
   name_suffix : 'imagerplugin', # Change the output file extension
   cpp_args : ['-DNOMINMAX', '-DIMAGER_EQUIPMENT_NAME="' + plugin_name + '"'],
 )

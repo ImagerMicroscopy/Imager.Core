@@ -46,7 +46,7 @@ import Utils.DLLUtils
 import Utils.MiscUtils
 
 pluginAPIVersion :: CInt
-pluginAPIVersion = 2
+pluginAPIVersion = 3
 
 data EquipmentPlugin = EquipmentPlugin {
                            epEquipmentName :: !EqName

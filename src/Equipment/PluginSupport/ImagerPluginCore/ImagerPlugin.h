@@ -19,7 +19,7 @@
     #endif
 #endif
 
-#define IMAGER_API_VERSION 2
+#define IMAGER_API_VERSION 3
 
 #ifdef __cplusplus
 extern "C" {
