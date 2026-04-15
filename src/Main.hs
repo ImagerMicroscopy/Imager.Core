@@ -63,6 +63,9 @@ main = do
   DT.trace (show exePath) readAvailableEquipment >>= \descs ->
     withEquipmentAndPluginCameras descs $ \(availableEquipment, availablePluginCams) -> do
 
+      when (null availablePluginCams) (
+        throwIO $ userError "No cameras found! Please check the connections.")
+
       exePath <- getExecutablePath
       let rootDir = takeDirectory exePath
       let configPath = rootDir </> "config.json"
