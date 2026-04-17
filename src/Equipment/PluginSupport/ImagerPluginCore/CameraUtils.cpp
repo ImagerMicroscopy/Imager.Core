@@ -74,8 +74,9 @@ private:
 // Global static instance
 static ImageRecycler gImageRecycler;
 
-std::shared_ptr<std::uint16_t[]> NewRecycledImage(std::pair<size_t, size_t> size) {
-    return gImageRecycler.newRecycledImage(size);
+AcquiredImage NewRecycledImage(int nRows, int nCols, double timestamp) {
+    auto data = gImageRecycler.newRecycledImage(std::pair<size_t, size_t>(nRows, nCols));
+    return AcquiredImage(nRows, nCols, timestamp, data);
 }
 
 void AtomicString::set(const std::string& val) {

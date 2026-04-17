@@ -67,6 +67,6 @@ private:
 std::string wcharStringToUtf8(const std::wstring& str);
 std::wstring utf8StringToWChar(const std::string& str);
 
-std::shared_ptr<std::uint16_t[]> NewRecycledImage(std::pair<size_t, size_t> size);
+AcquiredImage NewRecycledImage(int nRows, int nCols, double timestamp = 0.0);
 
 #endif // CAMERAUTILS_H

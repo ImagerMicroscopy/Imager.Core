@@ -165,7 +165,7 @@ void BaseCameraClass::_asyncAcquisitionWorker(AcquisitionMode acqMode, std::uint
         startedNotificationQueue->enqueue(0);
 
         for ( ; ;) {
-            std::shared_ptr<std::uint16_t[]> theImage = NewRecycledImage(actualImageSize);
+            AcquiredImage theImage = NewRecycledImage(actualImageSize.first, actualImageSize.second);
             for ( ; ; ) {
                 if (_asyncWantAbort) {
                     return;
@@ -174,11 +174,11 @@ void BaseCameraClass::_asyncAcquisitionWorker(AcquisitionMode acqMode, std::uint
                     _asyncAcquisitionErrorStr.set("_imageProcessingWorker had error:" + _asyncProcessingErrorStr.get());
                     return;
                 }
-                NewImageResult result = _waitForNewImageWithTimeout(250, theImage.get(), actualImageSize.first * actualImageSize.second * sizeof(std::uint16_t));
+                NewImageResult result = _waitForNewImageWithTimeout(250, theImage.getData().get(), actualImageSize.first * actualImageSize.second * sizeof(std::uint16_t));
                 if (result == NewImageCopied) {
                     auto duration = std::chrono::duration<double>(std::chrono::steady_clock::now() - _acquisitionStartTimeStamp);
                     double acqTimeStamp = duration.count();
-                    processingQueue.enqueue(AcquiredImage(actualImageSize.first, actualImageSize.second, acqTimeStamp, theImage));
+                    processingQueue.enqueue(AcquiredImage(actualImageSize.first, actualImageSize.second, acqTimeStamp, theImage.getData()));
                     _asyncNImagesStored += 1;
                     
                     if ((acqMode == AcqFillAndStop) && (_asyncNImagesStored == nImagesToAcquire)) {

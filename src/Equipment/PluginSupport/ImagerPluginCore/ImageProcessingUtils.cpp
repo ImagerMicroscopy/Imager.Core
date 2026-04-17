@@ -74,13 +74,13 @@ std::shared_ptr<std::uint16_t[]> DoProcessingStep(std::shared_ptr<ImageProcessin
         {
             nRowsOutput = nColsInput;
             nColsOutput = nRowsInput;
-            std::shared_ptr<std::uint16_t[]> outputImage = NewRecycledImage(std::pair<size_t, size_t>(nRowsOutput, nColsOutput));
+            AcquiredImage outputImage = NewRecycledImage(nRowsOutput, nColsOutput);
             if (processingType == ImageProcessingTypes::kRotateCW) {
-                RotateCW(inputImage.get(), nRowsInput, nColsInput, outputImage.get());
+                RotateCW(inputImage.get(), nRowsInput, nColsInput, outputImage.getData().get());
             } else {
-                RotateCCW(inputImage.get(), nRowsInput, nColsInput, outputImage.get());
+                RotateCCW(inputImage.get(), nRowsInput, nColsInput, outputImage.getData().get());
             }
-            return outputImage;
+            return outputImage.getData();
             break;
         }
         case ImageProcessingTypes::kFlipHorizontal:
@@ -88,13 +88,13 @@ std::shared_ptr<std::uint16_t[]> DoProcessingStep(std::shared_ptr<ImageProcessin
         {
             nRowsOutput = nRowsInput;
             nColsOutput = nColsInput;
-            std::shared_ptr<std::uint16_t[]> outputImage = NewRecycledImage(std::pair<size_t, size_t>(nRowsOutput, nColsOutput));
-            if (processingType == ImageProcessingTypes::kFlipHorizontal) {
-                FlipHorizontal(inputImage.get(), nRowsInput, nColsInput, outputImage.get());
+            AcquiredImage outputImage = NewRecycledImage(nRowsOutput, nColsOutput);
+            if (processingType == ImageProcessingTypes::kFlipHorizontal) {      
+                FlipHorizontal(inputImage.get(), nRowsInput, nColsInput, outputImage.getData().get());
             } else {
-                FlipVertical(inputImage.get(), nRowsInput, nColsInput, outputImage.get());
+                FlipVertical(inputImage.get(), nRowsInput, nColsInput, outputImage.getData().get());
             }
-            return outputImage;
+            return outputImage.getData();
             break;
         }
         case ImageProcessingTypes::kCrop:
@@ -102,9 +102,9 @@ std::shared_ptr<std::uint16_t[]> DoProcessingStep(std::shared_ptr<ImageProcessin
             IPDCrop* cropObj = reinterpret_cast<IPDCrop*>(descriptor.get());
             nRowsOutput = cropObj->nRows;
             nColsOutput = cropObj->nCols;
-            std::shared_ptr<std::uint16_t[]> outputImage = NewRecycledImage(std::pair<size_t, size_t>(nRowsOutput, nColsOutput));
-            CropImage(inputImage.get(), nRowsInput, nColsInput, nRowsOutput, nColsOutput, outputImage.get());
-            return outputImage;
+            AcquiredImage outputImage = NewRecycledImage(nRowsOutput, nColsOutput);
+            CropImage(inputImage.get(), nRowsInput, nColsInput, nRowsOutput, nColsOutput, outputImage.getData().get());
+            return outputImage.getData();
             break;
         }
         case ImageProcessingTypes::kBin:
@@ -113,9 +113,9 @@ std::shared_ptr<std::uint16_t[]> DoProcessingStep(std::shared_ptr<ImageProcessin
             int binFactor = binObj->binFactor;
             nRowsOutput = nRowsInput / binFactor;
             nColsOutput = nColsInput / binFactor;
-            std::shared_ptr<std::uint16_t[]> outputImage = NewRecycledImage(std::pair<size_t, size_t>(nRowsOutput, nColsOutput));
-            BinImage(inputImage.get(), nRowsInput, nColsInput, outputImage.get(), binFactor);
-            return outputImage;
+            AcquiredImage outputImage = NewRecycledImage(nRowsOutput, nColsOutput);
+            BinImage(inputImage.get(), nRowsInput, nColsInput, outputImage.getData().get(), binFactor);
+            return outputImage.getData();
             break;
         }
         default:
