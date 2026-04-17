@@ -48,10 +48,9 @@ public:
     size_t nRows, nCols;
 };
 
-std::shared_ptr<std::uint16_t> ProcessImage(const size_t nRows, const size_t nCols, std::shared_ptr<std::uint16_t> inputImage,
-                                            const std::vector<std::shared_ptr<ImageProcessingDescriptor>> &
-                                            processingDescriptors,
-                                            size_t& nOutputRows, size_t& nOutputCols);
+class AcquiredImage; // Forward declaration
+
+AcquiredImage ProcessImage(const AcquiredImage& inputImage, const std::vector<std::shared_ptr<ImageProcessingDescriptor>>& processingDescriptors);
 
 void RotateCW(const std::uint16_t* image, size_t nRows, size_t nCols, std::uint16_t* rotatedImage);
 void RotateCCW(const std::uint16_t* image, size_t nRows, size_t nCols, std::uint16_t* rotatedImage);

@@ -26,7 +26,7 @@ public:
         }
     }
 
-    std::shared_ptr<std::uint16_t> newRecycledImage(std::pair<size_t, size_t> size) {
+    std::shared_ptr<std::uint16_t[]> newRecycledImage(std::pair<size_t, size_t> size) {
         auto* q = getQueueForSize(size);
         std::uint16_t* ptr = nullptr;
 
@@ -41,7 +41,7 @@ public:
         constexpr size_t MAX_IDLE_BUFFERS = 10;
 
         // Return a shared_ptr with a lambda deleter
-        return std::shared_ptr<std::uint16_t>(ptr, [q](std::uint16_t* p) {
+        return std::shared_ptr<std::uint16_t[]>(ptr, [q](std::uint16_t* p) {
             // size_approx() is fast and lock-free. It may not be perfect under extreme thread contention, 
             // but it is an excellent heuristic for high-water marks.
             if (q->size_approx() < MAX_IDLE_BUFFERS) {
@@ -74,7 +74,7 @@ private:
 // Global static instance
 static ImageRecycler gImageRecycler;
 
-std::shared_ptr<std::uint16_t> NewRecycledImage(std::pair<size_t, size_t> size) {
+std::shared_ptr<std::uint16_t[]> NewRecycledImage(std::pair<size_t, size_t> size) {
     return gImageRecycler.newRecycledImage(size);
 }
 

@@ -15,6 +15,14 @@ public:
         PropertyDiscrete
     };
 
+    enum StandardCameraPropertyIDs {
+        ReqPropExposureTime,
+        ReqPropCroppingDim1,
+        ReqPropCroppingDim2,
+        ReqPropBinning,
+        FirstAvailablePropertyID
+    };
+
     CameraProperty(const int propertyCode, const std::string& descriptor) :
         _propertyCode(propertyCode),
         _descriptor(descriptor),

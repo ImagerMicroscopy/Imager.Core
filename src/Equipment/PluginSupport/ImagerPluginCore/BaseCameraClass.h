@@ -44,14 +44,14 @@ public:
     bool isConfiguredForHardwareTriggering();
     virtual void setImageOrientationOps(const std::vector<std::shared_ptr<ImageProcessingDescriptor>> &ops);
 
-    std::tuple<std::shared_ptr<uint16_t>, int, int> acquireSingleImage();
+    AcquiredImage acquireSingleImage();
 
     int startAsyncAcquisition(AcquisitionMode acqMode, std::uint64_t nImagesToAcquire);
     bool isAsyncAcquisitionRunning() const;
     void abortAsyncAcquisitionIfRunning();
     std::uint64_t getNImagesAsyncAcquired() const;
-    std::tuple<std::shared_ptr<std::uint16_t>, int, int, double> getOldestImageAsyncAcquired();
-    std::optional<std::tuple<std::shared_ptr<std::uint16_t>, int, int, double>> getOldestImageAsyncAcquiredWithTimeout(const std::uint32_t timeoutMillis);
+    AcquiredImage getOldestImageAsyncAcquired();
+    std::optional<AcquiredImage> getOldestImageAsyncAcquiredWithTimeout(const std::uint32_t timeoutMillis);
 
 
 private:
@@ -75,10 +75,9 @@ private:
 
     std::vector<std::shared_ptr<ImageProcessingDescriptor>> _getImageProcessingDescriptors();
     virtual std::vector<std::shared_ptr<ImageProcessingDescriptor>> _derivedGetAdditionalImageProcessingDescriptors() { return {}; }
-    void _imageProcessingWorker(const size_t nRows, const size_t nCols, const std::vector<std::shared_ptr<ImageProcessingDescriptor>> &
-                                processingDescriptors,
-                                moodycamel::BlockingConcurrentQueue<std::pair<std::shared_ptr<std::uint16_t>, double>> &incomingImagesQueue,
-                                moodycamel::BlockingConcurrentQueue<std::tuple<std::shared_ptr<std::uint16_t>, int, int, double>>& outgoingImagesQueue,
+    void _imageProcessingWorker(const std::vector<std::shared_ptr<ImageProcessingDescriptor>> &processingDescriptors,
+                                moodycamel::BlockingConcurrentQueue<AcquiredImage> &incomingImagesQueue,
+                                moodycamel::BlockingConcurrentQueue<AcquiredImage>& outgoingImagesQueue,
                                 AtomicString& errorString);
 
     std::vector<std::shared_ptr<ImageProcessingDescriptor>> _imageOrientationOps;
@@ -87,7 +86,7 @@ private:
     AtomicString _asyncAcquisitionErrorStr;
     volatile bool _asyncWantAbort;
     std::uint64_t _asyncNImagesStored;
-    moodycamel::BlockingConcurrentQueue<std::tuple<std::shared_ptr<std::uint16_t>, int, int, double>> _availableImagesQueue;
+    moodycamel::BlockingConcurrentQueue<AcquiredImage> _availableImagesQueue;
     std::future<void> _asyncWorkerFuture;
 };
 
