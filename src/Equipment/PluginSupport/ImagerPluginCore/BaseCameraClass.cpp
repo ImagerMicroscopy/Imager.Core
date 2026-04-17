@@ -41,22 +41,9 @@ void BaseCameraClass::setImageOrientationOps(const std::vector<std::shared_ptr<I
 
 AcquiredImage BaseCameraClass::acquireSingleImage() {
     abortAsyncAcquisitionIfRunning();
-    if (!_hasCustomAcquireSingleImage()) {
-        startAsyncAcquisition(AcqFillAndStop, 1);
-        AcquiredImage acquiredImage = getOldestImageAsyncAcquired();
-        abortAsyncAcquisitionIfRunning();
-
-        return std::move(acquiredImage);
-    } else {
-        std::pair<int, int> imageSize = _getSizeOfRawImages();
-        int nPixels = imageSize.first * imageSize.second;
-        std::shared_ptr<std::uint16_t[]> imageData = NewRecycledImage(std::pair<size_t, size_t>(imageSize.first, imageSize.second));
-        std::vector<std::shared_ptr<ImageProcessingDescriptor>> imageProcessingDescriptors = _getImageProcessingDescriptors();
-        _derivedAcquireSingleImage(imageData.get(), nPixels * sizeof(std::uint16_t));
-
-        AcquiredImage acquiredImage(imageSize.first, imageSize.second, 0.0, imageData);
-        return ProcessImage(acquiredImage, imageProcessingDescriptors);
-    }
+    AcquiredImage acquiredImage = _derivedAcquireSingleImage();
+    std::vector<std::shared_ptr<ImageProcessingDescriptor>> imageProcessingDescriptors = _getImageProcessingDescriptors();
+    return ProcessImage(acquiredImage, imageProcessingDescriptors);
 }
 
 int BaseCameraClass::startAsyncAcquisition(AcquisitionMode acqMode, std::uint64_t nImagesToAcquire) {
@@ -69,7 +56,7 @@ int BaseCameraClass::startAsyncAcquisition(AcquisitionMode acqMode, std::uint64_
     _clearAvailableImagesQueue();
     std::shared_ptr<moodycamel::BlockingConcurrentQueue<int>> startedNotificationQueue(new moodycamel::BlockingConcurrentQueue<int>());
 
-    _asyncWorkerFuture = std::async(std::launch::async, [=]() {
+    _asyncAcquisitionWorkerFuture = std::async(std::launch::async, [=]() {
         _asyncAcquisitionWorker(acqMode, nImagesToAcquire, startedNotificationQueue);
     });
 
@@ -83,18 +70,18 @@ int BaseCameraClass::startAsyncAcquisition(AcquisitionMode acqMode, std::uint64_
 }
 
 bool BaseCameraClass::isAsyncAcquisitionRunning() const {
-    if (!_asyncWorkerFuture.valid()) {
+    if (!_asyncAcquisitionWorkerFuture.valid()) {
         return false;
     }
-    std::future_status status = _asyncWorkerFuture.wait_for(std::chrono::seconds(0));
+    std::future_status status = _asyncAcquisitionWorkerFuture.wait_for(std::chrono::seconds(0));
     return (status != std::future_status::ready);
 }
 
 void BaseCameraClass::abortAsyncAcquisitionIfRunning() {
     if (isAsyncAcquisitionRunning()) {
         _asyncWantAbort = true;
-        _asyncWorkerFuture.wait();
-        _asyncWorkerFuture.get();
+        _asyncAcquisitionWorkerFuture.wait();
+        _asyncAcquisitionWorkerFuture.get();
     }
 }
 
@@ -135,6 +122,16 @@ std::optional<AcquiredImage> BaseCameraClass::getOldestImageAsyncAcquiredWithTim
             return std::optional<AcquiredImage>(imageData);
         }
     }
+}
+
+AcquiredImage BaseCameraClass::_derivedAcquireSingleImage() {
+    if (isAsyncAcquisitionRunning()) {
+        throw std::logic_error("Camera plugin implemented neither async nor single acquisition modes!");
+    }
+    startAsyncAcquisition(AcqFillAndStop, 1);
+    AcquiredImage acquiredImage = getOldestImageAsyncAcquired();
+    abortAsyncAcquisitionIfRunning();
+    return acquiredImage;
 }
 
 void BaseCameraClass::_asyncAcquisitionWorker(AcquisitionMode acqMode, std::uint64_t nImagesToAcquire, const std::shared_ptr<moodycamel::BlockingConcurrentQueue<int>>& startedNotificationQueue) {
@@ -208,6 +205,58 @@ void BaseCameraClass::_clearAvailableImagesQueue() {
     }
 }
 
+void BaseCameraClass::_derivedStartUnboundedAsyncAcquisition() {
+    // default implementation based on acquireSingleImage()
+    AcquiredImage dummy;
+    while (_asyncFromSingleImageAcquisitionQueue.try_dequeue(dummy)) {
+        ;
+    }
+
+    _asyncFromSingleImageAcquisitionWantAbort = false;
+    _asyncFromSingleImageAcquisitionErrorStr.clear();
+    _asyncFromSingleImageAcquisitionFuture = std::async(std::launch::async, [&]() {
+        try {
+            while (true) {
+                if (_asyncFromSingleImageAcquisitionWantAbort) {
+                    return;
+                }
+                AcquiredImage acquiredImage = _derivedAcquireSingleImage();
+                _asyncFromSingleImageAcquisitionQueue.enqueue(acquiredImage);
+            }
+        }
+        catch (const std::exception& e) {
+            _asyncFromSingleImageAcquisitionErrorStr.set(e.what());
+            return;
+        }
+        catch (...) {
+            _asyncFromSingleImageAcquisitionErrorStr.set("unknown exception in default _derivedStartUnboundedAsyncAcquisition");
+            return;
+        }
+    });
+}
+
+void BaseCameraClass::_derivedAbortAsyncAcquisition() {
+    // default implementation based on acquireSingleImage()
+    _asyncFromSingleImageAcquisitionWantAbort = true;
+    if (_asyncFromSingleImageAcquisitionFuture.valid()) {
+        _asyncFromSingleImageAcquisitionFuture.wait();
+        _asyncFromSingleImageAcquisitionFuture.get();
+    }
+}
+
+BaseCameraClass::NewImageResult BaseCameraClass::_waitForNewImageWithTimeout(int timeoutMillis, std::uint16_t* bufferForThisImage, int nBytes) {
+    // default implementation based on acquireSingleImage()
+    AcquiredImage acquiredImage;
+    bool haveImage = _asyncFromSingleImageAcquisitionQueue.wait_dequeue_timed(acquiredImage, std::chrono::milliseconds(timeoutMillis));
+    if (haveImage) {
+        auto data = acquiredImage.getData();
+        std::memcpy(bufferForThisImage, data.get(), nBytes);
+        return NewImageCopied;
+    } else {
+        return NoImageBeforeTimeout;
+    }
+}
+
 std::vector<std::shared_ptr<ImageProcessingDescriptor>> BaseCameraClass::_getImageProcessingDescriptors() {
     std::vector<std::shared_ptr<ImageProcessingDescriptor>> imageProcessingDescriptors;
     imageProcessingDescriptors = _derivedGetAdditionalImageProcessingDescriptors();
@@ -230,8 +279,6 @@ void BaseCameraClass::_imageProcessingWorker(const std::vector<std::shared_ptr<I
                 return;
             }
 
-            size_t nInputRows = inputImage.getNRows(), nInputCols = inputImage.getNCols();
-            size_t nOutputRows = nInputRows, nOutputCols = nInputCols;
             AcquiredImage outputImage = ProcessImage(inputImage, processingDescriptors);
             outgoingImagesQueue.enqueue(outputImage);
         }

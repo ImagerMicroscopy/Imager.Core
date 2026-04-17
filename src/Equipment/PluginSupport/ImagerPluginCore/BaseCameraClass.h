@@ -61,17 +61,16 @@ private:
     virtual bool _derivedIsConfiguredForHardwareTriggering() { return false; }
 
     virtual std::pair<int, int> _getSizeOfRawImages() = 0;
-    virtual bool _hasCustomAcquireSingleImage() const { return false; }
-    virtual void _derivedAcquireSingleImage(std::uint16_t* bufferForThisImage, int nBytes) { throw std::logic_error("custom single acquire but not implemented"); }
+    virtual AcquiredImage _derivedAcquireSingleImage();
 
     void _asyncAcquisitionWorker(AcquisitionMode acqMode, std::uint64_t nImagesToAcquire, const std::shared_ptr<moodycamel::BlockingConcurrentQueue<int>>& startedNotificationQueue);
     void _clearAvailableImagesQueue();
     
-    virtual void _derivedStartUnboundedAsyncAcquisition() = 0;
+    virtual void _derivedStartUnboundedAsyncAcquisition();
     virtual bool _derivedHaveBoundedAsyncAcquisition() {return false;}
     virtual void _derivedStartBoundedAsyncAcquisition(std::uint64_t nImagesToAcquire) {throw std::logic_error("_derivedStartBoundedAsyncAcquisition() not implemented");}
-    virtual void _derivedAbortAsyncAcquisition() = 0;
-    virtual NewImageResult _waitForNewImageWithTimeout(int timeoutMillis, std::uint16_t* bufferForThisImage, int nBytes) = 0;
+    virtual void _derivedAbortAsyncAcquisition();
+    virtual NewImageResult _waitForNewImageWithTimeout(int timeoutMillis, std::uint16_t* bufferForThisImage, int nBytes);
 
     std::vector<std::shared_ptr<ImageProcessingDescriptor>> _getImageProcessingDescriptors();
     virtual std::vector<std::shared_ptr<ImageProcessingDescriptor>> _derivedGetAdditionalImageProcessingDescriptors() { return {}; }
@@ -87,7 +86,12 @@ private:
     volatile bool _asyncWantAbort;
     std::uint64_t _asyncNImagesStored;
     moodycamel::BlockingConcurrentQueue<AcquiredImage> _availableImagesQueue;
-    std::future<void> _asyncWorkerFuture;
+    std::future<void> _asyncAcquisitionWorkerFuture;
+
+    moodycamel::BlockingConcurrentQueue<AcquiredImage> _asyncFromSingleImageAcquisitionQueue;
+    bool _asyncFromSingleImageAcquisitionWantAbort = false;
+    AtomicString _asyncFromSingleImageAcquisitionErrorStr;
+    std::future<void> _asyncFromSingleImageAcquisitionFuture;
 };
 
 #endif
