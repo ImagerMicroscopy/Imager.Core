@@ -29,6 +29,7 @@ public:
     int getNRows() const { return _nRows; }
     int getNCols() const { return _nCols; }
     double getTimestamp() const { return _timestamp; }
+    void setTimestamp(double timestamp) { _timestamp = timestamp; }
 
 private:
     std::shared_ptr<std::uint16_t[]> _data;

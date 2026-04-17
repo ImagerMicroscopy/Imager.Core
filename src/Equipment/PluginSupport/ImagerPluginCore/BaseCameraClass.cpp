@@ -135,8 +135,6 @@ AcquiredImage BaseCameraClass::_derivedAcquireSingleImage() {
 }
 
 void BaseCameraClass::_asyncAcquisitionWorker(AcquisitionMode acqMode, std::uint64_t nImagesToAcquire, const std::shared_ptr<moodycamel::BlockingConcurrentQueue<int>>& startedNotificationQueue) {
-    auto actualImageSize = _getSizeOfRawImages();
-
     try {
         std::vector<std::shared_ptr<ImageProcessingDescriptor>> imageProcessingDescriptors = _getImageProcessingDescriptors();
 
@@ -165,7 +163,6 @@ void BaseCameraClass::_asyncAcquisitionWorker(AcquisitionMode acqMode, std::uint
         startedNotificationQueue->enqueue(0);
 
         for ( ; ;) {
-            AcquiredImage theImage = NewRecycledImage(actualImageSize.first, actualImageSize.second);
             for ( ; ; ) {
                 if (_asyncWantAbort) {
                     return;
@@ -174,11 +171,12 @@ void BaseCameraClass::_asyncAcquisitionWorker(AcquisitionMode acqMode, std::uint
                     _asyncAcquisitionErrorStr.set("_imageProcessingWorker had error:" + _asyncProcessingErrorStr.get());
                     return;
                 }
-                NewImageResult result = _waitForNewImageWithTimeout(250, theImage.getData().get(), actualImageSize.first * actualImageSize.second * sizeof(std::uint16_t));
-                if (result == NewImageCopied) {
+                
+                std::optional<AcquiredImage> result = _waitForNewImageWithTimeout(250);
+                if (result.has_value()) {
                     auto duration = std::chrono::duration<double>(std::chrono::steady_clock::now() - _acquisitionStartTimeStamp);
-                    double acqTimeStamp = duration.count();
-                    processingQueue.enqueue(AcquiredImage(actualImageSize.first, actualImageSize.second, acqTimeStamp, theImage.getData()));
+                    result.value().setTimestamp(duration.count());
+                    processingQueue.enqueue(result.value());
                     _asyncNImagesStored += 1;
                     
                     if ((acqMode == AcqFillAndStop) && (_asyncNImagesStored == nImagesToAcquire)) {
@@ -244,16 +242,14 @@ void BaseCameraClass::_derivedAbortAsyncAcquisition() {
     }
 }
 
-BaseCameraClass::NewImageResult BaseCameraClass::_waitForNewImageWithTimeout(int timeoutMillis, std::uint16_t* bufferForThisImage, int nBytes) {
+std::optional<AcquiredImage> BaseCameraClass::_waitForNewImageWithTimeout(int timeoutMillis) {
     // default implementation based on acquireSingleImage()
     AcquiredImage acquiredImage;
     bool haveImage = _asyncFromSingleImageAcquisitionQueue.wait_dequeue_timed(acquiredImage, std::chrono::milliseconds(timeoutMillis));
     if (haveImage) {
-        auto data = acquiredImage.getData();
-        std::memcpy(bufferForThisImage, data.get(), nBytes);
-        return NewImageCopied;
+        return acquiredImage;
     } else {
-        return NoImageBeforeTimeout;
+        return std::nullopt;
     }
 }
 

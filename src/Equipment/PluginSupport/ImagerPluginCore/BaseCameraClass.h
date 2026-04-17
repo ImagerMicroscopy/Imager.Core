@@ -26,14 +26,11 @@ public:
         AcqFillAndStop
     };
 
-    enum NewImageResult {
-        NewImageCopied,
-        NoImageBeforeTimeout
-    };
-
-    BaseCameraClass() : _asyncWantAbort(false), _asyncNImagesStored(0) { ; }
-
+    BaseCameraClass() = default;
     virtual ~BaseCameraClass();
+    
+    BaseCameraClass(const BaseCameraClass&) = delete;
+    BaseCameraClass& operator=(const BaseCameraClass&) = delete;
 
     virtual std::string getIdentifierStr() = 0;
 
@@ -60,7 +57,6 @@ private:
 
     virtual bool _derivedIsConfiguredForHardwareTriggering() { return false; }
 
-    virtual std::pair<int, int> _getSizeOfRawImages() = 0;
     virtual AcquiredImage _derivedAcquireSingleImage();
 
     void _asyncAcquisitionWorker(AcquisitionMode acqMode, std::uint64_t nImagesToAcquire, const std::shared_ptr<moodycamel::BlockingConcurrentQueue<int>>& startedNotificationQueue);
@@ -70,7 +66,7 @@ private:
     virtual bool _derivedHaveBoundedAsyncAcquisition() {return false;}
     virtual void _derivedStartBoundedAsyncAcquisition(std::uint64_t nImagesToAcquire) {throw std::logic_error("_derivedStartBoundedAsyncAcquisition() not implemented");}
     virtual void _derivedAbortAsyncAcquisition();
-    virtual NewImageResult _waitForNewImageWithTimeout(int timeoutMillis, std::uint16_t* bufferForThisImage, int nBytes);
+    virtual std::optional<AcquiredImage> _waitForNewImageWithTimeout(int timeoutMillis);
 
     std::vector<std::shared_ptr<ImageProcessingDescriptor>> _getImageProcessingDescriptors();
     virtual std::vector<std::shared_ptr<ImageProcessingDescriptor>> _derivedGetAdditionalImageProcessingDescriptors() { return {}; }
@@ -83,8 +79,8 @@ private:
 
     std::chrono::steady_clock::time_point _acquisitionStartTimeStamp;
     AtomicString _asyncAcquisitionErrorStr;
-    volatile bool _asyncWantAbort;
-    std::uint64_t _asyncNImagesStored;
+    volatile bool _asyncWantAbort = false;
+    std::uint64_t _asyncNImagesStored = 0;
     moodycamel::BlockingConcurrentQueue<AcquiredImage> _availableImagesQueue;
     std::future<void> _asyncAcquisitionWorkerFuture;
 
