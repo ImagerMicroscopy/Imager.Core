@@ -31,6 +31,7 @@ shared_library(plugin_name,
   'ImagerPluginCore/CameraPropertiesEncoding.cpp',
   'ImagerPluginCore/PluginManager.cpp',
   'ImagerPluginCore/RobotProgramArguments.cpp',
+  'ImagerPluginCore/StandardCameraProperties.cpp',
   
   # Add your plugin source files here
   'src/PluginImplementation.cpp',
