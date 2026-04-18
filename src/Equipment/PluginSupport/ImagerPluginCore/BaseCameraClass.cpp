@@ -151,11 +151,7 @@ void BaseCameraClass::_asyncAcquisitionWorker(AcquisitionMode acqMode, std::uint
             imageProcessingFuture.get();
         });
 
-        if (_derivedHaveBoundedAsyncAcquisition()) {
-            _derivedStartBoundedAsyncAcquisition(nImagesToAcquire);
-        } else {
-            _derivedStartUnboundedAsyncAcquisition();
-        }
+        _derivedStartBoundedAsyncAcquisition(nImagesToAcquire);
         CleanupRunner runner([&]() {
             this->_derivedAbortAsyncAcquisition();
         });
@@ -203,7 +199,7 @@ void BaseCameraClass::_clearAvailableImagesQueue() {
     }
 }
 
-void BaseCameraClass::_derivedStartUnboundedAsyncAcquisition() {
+void BaseCameraClass::_derivedStartBoundedAsyncAcquisition(std::uint64_t nImagesToAcquire) {
     // default implementation based on acquireSingleImage()
     AcquiredImage dummy;
     while (_asyncFromSingleImageAcquisitionQueue.try_dequeue(dummy)) {
@@ -214,12 +210,17 @@ void BaseCameraClass::_derivedStartUnboundedAsyncAcquisition() {
     _asyncFromSingleImageAcquisitionErrorStr.clear();
     _asyncFromSingleImageAcquisitionFuture = std::async(std::launch::async, [&]() {
         try {
+            std::uint64_t nImagesAcquired = 0;
             while (true) {
+                if (nImagesAcquired >= nImagesToAcquire) {
+                    return;
+                }
                 if (_asyncFromSingleImageAcquisitionWantAbort) {
                     return;
                 }
                 AcquiredImage acquiredImage = _derivedAcquireSingleImage();
                 _asyncFromSingleImageAcquisitionQueue.enqueue(acquiredImage);
+                nImagesAcquired += 1;
             }
         }
         catch (const std::exception& e) {
@@ -227,7 +228,7 @@ void BaseCameraClass::_derivedStartUnboundedAsyncAcquisition() {
             return;
         }
         catch (...) {
-            _asyncFromSingleImageAcquisitionErrorStr.set("unknown exception in default _derivedStartUnboundedAsyncAcquisition");
+            _asyncFromSingleImageAcquisitionErrorStr.set("unknown exception in default _derivedStartBoundedAsyncAcquisition");
             return;
         }
     });

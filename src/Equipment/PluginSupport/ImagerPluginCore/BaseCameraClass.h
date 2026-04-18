@@ -28,7 +28,7 @@ public:
 
     BaseCameraClass() = default;
     virtual ~BaseCameraClass();
-    
+
     BaseCameraClass(const BaseCameraClass&) = delete;
     BaseCameraClass& operator=(const BaseCameraClass&) = delete;
 
@@ -62,9 +62,7 @@ private:
     void _asyncAcquisitionWorker(AcquisitionMode acqMode, std::uint64_t nImagesToAcquire, const std::shared_ptr<moodycamel::BlockingConcurrentQueue<int>>& startedNotificationQueue);
     void _clearAvailableImagesQueue();
     
-    virtual void _derivedStartUnboundedAsyncAcquisition();
-    virtual bool _derivedHaveBoundedAsyncAcquisition() {return false;}
-    virtual void _derivedStartBoundedAsyncAcquisition(std::uint64_t nImagesToAcquire) {throw std::logic_error("_derivedStartBoundedAsyncAcquisition() not implemented");}
+    virtual void _derivedStartBoundedAsyncAcquisition(std::uint64_t nImagesToAcquire);
     virtual void _derivedAbortAsyncAcquisition();
     virtual std::optional<AcquiredImage> _waitForNewImageWithTimeout(int timeoutMillis);
 
