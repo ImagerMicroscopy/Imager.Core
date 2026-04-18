@@ -46,7 +46,7 @@ AcquiredImage BaseCameraClass::acquireSingleImage() {
     return ProcessImage(acquiredImage, imageProcessingDescriptors);
 }
 
-int BaseCameraClass::startAsyncAcquisition(AcquisitionMode acqMode, std::uint64_t nImagesToAcquire) {
+int BaseCameraClass::startAsyncAcquisition(std::uint64_t nImagesToAcquire) {
     _acquisitionStartTimeStamp = std::chrono::steady_clock::now();
     
     abortAsyncAcquisitionIfRunning();
@@ -57,7 +57,7 @@ int BaseCameraClass::startAsyncAcquisition(AcquisitionMode acqMode, std::uint64_
     std::shared_ptr<moodycamel::BlockingConcurrentQueue<int>> startedNotificationQueue(new moodycamel::BlockingConcurrentQueue<int>());
 
     _asyncAcquisitionWorkerFuture = std::async(std::launch::async, [=]() {
-        _asyncAcquisitionWorker(acqMode, nImagesToAcquire, startedNotificationQueue);
+        _asyncAcquisitionWorker(nImagesToAcquire, startedNotificationQueue);
     });
 
     int dummy = -1;
@@ -128,13 +128,13 @@ AcquiredImage BaseCameraClass::_derivedAcquireSingleImage() {
     if (isAsyncAcquisitionRunning()) {
         throw std::logic_error("Camera plugin implemented neither async nor single acquisition modes!");
     }
-    startAsyncAcquisition(AcqFillAndStop, 1);
+    startAsyncAcquisition(1);
     AcquiredImage acquiredImage = getOldestImageAsyncAcquired();
     abortAsyncAcquisitionIfRunning();
     return acquiredImage;
 }
 
-void BaseCameraClass::_asyncAcquisitionWorker(AcquisitionMode acqMode, std::uint64_t nImagesToAcquire, const std::shared_ptr<moodycamel::BlockingConcurrentQueue<int>>& startedNotificationQueue) {
+void BaseCameraClass::_asyncAcquisitionWorker(std::uint64_t nImagesToAcquire, const std::shared_ptr<moodycamel::BlockingConcurrentQueue<int>>& startedNotificationQueue) {
     try {
         std::vector<std::shared_ptr<ImageProcessingDescriptor>> imageProcessingDescriptors = _getImageProcessingDescriptors();
 
@@ -175,7 +175,7 @@ void BaseCameraClass::_asyncAcquisitionWorker(AcquisitionMode acqMode, std::uint
                     processingQueue.enqueue(result.value());
                     _asyncNImagesStored += 1;
                     
-                    if ((acqMode == AcqFillAndStop) && (_asyncNImagesStored == nImagesToAcquire)) {
+                    if (_asyncNImagesStored >= nImagesToAcquire) {
                         return;
                     }
                 }

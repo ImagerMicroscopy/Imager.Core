@@ -442,7 +442,7 @@ int StartBoundedAsyncAcquisition(char* cameraName, uint64_t nImagesToAcquire) {
         PluginManager& manager = PluginManager::Manager();
         std::shared_ptr<BaseCameraClass> camPtr = manager.getCameraByName(cameraName);
 
-        camPtr->startAsyncAcquisition(BaseCameraClass::AcqFillAndStop, nImagesToAcquire);
+        camPtr->startAsyncAcquisition(nImagesToAcquire);
     });
 }
 

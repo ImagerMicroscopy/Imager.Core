@@ -21,11 +21,6 @@
 
 class BaseCameraClass {
 public:
-    enum AcquisitionMode {
-        AcqFreeRunMode,
-        AcqFillAndStop
-    };
-
     BaseCameraClass() = default;
     virtual ~BaseCameraClass();
 
@@ -43,7 +38,7 @@ public:
 
     AcquiredImage acquireSingleImage();
 
-    int startAsyncAcquisition(AcquisitionMode acqMode, std::uint64_t nImagesToAcquire);
+    int startAsyncAcquisition(std::uint64_t nImagesToAcquire);
     bool isAsyncAcquisitionRunning() const;
     void abortAsyncAcquisitionIfRunning();
     std::uint64_t getNImagesAsyncAcquired() const;
@@ -59,7 +54,7 @@ private:
 
     virtual AcquiredImage _derivedAcquireSingleImage();
 
-    void _asyncAcquisitionWorker(AcquisitionMode acqMode, std::uint64_t nImagesToAcquire, const std::shared_ptr<moodycamel::BlockingConcurrentQueue<int>>& startedNotificationQueue);
+    void _asyncAcquisitionWorker(std::uint64_t nImagesToAcquire, const std::shared_ptr<moodycamel::BlockingConcurrentQueue<int>>& startedNotificationQueue);
     void _clearAvailableImagesQueue();
     
     virtual void _derivedStartBoundedAsyncAcquisition(std::uint64_t nImagesToAcquire);
