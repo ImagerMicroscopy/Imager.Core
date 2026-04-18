@@ -39,7 +39,7 @@ public:
 
     virtual double getFrameRate() = 0;
     bool isConfiguredForHardwareTriggering();
-    virtual void setImageOrientationOps(const std::vector<std::shared_ptr<ImageProcessingDescriptor>> &ops);
+    void setImageProcessingOps(const std::vector<std::shared_ptr<ImageProcessingDescriptor>> &ops);
 
     AcquiredImage acquireSingleImage();
 
