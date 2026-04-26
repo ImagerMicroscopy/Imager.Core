@@ -172,7 +172,7 @@ void BaseCameraClass::_asyncAcquisitionWorker(std::uint64_t nImagesToAcquire, co
                 if (result.has_value()) {
                     auto duration = std::chrono::duration<double>(std::chrono::steady_clock::now() - _acquisitionStartTimeStamp);
                     result.value().setTimestamp(duration.count());
-                    processingQueue.enqueue(result.value());
+                    processingQueue.enqueue(std::move(result.value()));
                     _asyncNImagesStored += 1;
                     
                     if (_asyncNImagesStored >= nImagesToAcquire) {
@@ -219,7 +219,7 @@ void BaseCameraClass::_derivedStartBoundedAsyncAcquisition(std::uint64_t nImages
                     return;
                 }
                 AcquiredImage acquiredImage = _derivedAcquireSingleImage();
-                _asyncFromSingleImageAcquisitionQueue.enqueue(acquiredImage);
+                _asyncFromSingleImageAcquisitionQueue.enqueue(std::move(acquiredImage));
                 nImagesAcquired += 1;
             }
         }
@@ -277,7 +277,7 @@ void BaseCameraClass::_imageProcessingWorker(const std::vector<std::shared_ptr<I
             }
 
             AcquiredImage outputImage = ProcessImage(inputImage, processingDescriptors);
-            outgoingImagesQueue.enqueue(outputImage);
+            outgoingImagesQueue.enqueue(std::move(outputImage));
         }
     }
     catch (std::exception& e) {

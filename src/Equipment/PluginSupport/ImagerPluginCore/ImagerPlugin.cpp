@@ -453,7 +453,7 @@ int GetOldestImageAsyncAcquired(char* cameraName, uint32_t timeoutMillis, uint16
 
         std::optional<AcquiredImage> maybeAcquiredImage = camPtr->getOldestImageAsyncAcquiredWithTimeout(timeoutMillis);
         if (maybeAcquiredImage.has_value()) {
-            AcquiredImage acquiredImage = maybeAcquiredImage.value();
+            AcquiredImage acquiredImage = std::move(maybeAcquiredImage.value());
             *nRows = acquiredImage.getNRows();
             *nCols = acquiredImage.getNCols();
             *timeStamp = acquiredImage.getTimestamp();
