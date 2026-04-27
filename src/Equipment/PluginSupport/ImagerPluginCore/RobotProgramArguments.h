@@ -66,6 +66,9 @@ public:
         : _argumentName(argumentName), _value(value) {}
     ~RobotProgramExecutionDiscreteArgument() = default;
 
+    std::string argumentName() const { return _argumentName; }
+    std::string value() const { return _value; }
+
 private:
     std::string _argumentName;
     std::string _value;
@@ -77,7 +80,10 @@ public:
         : _argumentName(argumentName), _value(value) {}
     ~RobotProgramExecutionContinuousArgument() = default;
 
-    private:
+    std::string argumentName() const { return _argumentName; }
+    double value() const { return _value; }
+
+private:
     std::string _argumentName;
     double _value;
 };
