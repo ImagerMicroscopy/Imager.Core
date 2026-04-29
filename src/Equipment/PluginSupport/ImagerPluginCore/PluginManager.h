@@ -7,6 +7,7 @@
 
 #include "DeviceTemplates.h"
 #include "BaseCameraClass.h"
+#include "ConfigManager.h"
 
 class PluginManager {
 public:
@@ -57,8 +58,11 @@ public:
     std::shared_ptr<BaseCameraClass> getCameraByName(const std::string& name);
 
     void setPrinter(void (*printer)(const char*));
+    void setConfigFilePath(const std::string& configFilePath);
 
     void Print(const std::string& message);
+    ConfigManager& getConfigManager();
+
 private:
     PluginManager() = default;
     ~PluginManager() = default;
@@ -72,6 +76,8 @@ private:
     std::vector<std::shared_ptr<BaseCameraClass>> _availableCameras;
 
     void (*_printer)(const char*) = nullptr;
+    std::string _configFilePath;
+    std::unique_ptr<ConfigManager> _configManager;
 };
 
 #endif // PLUGIN_MANAGER_H

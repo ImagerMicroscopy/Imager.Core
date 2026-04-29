@@ -6,7 +6,9 @@
 #include <string>
 #include <vector>
 
-void InitPlugin(const std::filesystem::path& configDirPath);
+#include "ImagerPluginCore/PluginManager.h"
+
+void InitPlugin();
 
 void ShutdownPlugin();
 

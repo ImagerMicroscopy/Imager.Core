@@ -65,6 +65,10 @@ void PluginManager::setPrinter(void (*printer)(const char*)) {
     _printer = printer;
 }
 
+void PluginManager::setConfigFilePath(const std::string& configFilePath) {
+    _configFilePath = configFilePath;
+}
+
 void PluginManager::Print(const std::string& message) {
     if (_printer) {
         static std::mutex printMutex;
@@ -73,4 +77,14 @@ void PluginManager::Print(const std::string& message) {
     } else {
         throw std::logic_error("Plugin printer function not set");
     }
+}
+
+ConfigManager& PluginManager::getConfigManager() {
+    if (!_configManager) {
+        if (_configFilePath.empty()) {
+            throw std::logic_error("Config file path not set");
+        }
+        _configManager = std::make_unique<ConfigManager>(_configFilePath);
+    }
+    return *_configManager;
 }

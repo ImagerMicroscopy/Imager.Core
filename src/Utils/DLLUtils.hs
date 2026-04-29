@@ -40,13 +40,13 @@ loadModule mName =
     B.useAsCString (T.encodeUtf8 mName) (\nameStr ->
     cLoadLibraryA nameStr >>= \modu ->
     if (fromHMODULE modu == nullPtr)
-    then cGetLastError >>= putStrLn . show >> error ("couldn't load " ++ T.unpack mName)
+    then cGetLastError >>= putStrLn . show >> error ("couldn't load module " ++ T.unpack mName)
     else pure modu)
 #else
     B.useAsCString (T.encodeUtf8 mName) (\nameStr ->
     cdlopen nameStr >>= \modu ->
     if (fromHMODULE modu == nullPtr)
-    then cdlerror >>= putStrLn . show >> error ("couldn't load " ++ T.unpack mName)
+    then cdlerror >>= putStrLn . show >> error ("couldn't load module " ++ T.unpack mName)
     else pure modu)
 #endif
 
@@ -63,13 +63,13 @@ loadFunctionAddress modu fName =
     B.useAsCString (T.encodeUtf8 fName) $ \nameStr ->
     cGetProcAddress modu nameStr >>= \address ->
     if (fromFARPROC address == nullPtr)
-    then cGetLastError >>= putStrLn . show >> error ("couldn't load " ++ T.unpack fName)
+    then cGetLastError >>= putStrLn . show >> error ("couldn't load function " ++ T.unpack fName)
     else pure address
 #else
     B.useAsCString (T.encodeUtf8 fName) $ \nameStr ->
     cdlsym modu nameStr >>= \address ->
     if (fromFARPROC address == nullPtr)
-    then cdlerror >>= putStrLn . show >> error ("couldn't load " ++ T.unpack fName)
+    then cdlerror >>= putStrLn . show >> error ("couldn't load function " ++ T.unpack fName)
     else pure address
 #endif
 

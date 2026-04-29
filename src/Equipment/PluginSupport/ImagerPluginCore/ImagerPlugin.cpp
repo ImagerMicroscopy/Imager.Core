@@ -1,6 +1,6 @@
 #define COMPILING_IMAGERPLUGIN
 
-#include "ImagerPlugin.h"
+#include "ImagerPluginCore/ImagerPlugin.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -10,16 +10,16 @@
 #include <string>
 #include <vector>
 
-#include "CameraPropertiesEncoding.h"
-#include "CameraUtils.h"
-#include "PluginManager.h"
-#include "RobotProgramArguments.h"
+#include "ImagerPluginCore/CameraPropertiesEncoding.h"
+#include "ImagerPluginCore/CameraUtils.h"
+#include "ImagerPluginCore/PluginManager.h"
+#include "ImagerPluginCore/RobotProgramArguments.h"
 
 const char* gEquipmentName = IMAGER_EQUIPMENT_NAME;   // set in the build configuration file.
 
 // Forward declarations of functions that must be
 // defined in the actual plugin implementation.
-void InitPlugin(const std::filesystem::path& configDirPath);
+void InitPlugin();
 void ShutdownPlugin();
 
 std::string gLastError = std::string(); // only used for cameras for now.
@@ -58,8 +58,9 @@ int InitImagerPlugin(char* configurationDirPath, void(*printer)(const char*)) {
     // printer is a function pointer that you can use to print output in the main program window.
     return HandleExceptions([&]() {
         PluginManager::Manager().setPrinter(printer);
+        PluginManager::Manager().setConfigFilePath(std::string(configurationDirPath) + "/" + gEquipmentName + ".toml");
 
-        InitPlugin(std::filesystem::path(configurationDirPath));
+        InitPlugin();
 
         PluginManager::Manager().Print("Successfully initialized\n");
     });

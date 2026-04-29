@@ -2,9 +2,11 @@
 
 #include "ImagerPluginCore/PluginManager.h"
 
-void InitPlugin(const std::filesystem::path& configDirPath) {
+void InitPlugin() {
     // Imager is starting up. Create all objects and perform all work
     // needed to start operation.
+
+    PluginManager& manager = PluginManager::Manager();
 }
 
 void ShutdownPlugin() {

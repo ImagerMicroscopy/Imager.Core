@@ -16,6 +16,11 @@ endif
 # Fetch dependencies
 json_dep = dependency('nlohmann_json')
 queue_dep = dependency('concurrentqueue')
+toml_dep = dependency('tomlplusplus')
+
+cmake = import('cmake')
+serial_subproj = cmake.subproject('serial_cpp')
+serial_dep = serial_subproj.dependency('serial_cpp')
 
 # Add an include dir so that we can use ImagerPluginCore/ syntax to access its headers
 core_inc = include_directories('.')
@@ -26,19 +31,20 @@ shared_library(plugin_name,
   # It should not be necessary to edit or modify these
   'ImagerPluginCore/BaseCameraClass.cpp',
   'ImagerPluginCore/CameraUtils.cpp',
+  'ImagerPluginCore/ConfigManager.cpp',
   'ImagerPluginCore/ImageProcessingUtils.cpp',
   'ImagerPluginCore/ImagerPlugin.cpp',
   'ImagerPluginCore/CameraPropertiesEncoding.cpp',
   'ImagerPluginCore/PluginManager.cpp',
   'ImagerPluginCore/RobotProgramArguments.cpp',
+  'ImagerPluginCore/SerialPort.cpp',
   'ImagerPluginCore/StandardCameraProperties.cpp',
   
   # Add your plugin source files here
   'src/PluginImplementation.cpp',
   
   include_directories : core_inc,
-  #link_with : [core_lib],
-  dependencies : [json_dep, queue_dep],
+  dependencies : [json_dep, queue_dep, serial_dep, toml_dep],
   name_suffix : 'imagerplugin', # Change the output file extension
   cpp_args : ['-DNOMINMAX', '-DIMAGER_EQUIPMENT_NAME="' + plugin_name + '"'],
   )
