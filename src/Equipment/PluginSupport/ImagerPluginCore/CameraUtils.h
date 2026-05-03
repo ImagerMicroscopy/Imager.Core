@@ -10,32 +10,33 @@
 
 class AcquiredImage {
 public:
-    AcquiredImage() = default;
-    AcquiredImage(int nRows, int nCols, double timestamp, std::shared_ptr<std::uint16_t[]> data) {
-        _nRows = nRows;
-        _nCols = nCols;
-        _timestamp = timestamp;
-        _data = std::move(data);
-    }
-    AcquiredImage(int nRows, int nCols, double timestamp) {
-        _nRows = nRows;
-        _nCols = nCols;
-        _timestamp = timestamp;
-        _data.reset(new std::uint16_t[nRows * nCols], std::default_delete<std::uint16_t[]>());
-    }
+    enum PixelFormat {
+        Mono8 = 2,
+        Mono16 = 0,
+        Float64 = 1
+    };
+
+    AcquiredImage();
+    AcquiredImage(PixelFormat pixelFormat, int nRows, int nCols, double timestamp, std::shared_ptr<std::uint8_t[]> data);
+    AcquiredImage(PixelFormat pixelFormat, int nRows, int nCols, double timestamp);
     ~AcquiredImage() = default;
 
-    std::shared_ptr<std::uint16_t[]> getData() const { return _data; }
+    std::shared_ptr<std::uint8_t[]> getData() const { return _data; }
+    PixelFormat getPixelFormat() const { return _pixelFormat; }
     int getNRows() const { return _nRows; }
     int getNCols() const { return _nCols; }
     double getTimestamp() const { return _timestamp; }
     void setTimestamp(double timestamp) { _timestamp = timestamp; }
 
+    static size_t BytesPerPixelForPixelFormat(PixelFormat pixelFormat);
+
 private:
-    std::shared_ptr<std::uint16_t[]> _data;
+
+    std::shared_ptr<std::uint8_t[]> _data;
     int _nRows = 0;
     int _nCols = 0;
     double _timestamp = 0.0;
+    PixelFormat _pixelFormat = PixelFormat::Mono16;
 };
 
 template <typename T>
@@ -68,6 +69,6 @@ private:
 std::string wcharStringToUtf8(const std::wstring& str);
 std::wstring utf8StringToWChar(const std::string& str);
 
-AcquiredImage NewRecycledImage(int nRows, int nCols, double timestamp = 0.0);
+AcquiredImage NewRecycledImage(AcquiredImage::PixelFormat pixelFormat, int nRows, int nCols, double timestamp = 0.0);
 
 #endif // CAMERAUTILS_H

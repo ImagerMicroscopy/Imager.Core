@@ -174,7 +174,7 @@ performAction env ListWavelengths =
     where
         wavelengths = envEncodedSpectrometerWavelengths env
         nWavelengths = SB.length wavelengths `div` 8
-        numType = FP64
+        numType = Float64PixelFormat
 
 performAction env ListAvailableEquipment =
     return (AvailableEquipment es, env)

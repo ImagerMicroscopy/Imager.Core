@@ -36,11 +36,10 @@ instance Detector SCCamDetector where
     detectorName = sccCamName
     acquireData :: SCCamDetector -> IO AcquiredData
     acquireData (SCCamDetector camName) =
-        SC.acquireSingleImage camName >>= \(SC.MeasuredImage nRows nCols _ vec) ->
+        SC.acquireSingleImage camName >>= \(SC.MeasuredImage pf nRows nCols _ vec) ->
         getTime Monotonic >>= \timeStamp ->
         let bytes = byteStringFromVector vec
-            numType = UINT16
-        in return (AcquiredData nRows nCols timeStamp camName bytes numType)
+        in return (AcquiredData nRows nCols timeStamp camName bytes pf)
 
     acquireStreamingData :: SCCamDetector -> NMeasurementsToPerform -> Signal -> Chan AsyncData -> IO ()
     acquireStreamingData (SCCamDetector camName) nMeasurements hasStarted chan =
@@ -55,9 +54,9 @@ instance Detector SCCamDetector where
             fetchImages nImagesRemaining acqStart chan
                 | nImagesRemaining == 0 = return ()
                 | otherwise =
-                    fetchNextImage >>= \(SC.MeasuredImage nRows nCols timeStamp imageData) ->
+                    fetchNextImage >>= \(SC.MeasuredImage pf nRows nCols timeStamp imageData) ->
                     let shiftedTimeStamp = fromNanoSecs (toNanoSecs acqStart + round (timeStamp * 1.0e9))
-                        acqData = AcquiredData nRows nCols shiftedTimeStamp camName (byteStringFromVector imageData) UINT16
+                        acqData = AcquiredData nRows nCols shiftedTimeStamp camName (byteStringFromVector imageData) pf
                     in  acqData `deepseq` writeChan chan (AsyncData acqData) >>
                         fetchImages (nImagesRemaining - 1) acqStart chan
             fetchNextImage = SC.getNextAcquiredImage camName 500 >>= \maybeImg ->

@@ -19,7 +19,7 @@
     #endif
 #endif
 
-#define IMAGER_API_VERSION 4
+#define IMAGER_API_VERSION 5
 
 #ifdef __cplusplus
 extern "C" {
@@ -70,12 +70,13 @@ extern "C" {
     LIBSPEC int GetFrameRate(char* cameraName, double* frameRate);
     LIBSPEC int IsConfiguredForHardwareTriggering(char* cameraName, int* isConfiguredForHardwareTriggering);
     
-    LIBSPEC int AcquireSingleImage(char* cameraName, uint16_t** imagePtr, int* nRows, int* nCols);
+    LIBSPEC int AcquireSingleImage(char* cameraName, uint8_t** imagePtr, int* pixelFormat, int* nRows, int* nCols);
 
     LIBSPEC int StartAsyncAcquisition(char* cameraName);
     LIBSPEC int StartBoundedAsyncAcquisition(char* cameraName, uint64_t nImagesToAcquire);
-    LIBSPEC int GetOldestImageAsyncAcquired(char* cameraName, uint32_t timeoutMillis, uint16_t** imagePtr, int* nRows, int* nCols, double* timeStamp);
-    LIBSPEC void ReleaseImageData(uint16_t* imagePtr);
+    LIBSPEC int GetOldestImageAsyncAcquired(char* cameraName, uint32_t timeoutMillis,uint8_t** imagePtr, 
+                                            int* pixelFormat, int* nRows, int* nCols, double* timeStamp);
+    LIBSPEC void ReleaseImageData(uint8_t* imagePtr);
     LIBSPEC int AbortAsyncAcquisition(char* cameraName);
 
     LIBSPEC void GetLastSCCamError(char* msgBuf, size_t bufSize);

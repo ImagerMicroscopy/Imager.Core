@@ -436,10 +436,10 @@ int IsConfiguredForHardwareTriggering(char* cameraName, int* isConfiguredForHard
 
 // These keep track of images that have been acquired and not yet released by Imager.
 // We need to keep track of them on the plugin side so we can free the memory when Imager is done with them.
-std::vector<std::shared_ptr<std::uint16_t[]>> gImagesInFlight;
+std::vector<std::shared_ptr<std::uint8_t[]>> gImagesInFlight;
 std::mutex gImagesInFlightMutex;
 
-int AcquireSingleImage(char* cameraName, uint16_t** imagePtr, int* nRows, int* nCols) {
+int AcquireSingleImage(char* cameraName, uint8_t** imagePtr, int* pixelFormat, int* nRows, int* nCols) {
     return HandleExceptions([&]() {
         PluginManager& manager = PluginManager::Manager();
         std::shared_ptr<BaseCameraClass> camPtr = manager.getCameraByName(cameraName);
@@ -447,6 +447,7 @@ int AcquireSingleImage(char* cameraName, uint16_t** imagePtr, int* nRows, int* n
         AcquiredImage acquiredImage = camPtr->acquireSingleImage();
         *nRows = acquiredImage.getNRows();
         *nCols = acquiredImage.getNCols();
+        *pixelFormat = acquiredImage.getPixelFormat();
         *imagePtr = acquiredImage.getData().get();
         {
             std::lock_guard<std::mutex> lock(gImagesInFlightMutex);
@@ -473,7 +474,8 @@ int StartBoundedAsyncAcquisition(char* cameraName, uint64_t nImagesToAcquire) {
     });
 }
 
-int GetOldestImageAsyncAcquired(char* cameraName, uint32_t timeoutMillis, uint16_t** imagePtr, int* nRows, int* nCols, double* timeStamp) {
+int GetOldestImageAsyncAcquired(char* cameraName, uint32_t timeoutMillis, uint8_t** imagePtr,
+                                int* pixelFormat, int* nRows, int* nCols, double* timeStamp) {
     return HandleExceptions([&]() {
         PluginManager& manager = PluginManager::Manager();
         std::shared_ptr<BaseCameraClass> camPtr = manager.getCameraByName(cameraName);
@@ -483,6 +485,7 @@ int GetOldestImageAsyncAcquired(char* cameraName, uint32_t timeoutMillis, uint16
             AcquiredImage acquiredImage = std::move(maybeAcquiredImage.value());
             *nRows = acquiredImage.getNRows();
             *nCols = acquiredImage.getNCols();
+            *pixelFormat = static_cast<int>(acquiredImage.getPixelFormat());
             *timeStamp = acquiredImage.getTimestamp();
             *imagePtr = acquiredImage.getData().get();
             {
@@ -498,10 +501,10 @@ int GetOldestImageAsyncAcquired(char* cameraName, uint32_t timeoutMillis, uint16
     });
 }
 
-void ReleaseImageData(uint16_t* imagePtr) {
+void ReleaseImageData(uint8_t* imagePtr) {
     HandleExceptions([&]() {
         std::lock_guard<std::mutex> lock(gImagesInFlightMutex);
-        auto it = std::find_if(gImagesInFlight.begin(), gImagesInFlight.end(), [=](const std::shared_ptr<std::uint16_t[]>& ptr) -> bool {
+        auto it = std::find_if(gImagesInFlight.begin(), gImagesInFlight.end(), [=](const std::shared_ptr<std::uint8_t[]>& ptr) -> bool {
             return (ptr.get() == imagePtr);
         });
         if (it == gImagesInFlight.end()) {

@@ -2,7 +2,6 @@
 
 module Detectors.Detector (
     AcquiredData (..)
-  , NumberType (..)
   , Detector (..)
   , DetectorProperty
   , AsyncData (..)

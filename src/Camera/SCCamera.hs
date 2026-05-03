@@ -115,18 +115,20 @@ setCameraOrientation camName ops =
 acquireSingleImage :: Text -> IO MeasuredImage
 acquireSingleImage camName =
     withCString (T.unpack camName) $ \nameStr ->
+    alloca $ \pixelFormatPtr ->
     alloca $ \nRowsPtr ->
     alloca $ \nColsPtr ->
     alloca $ \imagePtrPtr ->
     poke imagePtrPtr nullPtr >>
-    cAcquireSingleImage nameStr imagePtrPtr nRowsPtr nColsPtr >>= \result ->
+    cAcquireSingleImage nameStr imagePtrPtr pixelFormatPtr nRowsPtr nColsPtr >>= \result ->
     when (result /= 0) (
         T.unpack <$> getLastSCCamError >>=
         throwIO . userError) >>
     peek imagePtrPtr >>= newForeignPtr cReleaseImageData >>= \fPtr ->
+    intToPixelFormat . fromIntegral <$> peek pixelFormatPtr >>= \pixelFormat ->
     fromIntegral <$> peek nRowsPtr >>= \nRows ->
     fromIntegral <$> peek nColsPtr >>= \nCols ->
-    pure (MeasuredImage nRows nCols 0.0 (V.unsafeFromForeignPtr0 fPtr (nRows * nCols)))
+    pure (MeasuredImage pixelFormat nRows nCols 0.0 (V.unsafeFromForeignPtr0 fPtr (nRows * nCols * (bytesPerPixelForPixelFormat pixelFormat))))
 
 startAsyncAcquisition :: Text -> IO ()
 startAsyncAcquisition camName =
@@ -148,11 +150,12 @@ getNextAcquiredImage :: Text -> Word -> IO (Maybe MeasuredImage)
 getNextAcquiredImage camName timeoutMillis =
     withCString (T.unpack camName) $ \nameStr ->
     alloca $ \imagePtrPtr ->
+    alloca $ \pixelFormatPtr ->
     alloca $ \nRowsPtr ->
     alloca $ \nColsPtr ->
     alloca $ \timeStampPtr ->
     poke imagePtrPtr nullPtr >>
-    cGetOldestImageAsyncAcquired nameStr (fromIntegral timeoutMillis) imagePtrPtr nRowsPtr nColsPtr timeStampPtr >>= \result ->
+    cGetOldestImageAsyncAcquired nameStr (fromIntegral timeoutMillis) imagePtrPtr pixelFormatPtr nRowsPtr nColsPtr timeStampPtr >>= \result ->
     when (result /= 0) (
         T.unpack <$> getLastSCCamError >>=
         throwIO . userError) >>
@@ -161,10 +164,11 @@ getNextAcquiredImage camName timeoutMillis =
         then return Nothing
         else
             newForeignPtr cReleaseImageData imgPtr >>= \fPtr ->
+            intToPixelFormat . fromIntegral <$> peek pixelFormatPtr >>= \pixelFormat ->
             fromIntegral <$> peek nRowsPtr >>= \nRows ->
             fromIntegral <$> peek nColsPtr >>= \nCols ->
             fromCDouble <$> peek timeStampPtr >>= \timeStamp ->
-            pure (Just (MeasuredImage nRows nCols timeStamp (V.unsafeFromForeignPtr0 fPtr (nRows * nCols))))
+            pure (Just (MeasuredImage pixelFormat nRows nCols timeStamp (V.unsafeFromForeignPtr0 fPtr (nRows * nCols * bytesPerPixelForPixelFormat pixelFormat))))
 
 abortAsyncAcquisition :: Text -> IO ()
 abortAsyncAcquisition camName =
@@ -220,7 +224,7 @@ foreign import ccall unsafe "SCCameraDLL.h SetImageOrientation"
     cSetImageOrientation :: CString -> Ptr CInt -> CInt -> IO CInt
 
 foreign import ccall "SCCameraDLL.h AcquireSingleImage"
-    cAcquireSingleImage :: CString -> Ptr (Ptr Word16) -> Ptr CInt -> Ptr CInt -> IO CInt
+    cAcquireSingleImage :: CString -> Ptr (Ptr Word8) -> Ptr CInt -> Ptr CInt -> Ptr CInt -> IO CInt
 
 foreign import ccall "SCCameraDLL.h StartAsyncAcquisition"
     cStartAsyncAcquisition :: CString -> IO CInt
@@ -229,10 +233,10 @@ foreign import ccall "SCCameraDLL.h StartBoundedAsyncAcquisition"
     cStartBoundedAsyncAcquisition :: CString -> Word64 -> IO CInt
 
 foreign import ccall "SCCameraDLL.h GetOldestImageAsyncAcquired"
-    cGetOldestImageAsyncAcquired :: CString -> Word32 -> Ptr (Ptr Word16) -> Ptr CInt -> Ptr CInt -> Ptr CDouble -> IO CInt
+    cGetOldestImageAsyncAcquired :: CString -> Word32 -> Ptr (Ptr Word8) -> Ptr CInt -> Ptr CInt -> Ptr CInt -> Ptr CDouble -> IO CInt
 
 foreign import ccall unsafe "SCCameraDLL.h &ReleaseImageData"
-    cReleaseImageData :: FunPtr (Ptr Word16 -> IO ())
+    cReleaseImageData :: FunPtr (Ptr Word8 -> IO ())
 
 foreign import ccall "SCCameraDLL.h AbortAsyncAcquisition"
     cAbortAsyncAcquisition :: CString -> IO CInt

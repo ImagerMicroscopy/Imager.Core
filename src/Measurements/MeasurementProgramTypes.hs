@@ -191,14 +191,14 @@ data AcquiredData = AcquiredData {
                       , acqTimeStamp :: !SecondsSinceStartOfExperiment
                       , acqDetectorName :: !DetectorName
                       , acqData :: !ByteString
-                      , acqNumType :: !NumberType
+                      , acqPixelFormat :: !PixelFormat
                   } deriving (Show, Generic, NFData)
 
 
 
 measuredImageAsAcquiredData :: MeasuredImage -> DetectorName -> TimeAtStartOfExperiment -> TimeAtStartOfEvent -> AcquiredData
-measuredImageAsAcquiredData (MeasuredImage nRows nCols (SecondsSinceStartOfDetection secsSinceDetStart) vecData) cameraName startOfExperiment startOfDetection =
-    AcquiredData nRows nCols (SecondsSinceStartOfExperiment timeStamp) cameraName (byteStringFromVector vecData) UINT16
+measuredImageAsAcquiredData (MeasuredImage pixelFormat nRows nCols (SecondsSinceStartOfDetection secsSinceDetStart) vecData) cameraName startOfExperiment startOfDetection =
+    AcquiredData nRows nCols (SecondsSinceStartOfExperiment timeStamp) cameraName (byteStringFromVector vecData) pixelFormat
     where
         secondsBetweenStartOfDetAndStartOfExp = timeSpecAsSeconds (diffTimeSpec (taseAsTimeSpec startOfDetection) (tasexAsTimeSpec startOfExperiment))
         timeStamp = secondsBetweenStartOfDetAndStartOfExp + secsSinceDetStart
@@ -219,20 +219,6 @@ data AcquisitionMetaData = AcquisitionMetaData {
                              , amdDetectionElementID :: !ElementID  -- ElementID of the MEDetection that gave rise to this image
                            } deriving (Show, Generic, NFData)
 
-
-
-data NumberType = UINT8
-                | UINT16
-                | FP64
-                deriving (Show, Eq)
-
-encodedNumType :: NumberType -> Int
-encodedNumType UINT8 = 2
-encodedNumType UINT16 = 0
-encodedNumType FP64 = 1
-
-instance NFData NumberType where
-  rnf t = t `seq` ()
 instance NFData TimeSpec where
   rnf t = t `seq` ()
 

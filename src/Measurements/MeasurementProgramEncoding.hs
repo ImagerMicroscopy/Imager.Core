@@ -218,10 +218,10 @@ instance MessagePack AsyncMeasurementMessage where
                  ]
 
 instance ToJSON AcquiredData where
-    toJSON (AcquiredData nRows nCols (SecondsSinceStartOfExperiment timeStamp) camName bytes numType) =
-        object ["nrows" .= nRows, "ncols" .= nCols, "timestamp" .= timeStamp, "detectorname" .= camName, "data" .= (show bytes), "numtype" .= (show numType)]
-    toEncoding (AcquiredData nRows nCols (SecondsSinceStartOfExperiment timeStamp) camName bytes numType) =
-        pairs ("nrows" .= nRows <> "ncols" .= nCols <> "timestamp" .= timeStamp <> "detectorname" .= camName <> "data" .= (show bytes) <> "numtype" .= (show numType))
+    toJSON (AcquiredData nRows nCols (SecondsSinceStartOfExperiment timeStamp) camName bytes pf) =
+        object ["nrows" .= nRows, "ncols" .= nCols, "timestamp" .= timeStamp, "detectorname" .= camName, "data" .= (show bytes), "numtype" .= (show pf)]
+    toEncoding (AcquiredData nRows nCols (SecondsSinceStartOfExperiment timeStamp) camName bytes pf) =
+        pairs ("nrows" .= nRows <> "ncols" .= nCols <> "timestamp" .= timeStamp <> "detectorname" .= camName <> "data" .= (show bytes) <> "numtype" .= (show pf))
 
 instance MessagePack AcquiredData where
     toObject d = toObject $ M.fromList [
@@ -230,7 +230,7 @@ instance MessagePack AcquiredData where
                              ("timestamp", toObject (sseAsSeconds d.acqTimeStamp)),
                              ("detectorname", toObject d.acqDetectorName),
                              ("imagedata", toObject d.acqData),
-                             ("numtype", toObject (encodedNumType d.acqNumType))
+                             ("numtype", toObject (pixelFormatToInt d.acqPixelFormat))
                           ]
     fromObject _ = error "no fromObject for AcquiredData"
 

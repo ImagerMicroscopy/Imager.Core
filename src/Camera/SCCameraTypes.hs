@@ -37,11 +37,33 @@ instance Eq DetectorProperty where
 data DetectorPropertyList = DetectorPropertyList {fromCPList :: ![DetectorProperty]}
                           deriving (Show)
 
+data PixelFormat = Mono8PixelFormat
+                 | Mono16PixelFormat
+                 | Float64PixelFormat
+                 deriving (Show, Eq, Ord, Generic, NFData)
+
+pixelFormatFromInt :: Int -> PixelFormat
+pixelFormatFromInt 2 = Mono8PixelFormat
+pixelFormatFromInt 0 = Mono16PixelFormat
+pixelFormatFromInt 1 = Float64PixelFormat
+pixelFormatFromInt n = error $ "Unknown pixel format code: " ++ show n
+
+pixelFormatToInt :: PixelFormat -> Int
+pixelFormatToInt Mono8PixelFormat = 2
+pixelFormatToInt Mono16PixelFormat = 0
+pixelFormatToInt Float64PixelFormat = 1
+
+bytesPerPixelForPixelFormat :: PixelFormat -> Int
+bytesPerPixelForPixelFormat Mono8PixelFormat = 1
+bytesPerPixelForPixelFormat Mono16PixelFormat = 2
+bytesPerPixelForPixelFormat Float64PixelFormat = 8
+
 data MeasuredImage = MeasuredImage {
-                          miNRows :: !Int
+                          miPixelFormat :: !PixelFormat
+                        , miNRows :: !Int
                         , miNCols :: !Int
                         , miTimeStamp :: !SecondsSinceStartOfDetection
-                        , miData :: !(V.Vector Word16)
+                        , miData :: !(V.Vector Word8)
                       }
 
 newtype TimeAtStartOfEvent = TimeAtStartOfEvent {taseAsTimeSpec :: TimeSpec} deriving (Show)
@@ -58,6 +80,23 @@ data OrientationOp = RotateCWOp
                    | RotateCCWOp
                    | FlipHorizontalOp
                    | FlipVerticalOp
+
+intToPixelFormat :: Int -> PixelFormat
+intToPixelFormat 2 = Mono8PixelFormat
+intToPixelFormat 0 = Mono16PixelFormat
+intToPixelFormat 1 = Float64PixelFormat
+intToPixelFormat c = error ("Unknown pixel format code: " ++ show c)
+
+instance ToJSON PixelFormat where
+    toJSON Mono8PixelFormat = String "Mono8"
+    toJSON Mono16PixelFormat = String "Mono16"
+    toJSON Float64PixelFormat = String "Float64"
+
+instance FromJSON PixelFormat where
+    parseJSON (String "Mono8") = pure Mono8PixelFormat
+    parseJSON (String "Mono16") = pure Mono16PixelFormat
+    parseJSON (String "Float64") = pure Float64PixelFormat
+    parseJSON _ = fail "Invalid PixelFormat"
 
 instance ToJSON DetectorProperty where
     toJSON np@(NumericProperty _ _ _) = object ["propertycode" .= npID np, "descriptor" .= npDescription np,

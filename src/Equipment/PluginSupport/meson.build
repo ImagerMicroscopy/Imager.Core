@@ -13,6 +13,16 @@ if host_machine.cpu_family() != 'x86_64'
   error('This plugin must be built for 64-bit architecture. Please configure your build system for x64.')
 endif
 
+# Cause the compile to fail if there are any switch statements
+# that don't handle all enum cases. This exists to enforce support
+# for postprocessing of new pixel format types.
+cpp = meson.get_compiler('cpp')
+if cpp.get_id() == 'msvc'
+  add_project_arguments('/we4062', language: 'cpp')
+else
+  add_project_arguments('-Werror=switch', language: 'cpp')
+endif
+
 # Fetch dependencies
 json_dep = dependency('nlohmann_json')
 queue_dep = dependency('concurrentqueue')

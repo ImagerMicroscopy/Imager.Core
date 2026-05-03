@@ -47,7 +47,7 @@ import Utils.DLLUtils
 import Utils.MiscUtils
 
 pluginAPIVersion :: CInt
-pluginAPIVersion = 4
+pluginAPIVersion = 5
 
 data EquipmentPlugin = EquipmentPlugin {
                            epEquipmentName :: !EqName
@@ -181,11 +181,11 @@ type ReleaseOptionsDataFunc = FunPtr (CString -> IO ())
 type SetCameraOptionFunc = CString -> CString -> IO CInt
 type GetFrameRateFunc = CString -> Ptr CDouble -> IO CInt
 type IsConfiguredForHardwareTriggeringFunc = CString -> Ptr CInt -> IO CInt
-type AcquireSingleImageFunc = CString -> Ptr (Ptr Word16) -> Ptr CInt -> Ptr CInt -> IO CInt
+type AcquireSingleImageFunc = CString -> Ptr (Ptr Word8) -> Ptr CInt -> Ptr CInt -> Ptr CInt -> IO CInt
 type StartAsyncAcquisitionFunc = CString -> IO CInt
 type StartBoundedAsyncAcquisitionFunc = CString -> Word64 -> IO CInt
-type GetOldestImageAsyncAcquiredFunc = CString -> Word32 -> Ptr (Ptr Word16) -> Ptr CInt -> Ptr CInt -> Ptr CDouble -> IO CInt
-type ReleaseImageDataFunc = FunPtr (Ptr Word16 -> IO ())
+type GetOldestImageAsyncAcquiredFunc = CString -> Word32 -> Ptr (Ptr Word8) -> Ptr CInt -> Ptr CInt -> Ptr CInt -> Ptr CDouble -> IO CInt
+type ReleaseImageDataFunc = FunPtr (Ptr Word8 -> IO ())
 type AbortAsyncAcquisitionFunc = CString -> IO CInt
 type GetLastSCCamErrorFunc = GetLastErrorFunc
 
@@ -530,15 +530,17 @@ loadPlugin pluginConfigDir libName =
         acquireSingleImage :: GetLastErrorFunc -> AcquireSingleImageFunc -> ReleaseImageDataFunc -> DetectorName -> IO MeasuredImage
         acquireSingleImage errF acqF releaseF (DetectorName camName) =
             withCString (T.unpack camName) $ \nameStr ->
+            alloca $ \pixelFormatPtr ->
             alloca $ \nRowsPtr ->
             alloca $ \nColsPtr ->
             alloca $ \imagePtrPtr ->
             poke imagePtrPtr nullPtr >>
-            checkErrorWithCallback errF (acqF nameStr imagePtrPtr nRowsPtr nColsPtr) >>
+            checkErrorWithCallback errF (acqF nameStr imagePtrPtr pixelFormatPtr nRowsPtr nColsPtr) >>
             peek imagePtrPtr >>= newForeignPtr releaseF >>= \fPtr ->
+            (intToPixelFormat . fromIntegral) <$> peek pixelFormatPtr >>= \pixelFormat ->
             fromIntegral <$> peek nRowsPtr >>= \nRows ->
             fromIntegral <$> peek nColsPtr >>= \nCols ->
-            pure (MeasuredImage nRows nCols (SecondsSinceStartOfDetection 0.0) (V.unsafeFromForeignPtr0 fPtr (nRows * nCols)))
+            pure (MeasuredImage pixelFormat nRows nCols (SecondsSinceStartOfDetection 0.0) (V.unsafeFromForeignPtr0 fPtr (nRows * nCols * (bytesPerPixelForPixelFormat pixelFormat))))
 
         startAsyncAcquisition :: GetLastErrorFunc -> StartAsyncAcquisitionFunc -> DetectorName -> IO ()
         startAsyncAcquisition errF f (DetectorName camName) =
@@ -554,20 +556,22 @@ loadPlugin pluginConfigDir libName =
         getOldestImageAsyncAcquired errF getImageF releaseImageF (DetectorName camName) timeoutMillis =
             withCString (T.unpack camName) $ \nameStr ->
             alloca $ \imagePtrPtr ->
+            alloca $ \pixelFormatPtr ->
             alloca $ \nRowsPtr ->
             alloca $ \nColsPtr ->
             alloca $ \timeStampPtr ->
             poke imagePtrPtr nullPtr >>
-            checkErrorWithCallback errF (getImageF nameStr (fromIntegral timeoutMillis) imagePtrPtr nRowsPtr nColsPtr timeStampPtr) >>
+            checkErrorWithCallback errF (getImageF nameStr (fromIntegral timeoutMillis) imagePtrPtr pixelFormatPtr nRowsPtr nColsPtr timeStampPtr) >>
             peek imagePtrPtr >>= \imgPtr ->
             if (imgPtr == nullPtr)
                 then return Nothing
                 else
                     newForeignPtr releaseImageF imgPtr >>= \fPtr ->
+                    (intToPixelFormat . fromIntegral) <$> peek pixelFormatPtr >>= \pixelFormat ->
                     fromIntegral <$> peek nRowsPtr >>= \nRows ->
                     fromIntegral <$> peek nColsPtr >>= \nCols ->
                     fromCDouble <$> peek timeStampPtr >>= \timeStamp ->
-                    pure (Just (MeasuredImage nRows nCols (SecondsSinceStartOfDetection timeStamp) (V.unsafeFromForeignPtr0 fPtr (nRows * nCols))))
+                    pure (Just (MeasuredImage pixelFormat nRows nCols (SecondsSinceStartOfDetection timeStamp) (V.unsafeFromForeignPtr0 fPtr (nRows * nCols * (bytesPerPixelForPixelFormat pixelFormat)))))
     
         abortAsyncAcquisition :: GetLastErrorFunc -> AbortAsyncAcquisitionFunc -> DetectorName -> IO ()
         abortAsyncAcquisition errF f (DetectorName camName) =
