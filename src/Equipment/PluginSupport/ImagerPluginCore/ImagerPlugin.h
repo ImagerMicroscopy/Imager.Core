@@ -19,7 +19,7 @@
     #endif
 #endif
 
-#define IMAGER_API_VERSION 3
+#define IMAGER_API_VERSION 4
 
 #ifdef __cplusplus
 extern "C" {
@@ -51,6 +51,8 @@ extern "C" {
     LIBSPEC int SupportedStageAxes(int* x, int* y, int* z);
     LIBSPEC int GetStagePosition(double* x, double* y, double* z, int* usingHardwareAF, int* afOffset);
     LIBSPEC int SetStagePosition(double x, double y, double z, int usingHardwareAF, int afOffset);
+    LIBSPEC int IsStageMoving(int* isMoving);
+    LIBSPEC int StopStageMotion();
 
     // Robots
     LIBSPEC int ListRobots(char** namesPtr, int nNames, int maxNBytesPerName, int* nNamesReturned);

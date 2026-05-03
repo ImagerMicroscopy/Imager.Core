@@ -14,6 +14,7 @@
 #include "ImagerPluginCore/CameraUtils.h"
 #include "ImagerPluginCore/PluginManager.h"
 #include "ImagerPluginCore/RobotProgramArguments.h"
+#include "ImagerPluginCore/ImagerPlugin.h"
 
 const char* gEquipmentName = IMAGER_EQUIPMENT_NAME;   // set in the build configuration file.
 
@@ -271,6 +272,31 @@ int SetStagePosition(double x, double y, double z, int usingHardwareAF, int afOf
         auto stages = manager.getAvailableMotorizedStages();
         if (!stages.empty()) {
             stages.front()->setPosition({x, y, z, usingHardwareAF != 0, afOffset});
+        } else {
+            throw std::runtime_error("No motorized stage available");
+        }
+    });
+}
+
+LIBSPEC int IsStageMoving(int* isMoving) {
+    return HandleExceptions([&] {
+        *isMoving = 0;
+        PluginManager& manager = PluginManager::Manager();
+        auto stages = manager.getAvailableMotorizedStages();
+        if (!stages.empty()) {
+            *isMoving = stages.front()->isMoving() ? 1 : 0;
+        } else {
+            throw std::runtime_error("No motorized stage available");
+        }
+    });
+}
+
+LIBSPEC int StopStageMotion() {
+    return HandleExceptions([&] {
+        PluginManager& manager = PluginManager::Manager();
+        auto stages = manager.getAvailableMotorizedStages();
+        if (!stages.empty()) {
+            stages.front()->stopMoving();
         } else {
             throw std::runtime_error("No motorized stage available");
         }

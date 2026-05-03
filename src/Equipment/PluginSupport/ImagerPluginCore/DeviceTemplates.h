@@ -68,6 +68,8 @@ public:
     using Position = std::tuple<double, double, double, bool, int>;   // x, y, z, usingHardwareAF, afOffset
     virtual Position getPosition() = 0;
     virtual void setPosition(Position position) = 0;
+    virtual bool isMoving() = 0;
+    virtual void stopMoving() = 0;
 };
 
 class Robot {
@@ -148,9 +150,12 @@ class MotorizedStageFunctor : public MotorizedStage {
 public:
     MotorizedStageFunctor(const std::string& name, bool supportsX, bool supportsY, bool supportsZ,
                           std::function<Position()> getPositionFunc,
-                          std::function<void(Position)> setPositionFunc)
+                          std::function<void(Position)> setPositionFunc,
+                          std::function<bool()> isMovingFunc,
+                          std::function<void()> stopMovingFunc)
         : _name(name), _supportsX(supportsX), _supportsY(supportsY), _supportsZ(supportsZ),
-          _getPositionFunc(getPositionFunc), _setPositionFunc(setPositionFunc) {}
+          _getPositionFunc(getPositionFunc), _setPositionFunc(setPositionFunc),
+          _isMovingFunc(isMovingFunc), _stopMovingFunc(stopMovingFunc) {}
 
     std::string getName() const override { return _name; }
     bool supportsX() const override { return _supportsX; }
@@ -158,12 +163,16 @@ public:
     bool supportsZ() const override { return _supportsZ; }
     Position getPosition() override { return _getPositionFunc(); }
     void setPosition(Position position) override { _setPositionFunc(position); }
+    bool isMoving() override { return _isMovingFunc(); }
+    void stopMoving() override { _stopMovingFunc(); }
 
 private:
     std::string _name;
     bool _supportsX, _supportsY, _supportsZ;
     std::function<Position()> _getPositionFunc;
     std::function<void(Position)> _setPositionFunc;
+    std::function<bool()> _isMovingFunc;
+    std::function<void()> _stopMovingFunc;
 };
 
 class RobotFunctor : public Robot {

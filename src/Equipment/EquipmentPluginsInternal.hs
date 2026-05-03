@@ -7,6 +7,7 @@ module Equipment.EquipmentPluginsInternal (
   , addDirectoryToLoaderPath
 ) where
 
+import Control.Concurrent
 import Control.Concurrent.Chan
 import Control.DeepSeq
 import Control.Exception
@@ -46,7 +47,7 @@ import Utils.DLLUtils
 import Utils.MiscUtils
 
 pluginAPIVersion :: CInt
-pluginAPIVersion = 3
+pluginAPIVersion = 4
 
 data EquipmentPlugin = EquipmentPlugin {
                            epEquipmentName :: !EqName
@@ -164,6 +165,8 @@ type SetMovableComponentsFunc = CInt -> Ptr CString -> Ptr CString -> CInt -> Pt
 type SupportedStageAxesFunc = Ptr CInt -> Ptr CInt -> Ptr CInt -> IO CInt
 type GetStagePositionFunc = Ptr CDouble -> Ptr CDouble -> Ptr CDouble -> Ptr CInt -> Ptr CInt -> IO CInt
 type SetStagePositionFunc = CDouble -> CDouble -> CDouble -> CInt -> CInt -> IO CInt
+type IsStageMovingFunc = Ptr CInt -> IO CInt
+type StopStageMotionFunc = IO CInt
 
 type ListRobotsFunc = StringListFunc
 type ListRobotProgramsFunc = CString -> Ptr CString -> IO CInt
@@ -205,6 +208,8 @@ foreign import ccall "dynamic" mkSetMovableComponentsFunc :: FunPtr SetMovableCo
 foreign import ccall "dynamic" mkSupportedStageAxesFunc :: FunPtr SupportedStageAxesFunc -> SupportedStageAxesFunc
 foreign import ccall "dynamic" mkGetStagePositionFunc :: FunPtr GetStagePositionFunc -> GetStagePositionFunc
 foreign import ccall "dynamic" mkSetStagePositionFunc :: FunPtr SetStagePositionFunc -> SetStagePositionFunc
+foreign import ccall "dynamic" mkIsStageMovingFunc :: FunPtr IsStageMovingFunc -> IsStageMovingFunc
+foreign import ccall "dynamic" mkStopStageMotionFunc :: FunPtr StopStageMotionFunc -> StopStageMotionFunc
 
 foreign import ccall "dynamic" mkListRobotsFunc :: FunPtr ListRobotsFunc -> ListRobotsFunc
 foreign import ccall "dynamic" mkListRobotProgramsFunc :: FunPtr ListRobotProgramsFunc -> ListRobotProgramsFunc
@@ -250,6 +255,8 @@ loadPlugin pluginConfigDir libName =
     loadFunc modu "SupportedStageAxes" mkSupportedStageAxesFunc >>= \suppAxesF ->
     loadFunc modu "GetStagePosition" mkGetStagePositionFunc >>= \getStagePosF ->
     loadFunc modu "SetStagePosition" mkSetStagePositionFunc >>= \setStagePosF ->
+    loadFunc modu "IsStageMoving" mkIsStageMovingFunc >>= \isStageMovingF ->
+    loadFunc modu "StopStageMotion" mkStopStageMotionFunc >>= \stopStageMotionF ->
 
     loadFunc modu "ListRobots" mkListRobotsFunc >>= \listRobotsF ->
     loadFunc modu "ListRobotPrograms" mkListRobotProgramsFunc >>= \listRobotProgramsF ->
@@ -294,7 +301,7 @@ loadPlugin pluginConfigDir libName =
                                 (handleDeactivateLightSource deactivateLightSourceF)
                                 movableComps (handleSetMoveComponents setMovableComponentsF)
                                 hasStage stageName supportedAxes
-                                (handleGetStagePosition getStagePosF) (handleSetStagePosition setStagePosF)
+                                (handleGetStagePosition getStagePosF) (handleSetStagePosition (setStagePosF, isStageMovingF, stopStageMotionF))
                                 robots
                                 (executeRobotProgram executeRobotProgramF)
                                 (robotIsExecuting robotIsExecutingF)
@@ -427,10 +434,21 @@ loadPlugin pluginConfigDir libName =
             fromIntegral <$> peek afOffsetPtr >>= \afOffset ->
             pure (StagePosition x y z useAF afOffset)
         
-        handleSetStagePosition :: SetStagePositionFunc -> (StagePosition -> IO ())
-        handleSetStagePosition f =
-            \(StagePosition x y z useAF afOffset) ->
-                checkError (f (CDouble x) (CDouble y) (CDouble z) (if (useAF) then 1 else 0) (fromIntegral afOffset))
+        handleSetStagePosition :: (SetStagePositionFunc, IsStageMovingFunc, StopStageMotionFunc) -> (StagePosition -> IO ())
+        handleSetStagePosition (setStagePositionF, isStageMovingF, stopStageMotionF) =
+            \pos ->
+                (doTheMove pos) `onException` stopStageMotionF
+                where
+                    doTheMove (StagePosition x y z useAF afOffset) = 
+                        checkError (setStagePositionF (CDouble x) (CDouble y) (CDouble z) (if (useAF) then 1 else 0) (fromIntegral afOffset)) >>
+                        waitUntilMotionCompleted
+                    waitUntilMotionCompleted =
+                        alloca $ \isMovingPtr ->
+                        checkError (isStageMovingF isMovingPtr) >>
+                        peek isMovingPtr >>= \isMoving ->
+                        if (isMoving /= 0)
+                            then threadDelay 50000 >> waitUntilMotionCompleted
+                            else pure ()
         
         listRobots :: (ListRobotsFunc, ListRobotProgramsFunc, ReleaseRobotProgramsInfoFunc) -> IO [RobotDescription]
         listRobots (listRobotsF, listRobotProgramsF, releaseRobotProgramsInfoF) =
