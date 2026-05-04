@@ -4,7 +4,7 @@
 
 #include "PluginManager.h"
 
-void SerialPort::open(const std::string& portName, std::uint32_t baudRate, std::uint32_t timeoutMillis) {
+void SerialPort::open(const std::string& portName, std::uint32_t baudRate, std::uint32_t timeoutMillis, SerialFormat format) {
     if (_serial.isOpen()) {
         std::string errorMsg = std::format("SerialPort::open({}) but already open on {}", portName, _serial.getPort());
         throw std::runtime_error(errorMsg);
@@ -14,7 +14,15 @@ void SerialPort::open(const std::string& portName, std::uint32_t baudRate, std::
     _serial.setBaudrate(baudRate);
     _serial.setBytesize(serial_cpp::eightbits);
     _serial.setParity(serial_cpp::parity_t::parity_none);
-    _serial.setStopbits(serial_cpp::stopbits_t::stopbits_one);
+
+    switch (format) {
+        case SerialFormat::f8N1:
+            _serial.setStopbits(serial_cpp::stopbits_t::stopbits_one);
+            break;
+        case SerialFormat::f8N2:
+            _serial.setStopbits(serial_cpp::stopbits_t::stopbits_two);
+            break;
+    }
 
     serial_cpp::Timeout timeout(50,             // inter_byte_timeout
                             timeoutMillis,  // read_timeout_constant

@@ -8,6 +8,12 @@
 
 class SerialPort {
 public:
+
+    enum class SerialFormat {
+        f8N1,    // 8 data bits, no parity, 1 stop bit
+        f8N2     // 8 data bits, no parity, 2 stop bits
+    };
+
     SerialPort() = default;
     ~SerialPort() = default;
     SerialPort(const SerialPort&) = delete;
@@ -15,7 +21,7 @@ public:
 
     void setPrintCommunication(bool print) { _printCommunication = print; }
 
-    void open(const std::string& portName, std::uint32_t baudRate, std::uint32_t timeoutMillis);
+    void open(const std::string& portName, std::uint32_t baudRate, std::uint32_t timeoutMillis, SerialFormat format = SerialFormat::f8N1);
     void close();
 
     void write(const std::string& data);
