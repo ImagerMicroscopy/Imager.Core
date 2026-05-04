@@ -1,6 +1,15 @@
 #include "SerialPort.h"
 
+#include <format>
+
+#include "PluginManager.h"
+
 void SerialPort::open(const std::string& portName, std::uint32_t baudRate, std::uint32_t timeoutMillis) {
+    if (_serial.isOpen()) {
+        std::string errorMsg = std::format("SerialPort::open({}) but already open on {}", portName, _serial.getPort());
+        throw std::runtime_error(errorMsg);
+    }
+
     _serial.setPort(portName);
     _serial.setBaudrate(baudRate);
     _serial.setBytesize(serial_cpp::eightbits);
@@ -15,45 +24,72 @@ void SerialPort::open(const std::string& portName, std::uint32_t baudRate, std::
     _serial.setTimeout(timeout);
 
     _serial.open();
+    if (!_serial.isOpen()) {
+        std::string errorMsg = std::format("SerialPort::open({}) failed to open", portName);
+        throw std::runtime_error(errorMsg);
+    }
+}
+
+void SerialPort::close() {
+    if (_serial.isOpen()) {
+        _serial.close();
+    }
 }
 
 void SerialPort::write(const std::string& data) {
     size_t nBytesWrittenTotal = 0;
-    for ( ; ; ) {
-        size_t nBytesWritten = _serial.write(data.substr(nBytesWrittenTotal));
-        nBytesWrittenTotal += nBytesWritten;
-        if (nBytesWrittenTotal >= data.size()) {
-            break;
+    while (nBytesWrittenTotal < data.size()) {
+        size_t nBytesWritten = _serial.write(reinterpret_cast<const uint8_t*>(data.data()) + nBytesWrittenTotal, 
+                                             data.size() - nBytesWrittenTotal);
+        if (nBytesWritten == 0) {
+            std::string errMsg = std::format("SerialPort::write timed out or failed to write to {}", _serial.getPort());
+            throw std::runtime_error(errMsg);
         }
+        
+        nBytesWrittenTotal += nBytesWritten;
     }
+
+    if (_printCommunication) {
+        std::string msg = std::format("{} wrote: {}\n", _serial.getPort(), data);
+        PluginManager::Manager().Print(msg);
+    }
+}
+
+std::string SerialPort::read() {
+    return read(65535);
+}
+
+std::string SerialPort::read(size_t maxNBytesToRead) {
+    std::string response = _serial.read(maxNBytesToRead);
+    if (_printCommunication) {
+        std::string msg = std::format("{} read: {}\n", _serial.getPort(), response);
+        PluginManager::Manager().Print(msg);
+    }
+    return response;
 }
 
 std::uint8_t SerialPort::writeByteAndReadByte(const std::uint8_t byte) {
-    std::uint8_t responseByte = 0;
-    _serial.write(&byte, 1);
-    _serial.read(&responseByte, 1);
-    return responseByte;
+    std::string byteStr(1, static_cast<char>(byte));
+    write(byteStr);
+    std::string response = read(1);
+    if (response.empty()) {
+        std::string errMsg = std::format("Expected to read 1 byte from {} but read nothing", _serial.getPort());
+        throw std::runtime_error(errMsg);
+    }
+
+    return static_cast<std::uint8_t>(response[0]);
 }
 
 std::string SerialPort::writeAndReadUntilString(const std::string& dataToWrite, const std::string& terminatorString) {
-    std::string response;
-    std::string remaining = dataToWrite;
-    while (!remaining.empty()) {
-        size_t nBytesWritten = _serial.write(remaining);
-        remaining = remaining.substr(nBytesWritten);
-    }
+    write(dataToWrite);
 
-    std::string accum;
-    for ( ; ; ) {
-        std::string read;
-        size_t nBytesRead = _serial.read(read);
-        accum += read;
-
-        size_t pos = accum.rfind(terminatorString);
-        if ((pos != std::string::npos) && (pos + terminatorString.size() == accum.size())) {
-            return accum;
-        }
+    std::string response = _serial.readline(65536, terminatorString);
+    if (_printCommunication) {
+        std::string msg = std::format("{} read: {}\n", _serial.getPort(), response);
+        PluginManager::Manager().Print(msg);
     }
+    
+    return response;
 }
 
 void SerialPort::clearBuffers() {
