@@ -1,4 +1,3 @@
-
 #include "BaseCameraClass.h"
 
 template <typename T>
@@ -52,7 +51,6 @@ int BaseCameraClass::startAsyncAcquisition(std::uint64_t nImagesToAcquire) {
     abortAsyncAcquisitionIfRunning();
     _asyncAcquisitionErrorStr.clear();
     _asyncWantAbort = false;
-    _asyncNImagesStored = 0;
     _clearAvailableImagesQueue();
     std::shared_ptr<moodycamel::BlockingConcurrentQueue<int>> startedNotificationQueue(new moodycamel::BlockingConcurrentQueue<int>());
 
@@ -78,15 +76,11 @@ bool BaseCameraClass::isAsyncAcquisitionRunning() const {
 }
 
 void BaseCameraClass::abortAsyncAcquisitionIfRunning() {
+    std::lock_guard<std::mutex> lg(_abortWorkerMutex);
     if (isAsyncAcquisitionRunning()) {
         _asyncWantAbort = true;
-        _asyncAcquisitionWorkerFuture.wait();
         _asyncAcquisitionWorkerFuture.get();
     }
-}
-
-std::uint64_t BaseCameraClass::getNImagesAsyncAcquired() const {
-    return _asyncNImagesStored;
 }
 
 AcquiredImage BaseCameraClass::getOldestImageAsyncAcquired() {
@@ -99,7 +93,6 @@ std::optional<AcquiredImage> BaseCameraClass::getOldestImageAsyncAcquiredWithTim
 
     std::chrono::time_point<std::chrono::high_resolution_clock> start(std::chrono::high_resolution_clock::now());
     std::chrono::time_point<std::chrono::high_resolution_clock> end = start + std::chrono::milliseconds(maybeCorrectedTimeoutMillis);
-    std::chrono::milliseconds singleWaitDuration(std::min(maybeCorrectedTimeoutMillis, (std::uint32_t)250));
 
    AcquiredImage imageData;
 
@@ -117,7 +110,10 @@ std::optional<AcquiredImage> BaseCameraClass::getOldestImageAsyncAcquiredWithTim
             return std::optional<AcquiredImage>();
         }
 
-        bool haveImage = _availableImagesQueue.wait_dequeue_timed(imageData, std::chrono::milliseconds(singleWaitDuration));
+        std::chrono::milliseconds timeLeft = std::chrono::duration_cast<std::chrono::milliseconds>(end - std::chrono::high_resolution_clock::now());
+        std::chrono::milliseconds waitDuration = std::min(timeLeft, std::chrono::milliseconds(250));
+
+        bool haveImage = _availableImagesQueue.wait_dequeue_timed(imageData, std::chrono::milliseconds(waitDuration));
         if (haveImage) {
             return std::optional<AcquiredImage>(imageData);
         }
@@ -125,9 +121,6 @@ std::optional<AcquiredImage> BaseCameraClass::getOldestImageAsyncAcquiredWithTim
 }
 
 AcquiredImage BaseCameraClass::_derivedAcquireSingleImage() {
-    if (isAsyncAcquisitionRunning()) {
-        throw std::logic_error("Camera plugin implemented neither async nor single acquisition modes!");
-    }
     startAsyncAcquisition(1);
     AcquiredImage acquiredImage = getOldestImageAsyncAcquired();
     abortAsyncAcquisitionIfRunning();
@@ -139,11 +132,11 @@ void BaseCameraClass::_asyncAcquisitionWorker(std::uint64_t nImagesToAcquire, co
         std::vector<std::shared_ptr<ImageProcessingDescriptor>> imageProcessingDescriptors = _getImageProcessingDescriptors();
 
         moodycamel::BlockingConcurrentQueue<AcquiredImage> processingQueue;
-        AtomicString _asyncProcessingErrorStr;
-        _asyncProcessingErrorStr.clear();
+        AtomicString asyncProcessingErrorStr;
+        asyncProcessingErrorStr.clear();
         std::future<void> imageProcessingFuture = std::async(std::launch::async, [&]() {
             _imageProcessingWorker(imageProcessingDescriptors,
-                                   processingQueue, _availableImagesQueue, _asyncProcessingErrorStr);
+                                   processingQueue, _availableImagesQueue, asyncProcessingErrorStr);
         });
         CleanupRunner ipRunner([&]() {
             processingQueue.enqueue(AcquiredImage());
@@ -158,26 +151,25 @@ void BaseCameraClass::_asyncAcquisitionWorker(std::uint64_t nImagesToAcquire, co
 
         startedNotificationQueue->enqueue(0);
 
-        for ( ; ;) {
-            for ( ; ; ) {
-                if (_asyncWantAbort) {
-                    return;
-                }
-                if (!_asyncProcessingErrorStr.empty()) {
-                    _asyncAcquisitionErrorStr.set("_imageProcessingWorker had error:" + _asyncProcessingErrorStr.get());
-                    return;
-                }
+        uint64_t asyncNImagesStored = 0;
+        for ( ; ; ) {
+            if (_asyncWantAbort) {
+                return;
+            }
+            if (!asyncProcessingErrorStr.empty()) {
+                _asyncAcquisitionErrorStr.set("_imageProcessingWorker had error:" + asyncProcessingErrorStr.get());
+                return;
+            }
+            
+            std::optional<AcquiredImage> result = _waitForNewImageWithTimeout(250);
+            if (result.has_value()) {
+                auto duration = std::chrono::duration<double>(std::chrono::steady_clock::now() - _acquisitionStartTimeStamp);
+                result.value().setTimestamp(duration.count());
+                processingQueue.enqueue(std::move(result.value()));
+                asyncNImagesStored += 1;
                 
-                std::optional<AcquiredImage> result = _waitForNewImageWithTimeout(250);
-                if (result.has_value()) {
-                    auto duration = std::chrono::duration<double>(std::chrono::steady_clock::now() - _acquisitionStartTimeStamp);
-                    result.value().setTimestamp(duration.count());
-                    processingQueue.enqueue(std::move(result.value()));
-                    _asyncNImagesStored += 1;
-                    
-                    if (_asyncNImagesStored >= nImagesToAcquire) {
-                        return;
-                    }
+                if (asyncNImagesStored >= nImagesToAcquire) {
+                    return;
                 }
             }
         }
@@ -208,10 +200,10 @@ void BaseCameraClass::_derivedStartBoundedAsyncAcquisition(std::uint64_t nImages
 
     _asyncFromSingleImageAcquisitionWantAbort = false;
     _asyncFromSingleImageAcquisitionErrorStr.clear();
-    _asyncFromSingleImageAcquisitionFuture = std::async(std::launch::async, [&]() {
+    _asyncFromSingleImageAcquisitionFuture = std::async(std::launch::async, [this, nImagesToAcquire]() {
         try {
             std::uint64_t nImagesAcquired = 0;
-            while (true) {
+            for ( ; ; ) {
                 if (nImagesAcquired >= nImagesToAcquire) {
                     return;
                 }
@@ -236,9 +228,9 @@ void BaseCameraClass::_derivedStartBoundedAsyncAcquisition(std::uint64_t nImages
 
 void BaseCameraClass::_derivedAbortAsyncAcquisition() {
     // default implementation based on acquireSingleImage()
+    std::lock_guard<std::mutex> lg(_abortSingleImageAcquisitionMutex);
     _asyncFromSingleImageAcquisitionWantAbort = true;
     if (_asyncFromSingleImageAcquisitionFuture.valid()) {
-        _asyncFromSingleImageAcquisitionFuture.wait();
         _asyncFromSingleImageAcquisitionFuture.get();
     }
 }
@@ -271,7 +263,7 @@ void BaseCameraClass::_imageProcessingWorker(const std::vector<std::shared_ptr<I
         for (; ; ) {
             AcquiredImage inputImage;
             incomingImagesQueue.wait_dequeue(inputImage);
-            if (inputImage.getData() == nullptr) {
+            if (inputImage.getNRows() == 0 && inputImage.getNCols() == 0) {
                 // Signals that this worker should stop.
                 return;
             }

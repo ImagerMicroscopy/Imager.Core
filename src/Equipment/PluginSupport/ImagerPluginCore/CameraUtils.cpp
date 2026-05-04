@@ -27,6 +27,10 @@ AcquiredImage::AcquiredImage() {
 }
 
 AcquiredImage::AcquiredImage(PixelFormat pixelFormat, int nRows, int nCols, double timestamp, std::shared_ptr<std::uint8_t[]> data) {
+    if ((nRows <= 0) || (nCols <= 0)) {
+        throw std::invalid_argument("nRows and nCols must be non-negative");
+    }
+    
     _pixelFormat = pixelFormat;
     _nRows = nRows;
     _nCols = nCols;
@@ -35,6 +39,10 @@ AcquiredImage::AcquiredImage(PixelFormat pixelFormat, int nRows, int nCols, doub
 }
 
 AcquiredImage::AcquiredImage(PixelFormat pixelFormat, int nRows, int nCols, double timestamp) {
+    if ((nRows <= 0) || (nCols <= 0)) {
+        throw std::invalid_argument("nRows and nCols must be non-negative");
+    }
+    
     _pixelFormat = pixelFormat;
     _nRows = nRows;
     _nCols = nCols;

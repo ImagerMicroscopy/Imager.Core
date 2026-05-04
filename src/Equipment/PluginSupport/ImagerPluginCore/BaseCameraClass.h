@@ -1,16 +1,16 @@
 #ifndef BASECAMERACLASS_H
 #define BASECAMERACLASS_H
 
-#include <string>
-#include <vector>
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <limits>
-#include <thread>
-#include <mutex>
 #include <future>
+#include <limits>
+#include <mutex>
 #include <optional>
+#include <string>
+#include <thread>
 #include <vector>
 
 #include "blockingconcurrentqueue.h"
@@ -41,7 +41,6 @@ public:
     int startAsyncAcquisition(std::uint64_t nImagesToAcquire);
     bool isAsyncAcquisitionRunning() const;
     void abortAsyncAcquisitionIfRunning();
-    std::uint64_t getNImagesAsyncAcquired() const;
     AcquiredImage getOldestImageAsyncAcquired();
     std::optional<AcquiredImage> getOldestImageAsyncAcquiredWithTimeout(const std::uint32_t timeoutMillis);
 
@@ -72,15 +71,16 @@ private:
 
     std::chrono::steady_clock::time_point _acquisitionStartTimeStamp;
     AtomicString _asyncAcquisitionErrorStr;
-    volatile bool _asyncWantAbort = false;
-    std::uint64_t _asyncNImagesStored = 0;
+    std::atomic_bool _asyncWantAbort = false;
     moodycamel::BlockingConcurrentQueue<AcquiredImage> _availableImagesQueue;
     std::future<void> _asyncAcquisitionWorkerFuture;
+    std::mutex _abortWorkerMutex;
 
     moodycamel::BlockingConcurrentQueue<AcquiredImage> _asyncFromSingleImageAcquisitionQueue;
-    bool _asyncFromSingleImageAcquisitionWantAbort = false;
+    std::atomic_bool _asyncFromSingleImageAcquisitionWantAbort = false;
     AtomicString _asyncFromSingleImageAcquisitionErrorStr;
     std::future<void> _asyncFromSingleImageAcquisitionFuture;
+    std::mutex _abortSingleImageAcquisitionMutex;
 };
 
 #endif
