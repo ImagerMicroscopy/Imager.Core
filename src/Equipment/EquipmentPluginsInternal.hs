@@ -561,17 +561,18 @@ loadPlugin pluginConfigDir libName =
             alloca $ \nColsPtr ->
             alloca $ \timeStampPtr ->
             poke imagePtrPtr nullPtr >>
-            checkErrorWithCallback errF (getImageF nameStr (fromIntegral timeoutMillis) imagePtrPtr pixelFormatPtr nRowsPtr nColsPtr timeStampPtr) >>
-            peek imagePtrPtr >>= \imgPtr ->
-            if (imgPtr == nullPtr)
-                then return Nothing
-                else
-                    newForeignPtr releaseImageF imgPtr >>= \fPtr ->
-                    (intToPixelFormat . fromIntegral) <$> peek pixelFormatPtr >>= \pixelFormat ->
-                    fromIntegral <$> peek nRowsPtr >>= \nRows ->
-                    fromIntegral <$> peek nColsPtr >>= \nCols ->
-                    fromCDouble <$> peek timeStampPtr >>= \timeStamp ->
-                    pure (Just (MeasuredImage pixelFormat nRows nCols (SecondsSinceStartOfDetection timeStamp) (V.unsafeFromForeignPtr0 fPtr (nRows * nCols * (bytesPerPixelForPixelFormat pixelFormat)))))
+            mask_ (
+                checkErrorWithCallback errF (getImageF nameStr (fromIntegral timeoutMillis) imagePtrPtr pixelFormatPtr nRowsPtr nColsPtr timeStampPtr) >>
+                peek imagePtrPtr >>= \imgPtr ->
+                if (imgPtr == nullPtr)
+                    then return Nothing
+                    else
+                        newForeignPtr releaseImageF imgPtr >>= \fPtr ->
+                        (intToPixelFormat . fromIntegral) <$> peek pixelFormatPtr >>= \pixelFormat ->
+                        fromIntegral <$> peek nRowsPtr >>= \nRows ->
+                        fromIntegral <$> peek nColsPtr >>= \nCols ->
+                        fromCDouble <$> peek timeStampPtr >>= \timeStamp ->
+                        pure (Just (MeasuredImage pixelFormat nRows nCols (SecondsSinceStartOfDetection timeStamp) (V.unsafeFromForeignPtr0 fPtr (nRows * nCols * (bytesPerPixelForPixelFormat pixelFormat))))))
     
         abortAsyncAcquisition :: GetLastErrorFunc -> AbortAsyncAcquisitionFunc -> DetectorName -> IO ()
         abortAsyncAcquisition errF f (DetectorName camName) =
