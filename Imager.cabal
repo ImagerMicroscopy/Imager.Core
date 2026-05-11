@@ -43,6 +43,7 @@ executable Imager
                      , req
                      , stm
                      , temporary
+                     , Win32
   other-modules:       AggregateMotorizedStage
                      , CuvettorTypes
                      , Equipment.Devices.BlueBoxOptics
@@ -63,6 +64,7 @@ executable Imager
                      , Utils.MiscUtils
                      , Utils.DLLUtils
                      , Utils.MeasurementProgramUtils
+                     , Utils.SharedMemory
                      , Utils.WaitableChannel
                      , Equipment.Devices.Arduino
                      , Equipment.Devices.Asahi
