@@ -1,8 +1,13 @@
 {-# LANGUAGE CPP #-}
 
 module Utils.SharedMemory(
-    createSharedMemory
+    SharedMemory
+  , createSharedMemory
+  , sharedMemoryName
+  , sharedMemorySize
   , writeToSharedMemory
+  , writeMultipleToSharedMemory
+  , writeMultipleToSharedMemoryLBS
 ) where
 
 import Control.Exception (throwIO)
@@ -10,10 +15,14 @@ import Control.Monad (when, replicateM)
 import Data.Bits ((.|.))
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Unsafe as B
+import qualified Data.ByteString.Lazy as LB
 import Data.ByteString (ByteString)
+import Data.Text (Text)
+import qualified Data.Text as T
+import Data.Word
 import Foreign.Concurrent (newForeignPtr)
-import Foreign.ForeignPtr (ForeignPtr, finalizeForeignPtr, withForeignPtr)
-import Foreign.Ptr (Ptr, nullPtr, intPtrToPtr, IntPtr)
+import Foreign.ForeignPtr (ForeignPtr, withForeignPtr)
+import Foreign.Ptr
 import Foreign.C.String (withCString)
 import Foreign.C.Types
 import Foreign.Marshal.Utils (copyBytes)
@@ -25,27 +34,27 @@ import System.Win32
 #endif
 
 data SharedMemory = SharedMemory {
-    smName :: String
-  , smSize :: Int
+    smName :: Text
+  , smSize :: Word64
   , smPtr :: ForeignPtr ()
 } deriving (Show)
 
-generateUniqueName :: IO String
+generateUniqueName :: IO Text
 generateUniqueName = do
     chars <- replicateM 16 (randomRIO ('a', 'z'))
 #ifdef WINDOWS
-    pure $ "ImagerMem_" ++ chars
+    pure $ T.pack $ "ImagerMem_" ++ chars
 #else
-    pure $ "/ImagerMem_" ++ chars
+    pure $ T.pack $ "/ImagerMem_" ++ chars
 #endif
 
-createSharedMemory :: Int -> IO SharedMemory
+createSharedMemory :: Word64 -> IO SharedMemory
 #ifdef WINDOWS
 eRROR_ALREADY_EXISTS = 183 :: DWORD
 
 createSharedMemory nBytes =
     generateUniqueName >>= \name ->
-    createFileMapping Nothing pAGE_READWRITE (fromIntegral nBytes) (Just name) >>= \hMap ->
+    createFileMapping Nothing pAGE_READWRITE (fromIntegral nBytes) (Just (T.unpack name)) >>= \hMap ->
     getLastError >>= \errCode ->
     when (errCode == eRROR_ALREADY_EXISTS) (throwIO $ userError "Shared memory with this name already exists") >>
     mapViewOfFile hMap fILE_MAP_ALL_ACCESS 0 (fromIntegral nBytes) >>= \shMemPtr ->
@@ -78,14 +87,35 @@ createSharedMemory nBytes =
         c_mmap nullPtr (fromIntegral nBytes) 3 1 fd 0 >>= \ptr ->
         when (ptr == intPtrToPtr (-1 :: IntPtr)) (c_close fd >> c_shm_unlink c_name >> throwIO (userError "mmap failed")) >>
         c_close fd >>
-        let unMap = c_munmap ptr (fromIntegral nBytes) >> withCString name (\c_n -> c_shm_unlink c_n >> pure ())
+        let unMap = c_munmap ptr (fromIntegral nBytes) >> withCString (T.unpack name) (\c_n -> c_shm_unlink c_n >> pure ())
         in  newForeignPtr ptr unMap >>= \fptr ->
             pure (SharedMemory name nBytes fptr)
 #endif
 
+sharedMemoryName :: SharedMemory -> Text
+sharedMemoryName = smName
+
+sharedMemorySize :: SharedMemory -> Word64
+sharedMemorySize = smSize
+
 writeToSharedMemory :: ByteString -> SharedMemory -> IO ()
-writeToSharedMemory bs (SharedMemory _ size bPtr) =
-    when ((B.length bs) > size) (throwIO $ userError "Data size exceeds shared memory size") >>
-    withForeignPtr bPtr (\ptr ->
+writeToSharedMemory bs shMem =
+    writeToSharedMemoryAtOffset bs shMem 0
+
+writeMultipleToSharedMemory :: [ByteString] -> SharedMemory -> IO ()
+writeMultipleToSharedMemory bss shMem = f bss 0
+    where
+        f [] _ = return ()
+        f (bs:bss) offset =
+            writeToSharedMemoryAtOffset bs shMem offset >>
+            f bss (offset + (fromIntegral (B.length bs)))
+
+writeMultipleToSharedMemoryLBS :: [LB.ByteString] -> SharedMemory -> IO ()
+writeMultipleToSharedMemoryLBS lbss shMem = writeMultipleToSharedMemory (map LB.toStrict lbss) shMem
+
+writeToSharedMemoryAtOffset :: ByteString -> SharedMemory -> Word64 -> IO ()
+writeToSharedMemoryAtOffset bs (SharedMemory _ size bPtr) offset =
+    when ((fromIntegral $ B.length bs) + offset > size) (throwIO $ userError "Data size with offset exceeds shared memory size") >>
+    withForeignPtr bPtr ( \ptr ->
         B.unsafeUseAsCStringLen bs $ \(cstr, len) ->
-        copyBytes (castPtr ptr) cstr len)
+        copyBytes (castPtr ptr `plusPtr` fromIntegral offset) cstr len)

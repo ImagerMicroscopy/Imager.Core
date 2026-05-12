@@ -12,17 +12,21 @@ import Control.Monad
 import Control.Monad.Trans.Except
 import Data.Aeson
 import qualified Data.ByteString as SB
+import qualified Data.ByteString.Base64 as B64
+import qualified Data.ByteString.Lazy as LB
 import Data.Either
 import Data.IORef
 import Data.List
+import qualified Data.MessagePack as MP
+import Data.Serialize (runPut, putWord64le)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
-import qualified Data.ByteString.Base64 as B64
 import qualified Data.Map.Strict as M
 import Data.Maybe
 import qualified Data.Vector as V
 import Data.Word
+import Foreign.Storable
 import System.Clock
 import System.Environment
 import System.FilePath
@@ -32,6 +36,7 @@ import System.IO (hClose)
 import System.Environment (getExecutablePath)
 import System.FilePath (takeDirectory, (</>))
 import System.Process
+
 import Camera.SCCameraTypes
 import CuvettorTypes
 import Detectors.Detector
@@ -45,12 +50,16 @@ import Measurements.MeasurementProgramVerification
 import Measurements.SmartProgramRunner
 import Utils.MeasurementProgramUtils
 import Utils.MiscUtils
+import Utils.SharedMemory
 import Utils.WaitableChannel
 
 import Debug.Trace as DT
 
 handlerTimeout :: Int
 handlerTimeout = 2 * 1000000
+
+sharedMemorySizeForAsyncTransfer :: Word64
+sharedMemorySizeForAsyncTransfer = 2^27 -- Just over 134 MB.
 
 serverSettings = defaultSettings {ssBindToAllInterfaces = False,
                                   ssHandlerTimeout = Just (round 30e6),
@@ -86,7 +95,7 @@ main = do
 
 
           let env = Environment availableEquipment availablePluginCams encodedWl
-                asyncMessageChannel asyncStatusMessagesMVar asyncProgramWorker
+                asyncMessageChannel asyncStatusMessagesMVar asyncProgramWorker Nothing
             in  wait =<< async (runServer 3200 messageHandler env serverSettings)
 
 loadConfig :: FilePath -> IO AppConfig
@@ -224,6 +233,15 @@ performAction env (SetDetectorProperty detName prop) =
 
 performAction env Ping = return (Pong, env)
 
+performAction env (UseSharedMemoryForTransfer useShMem) =
+    case useShMem of
+        True  -> let shMemA = if (isNothing (envUseSharedMemoryForTransfer env))
+                                 then createSharedMemory sharedMemorySizeForAsyncTransfer
+                                 else pure $ fromJust (envUseSharedMemoryForTransfer env)
+                 in  shMemA >>= \shMem ->
+                     pure (SharedMemoryNameResponse (sharedMemoryName shMem), env {envUseSharedMemoryForTransfer = Just shMem})
+        False -> return (StatusOK, env {envUseSharedMemoryForTransfer = Nothing})
+
 performAction env (ExecuteMeasurementProgram me ddets smartProgramCode) =
     startAsyncAcquisition env ddets me smartProgramCode >>= \(asyncWorker, spectraMVar, statusMVar) ->
     let newEnv = env {envAsyncDataChannel = spectraMVar, envAsyncStatusMessagesMVar = statusMVar, envAsyncProgramWorker = asyncWorker}
@@ -233,14 +251,21 @@ performAction env FetchAsyncData =
     asyncAcquisitionRunning env >>= \asyncIsRunning ->
     readChannelMessages messageChannel >>= \newData ->
     asyncAcquisitionErrorMessage env >>= \asyncErrorMsg ->
+    when (shouldUseSharedMemory && not (null newData)) (copyDataToSharedMemory shMem newData) >>
     return (dataResponse asyncErrorMsg asyncIsRunning (newData), env)
     where
         messageChannel = envAsyncDataChannel env
         wl = envEncodedSpectrometerWavelengths env
         dataResponse asyncErrorMsg asyncIsRunning newData
             | not (null asyncErrorMsg) = StatusError asyncErrorMsg
-            | asyncIsRunning           = if (null newData) then StatusNoNewAsyncData else (AsyncAcquiredData newData)
-            | otherwise                = if (null newData) then StatusNoNewAsyncDataComing else (AsyncAcquiredData newData)
+            | asyncIsRunning           = if (null newData) then StatusNoNewAsyncData else (responseForNewData newData)
+            | otherwise                = if (null newData) then StatusNoNewAsyncDataComing else (responseForNewData newData)
+        shouldUseSharedMemory = isJust (envUseSharedMemoryForTransfer env)
+        shMem = fromJust (envUseSharedMemoryForTransfer env)
+        responseForNewData newData =
+            if shouldUseSharedMemory
+                then StatusAcquiredDataCopiedToSharedMemory (sharedMemoryName shMem)
+                else (AsyncAcquiredData newData)
 
 performAction env (AcknowledgeDataReceipt upToIdx) =
     -- delete all acquired data up to the index that has been received
@@ -308,3 +333,19 @@ asyncAcquisitionErrorMessage env =
         Just (Left e) -> return $ displayException e
     where
         worker = envAsyncProgramWorker env
+
+copyDataToSharedMemory :: SharedMemory -> [ChannelMessage] -> IO ()
+copyDataToSharedMemory shMem msgs = writeMultipleToSharedMemory (msgLength : encodedMessagesToTake) shMem
+    where
+        encodedData = map (LB.toStrict . encodeInMessagePack) msgs
+        encodeInMessagePack = MP.pack
+        availableMemSize = sharedMemorySize shMem - fromIntegral (sizeOf (0 :: Word64)) -- reserve space for the message size
+        encodedMessagesToTake = f (fromIntegral availableMemSize) encodedData
+            where
+                f _ [] = []
+                f remainingSize (m:ms) =
+                    let msgSize = SB.length m
+                    in  if (msgSize > remainingSize)
+                            then []
+                            else m : f (remainingSize - msgSize) ms
+        msgLength = runPut $ putWord64le (fromIntegral (sum (map SB.length encodedMessagesToTake)) + fromIntegral (sizeOf (0 :: Word64)))

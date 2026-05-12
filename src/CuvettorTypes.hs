@@ -28,13 +28,14 @@ import System.Clock
 import System.IO.Unsafe
 
 import Camera.SCCameraTypes
-import Utils.MiscUtils
 import Detectors.Detector
 import Equipment.Equipment
 import Encodings.EquipmentEncoding
 import Equipment.EquipmentTypes
 import Measurements.MeasurementProgram
 import Measurements.MeasurementProgramTypes
+import Utils.MiscUtils
+import Utils.SharedMemory
 
 data Environment a = Environment {
                       envEquipment :: ![EquipmentW]
@@ -43,6 +44,7 @@ data Environment a = Environment {
                     , envAsyncDataChannel :: !MessageChannel
                     , envAsyncStatusMessagesMVar :: !(MVar [Text])
                     , envAsyncProgramWorker :: !(Async ())
+                    , envUseSharedMemoryForTransfer :: Maybe SharedMemory
 }
 
 type ExposureTime = Double
@@ -62,6 +64,7 @@ data RequestMessage = AcquireData !DetectionParams
                         , execMeasurementSmartProgramCode :: !SmartProgramCode
                       }
                     | FetchAsyncData
+                    | UseSharedMemoryForTransfer !Bool
                     | AcknowledgeDataReceipt !Word64
                     | FetchAsyncStatusMessages
                     | CancelAsyncAcquisition
@@ -84,6 +87,7 @@ instance ToJSON RequestMessage where
         "defineddetections" .= dets <>
         "smartprogramcode" .= smartprog)
     toEncoding FetchAsyncData = pairs ("action" .= ("fetchasyncspectra" :: Text))
+    toEncoding (UseSharedMemoryForTransfer useShMem) = pairs ("action" .= ("usesharedmemoryfortransfer" :: Text) <> "usesharedmemory" .= useShMem)
     toEncoding (AcknowledgeDataReceipt upToIdx) = pairs ("action" .= ("acknowledgedatareceipt" :: Text) <> "uptoandincluding" .= upToIdx)
     toEncoding FetchAsyncStatusMessages = pairs ("action" .= ("fetchasyncstatusmessages" :: Text))
     toEncoding CancelAsyncAcquisition = pairs ("action" .= ("cancelasyncacquisition" :: Text))
@@ -104,6 +108,7 @@ instance FromJSON RequestMessage where
             "ping"      -> return Ping
             "executemeasurementprogram" -> ExecuteMeasurementProgram <$> v .: "program" <*> v .: "defineddetections" <*> v .: "smartprogramcode"
             "fetchasyncspectra" -> return FetchAsyncData
+            "usesharedmemoryfortransfer" -> UseSharedMemoryForTransfer <$> v .: "usesharedmemory"
             "acknowledgedatareceipt" -> AcknowledgeDataReceipt <$> v .: "uptoandincluding"
             "fetchasyncstatusmessages" -> return FetchAsyncStatusMessages
             "cancelasyncacquisition" -> return CancelAsyncAcquisition
@@ -116,6 +121,7 @@ data ResponseMessage = StatusOK
                      | StatusError !String
                      | StatusNoNewAsyncData
                      | StatusNoNewAsyncDataComing
+                     | StatusAcquiredDataCopiedToSharedMemory !Text
                      | AcquiredDataResponse ![ChannelMessage]
                      | Wavelengths !AcquiredData
                      | AvailableEquipment ![EquipmentW]
@@ -124,6 +130,7 @@ data ResponseMessage = StatusOK
                      | DetectorPropertiesResponse ![DetectorProperty] Double
                      | Pong
                      | AsyncAcquiredData ![ChannelMessage]
+                     | SharedMemoryNameResponse !Text
                      | AsyncStatusMessages ![Text]
                      | AsyncAcquisitionIsRunning !Bool
                      deriving (Generic)
@@ -137,6 +144,7 @@ instance ToJSON ResponseMessage where
     toEncoding (StatusError s) = pairs ("responsetype" .= ("status" :: Text) <> "status" .= ("error"  :: Text) <> "error" .= s)
     toEncoding StatusNoNewAsyncData = pairs ("responsetype" .= ("asyncacquisitionspectrastatus" :: Text) <> "status" .= ("nonewspectra" :: Text))
     toEncoding (StatusNoNewAsyncDataComing) = pairs ("responsetype" .= ("asyncacquisitionspectrastatus" :: Text) <> "status" .= ("nonewspectracoming" :: Text))
+    toEncoding (StatusAcquiredDataCopiedToSharedMemory shMemName) = pairs ("responsetype" .= ("acquireddatacopiedtosharedmemory" :: Text) <> "sharedmemoryname" .= shMemName)
     toEncoding (AcquiredDataResponse d) = pairs ("responsetype" .= ("acquireddata" :: Text) <> "data" .= d)
     toEncoding (Wavelengths d) = pairs ("responsetype" .= ("wavelengths" :: Text) <> "wavelengths" .= d)
     toEncoding (AvailableEquipment es) = pairs ("responsetype" .= ("availableequipment" :: Text) <> "equipment" .= es)
@@ -147,6 +155,7 @@ instance ToJSON ResponseMessage where
     toEncoding (Pong) = pairs ("responsetype" .= ("pong" :: Text))
     toEncoding (AsyncAcquiredData ds) =
         pairs ("responsetype" .= ("asyncdata" :: Text) <> "data" .= ds)
+    toEncoding (SharedMemoryNameResponse name) = pairs ("responsetype" .= ("sharedmemoryname" :: Text) <> "name" .= name)
     toEncoding (AsyncStatusMessages ms) =
         pairs ("responsetype" .= ("asyncstatusmessages" :: Text) <> "messages" .= ms)
     toEncoding (AsyncAcquisitionIsRunning b) = pairs ("responsetype" .= ("asyncacquisitionstatus" :: Text) <> "running" .= b)
@@ -197,7 +206,7 @@ encodeInMessagePack _ = error "no binary encoding for this type"
 encodeAcquiredData :: [ChannelMessage] -> [ByteString]
 encodeAcquiredData [] = error "Encoding empty data"
 encodeAcquiredData cms = let header = encodeHeader messageLength indices stagePositions acqTypeNames detectorNames dataSizes numType timeStamps
-                          in  header : acqBytes
+                         in  header : acqBytes
   where
       acqs = map cmMsg cms
       metadatas = map acquisitionMetaData acqs
