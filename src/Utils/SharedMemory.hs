@@ -23,7 +23,7 @@ import Data.Word
 import Foreign.Concurrent (newForeignPtr)
 import Foreign.ForeignPtr (ForeignPtr, withForeignPtr)
 import Foreign.Ptr
-import Foreign.C.String (withCString)
+import Foreign.C.String (CString, withCString)
 import Foreign.C.Types
 import Foreign.Marshal.Utils (copyBytes)
 import Foreign.Ptr (castPtr)
@@ -66,15 +66,15 @@ createSharedMemory nBytes =
 #else
 
 foreign import ccall unsafe "shm_open" c_shm_open :: CString -> CInt -> CInt -> IO CInt
-foreign import ccall unsafe "ftruncate" c_ftruncate :: CInt -> COff -> IO CInt
-foreign import ccall unsafe "mmap" c_mmap :: Ptr () -> CSize -> CInt -> CInt -> CInt -> COff -> IO (Ptr ())
+foreign import ccall unsafe "ftruncate" c_ftruncate :: CInt -> CLong -> IO CInt
+foreign import ccall unsafe "mmap" c_mmap :: Ptr () -> CSize -> CInt -> CInt -> CInt -> CLong -> IO (Ptr ())
 foreign import ccall unsafe "munmap" c_munmap :: Ptr () -> CSize -> IO CInt
 foreign import ccall unsafe "close" c_close :: CInt -> IO CInt
 foreign import ccall unsafe "shm_unlink" c_shm_unlink :: CString -> IO CInt
 
 createSharedMemory nBytes =
     generateUniqueName >>= \name ->
-    withCString name $ \c_name ->
+    withCString (T.unpack name) $ \c_name ->
     -- O_CREAT (0o100) | O_EXCL (0o200) | O_RDWR (0o2) = 0o302
     let flags = 0o302 
         mode = 0o666

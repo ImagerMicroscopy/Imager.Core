@@ -43,7 +43,6 @@ executable Imager
                      , req
                      , stm
                      , temporary
-                     , Win32
   other-modules:       AggregateMotorizedStage
                      , CuvettorTypes
                      , Equipment.Devices.BlueBoxOptics
@@ -93,3 +92,4 @@ executable Imager
 
   if (os(windows))
       cpp-options:     -DWINDOWS
+      build-depends:   Win32
