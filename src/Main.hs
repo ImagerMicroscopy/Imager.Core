@@ -32,7 +32,7 @@ import System.Environment
 import System.FilePath
 import Control.Exception (bracket, catch, SomeException)
 import Control.Concurrent (threadDelay)
-import System.IO (hClose)
+import System.IO (hClose, hSetBuffering, BufferMode(..), stdout, stderr)
 import System.Environment (getExecutablePath)
 import System.FilePath (takeDirectory, (</>))
 import System.Process
@@ -68,8 +68,12 @@ serverSettings = defaultSettings {ssBindToAllInterfaces = False,
 
 main :: IO ()
 main = do
-  exePath <- getExecutablePath
-  DT.trace (show exePath) readAvailableEquipment >>= \descs ->
+    -- Ensure output is line-buffered so we avoid block buffering when run as a subprocess
+    hSetBuffering stdout LineBuffering
+    hSetBuffering stderr LineBuffering
+
+    exePath <- getExecutablePath
+    descs <- DT.trace (show exePath) readAvailableEquipment
     withEquipmentAndPluginCameras descs $ \(availableEquipment, availablePluginCams) -> do
 
       when (null availablePluginCams) (

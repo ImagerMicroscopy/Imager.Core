@@ -40,7 +40,7 @@ initializeDummyRobot (DummyRobotDesc name) =
 instance Equipment DummyLightSource where
     equipmentName (DummyLightSource n) = n
     flushSerialPorts _ = pure ()
-    closeDevice (DummyLightSource name) = putStr ("closed light source " ++ T.unpack (fromEqName name)) >> return ()
+    closeDevice (DummyLightSource name) = putStrLn ("closed light source " ++ T.unpack (fromEqName name)) >> return ()
     availableLightSources (DummyLightSource n) =
         [LightSourceDescription (LSName "ls") True True (map LSChannelName ["ch1", "ch2"])]
     activateLightSource (DummyLightSource name) _ chs =
