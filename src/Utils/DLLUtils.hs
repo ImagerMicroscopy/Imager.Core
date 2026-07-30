@@ -44,7 +44,7 @@ loadModule mName =
     else pure modu)
 #else
     B.useAsCString (T.encodeUtf8 mName) (\nameStr ->
-    cdlopen nameStr >>= \modu ->
+    cdlopen nameStr 1 >>= \modu ->
     if (fromHMODULE modu == nullPtr)
     then cdlerror >>= peekCString >>= \errMsg -> error ("couldn't load module '" ++ T.unpack mName ++ "': " ++ errMsg)
     else pure modu)
@@ -92,7 +92,7 @@ foreign import ccall "Windows.h GetLastError"
     cGetLastError :: IO Int32
 #else
 foreign import ccall "dlfcn.h dlopen"
-    cdlopen  :: CString -> IO HMODULE
+    cdlopen  :: CString -> CInt -> IO HMODULE
 
 foreign import ccall "dlfcn.h dlsym"
     cdlsym :: HMODULE -> CString -> IO FARPROC

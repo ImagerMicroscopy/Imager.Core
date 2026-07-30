@@ -31,7 +31,7 @@ loadPlugins =
     let pluginNames = filter (\fn -> takeExtension (T.unpack fn) == ".imagerplugin") fileNames
     in  forM pluginNames ( \pn ->
             putStrLn ("Loading plugin " ++ T.unpack pn ++ "...") >>
-            loadPlugin (addTrailingPathSeparator  pluginConfigDirPath) pn >>= \contents ->
+            loadPlugin (addTrailingPathSeparator pluginConfigDirPath) (T.pack $ pluginsDirPath </> T.unpack pn) >>= \contents ->
             T.putStr (describePluginContents contents) >> pure contents
     )
 

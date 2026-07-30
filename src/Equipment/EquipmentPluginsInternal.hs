@@ -319,7 +319,7 @@ loadPlugin pluginConfigDir libName =
     in  pure (EquipmentW ep, map (\camName -> PluginDetector camName ep) connectedCameraNames)
     where
         baseLibName :: Text
-        baseLibName = T.pack . dropExtension . T.unpack $ libName
+        baseLibName = T.pack . takeBaseName . T.unpack $ libName
 
         verifyPluginVersion :: SingleIntPtrFunc -> IO ()
         verifyPluginVersion f = alloca $ \versionPtr ->
