@@ -94,8 +94,8 @@ main = do
           wl <- getDetectorWavelengths (head availablePluginCams)
           let encodedWl = byteStringFromVector wl
           printImagerBanner
-          putStrLn "ready to measure!"
           putStrLn "HOLD CONTROL-C UNTIL YOU SEE \"USER INTERRUPT\" BEFORE CLOSING THIS WINDOW"
+          putStrLn "Ready to measure!"
 
 
           let env = Environment availableEquipment availablePluginCams encodedWl
