@@ -128,7 +128,7 @@ startPythonBackend pythonPath runLocal =
     then do
       result <- try $ createProcess
           (proc pythonPath
-              [ "-m", "uvicorn"
+              ["-u", "-m", "uvicorn"
               , "main:app"
               , "--host", "127.0.0.1"
               , "--port", "5100"
