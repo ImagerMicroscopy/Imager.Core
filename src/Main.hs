@@ -28,6 +28,7 @@ import qualified Data.Vector as V
 import Data.Word
 import Foreign.Storable
 import System.Clock
+import System.Directory (doesFileExist)
 import System.Environment
 import System.FilePath
 import Control.Exception (bracket, catch, SomeException)
@@ -104,10 +105,18 @@ main = do
 
 loadConfig :: FilePath -> IO AppConfig
 loadConfig path = do
-  result <- eitherDecodeFileStrict' path
-  case result of
-    Left err   -> error ("Config error: " ++ err)
-    Right cfg  -> pure cfg
+  exists <- doesFileExist path
+  if exists
+    then do
+      result <- eitherDecodeFileStrict' path
+      case result of
+        Left err   -> error ("Config error: " ++ err)
+        Right cfg  -> pure cfg
+    else do
+      putStrLn ("No config file found at " ++ path ++ ", creating a default one.")
+      let defaultCfg = AppConfig { pythonpath = "", fromexternal = False }
+      LB.writeFile path (encode defaultCfg <> "\n")
+      pure defaultCfg
 
 printImagerBanner :: IO ()
 printImagerBanner =

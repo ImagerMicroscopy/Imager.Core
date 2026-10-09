@@ -56,6 +56,8 @@ data AppConfig = AppConfig
 
 instance FromJSON AppConfig
 
+instance ToJSON AppConfig
+
 data MeasurementElement = MEDetection !ElementID ![AcquisitionTypeName] ![SmartProgramID]
                         | MEIrradiation !ElementID !LSIlluminationDuration ![IrradiationParams]
                         | MEWait !ElementID !WaitDuration
