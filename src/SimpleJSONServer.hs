@@ -58,6 +58,7 @@ runServer portNumber handler env settings =
     withSocketsDo $
     head <$> getAddrInfo hints interface (Just (show portNumber)) >>= \serveraddr ->
     socket (addrFamily serveraddr) Stream defaultProtocol >>= \listenSock ->
+    setSocketOption listenSock ReuseAddr 1 >>
     bind listenSock (addrAddress serveraddr) >>
     (listen listenSock 16 >> messageLoop listenSock handler env settings) `finally` (close listenSock)
     where
