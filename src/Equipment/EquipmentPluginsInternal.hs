@@ -281,7 +281,7 @@ loadPlugin pluginConfigDir libName =
 
 
     verifyPluginVersion apiVersionF >>  -- check if the plugin api matches
-    castFunPtrToPtr <$> mkCStringCallback (pluginPrinter libName) >>= \printFunc ->
+    castFunPtrToPtr <$> mkCStringCallback (pluginPrinter (T.pack (takeFileName (T.unpack libName)))) >>= \printFunc ->
     B.useAsCString (T.encodeUtf8 . T.pack $ pluginConfigDir) $ \confDirPtr ->
     initF confDirPtr printFunc >>= \initResult ->
     when (initResult /= 0) (error "couldn't init plugin") >>
