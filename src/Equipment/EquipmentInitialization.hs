@@ -13,6 +13,7 @@ import Data.List
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+import System.Directory (doesFileExist)
 import System.Environment
 import System.FilePath
 import System.Signal
@@ -46,10 +47,16 @@ import Equipment.Devices.OxxiusLBX
 import Equipment.EquipmentPluginsInternal
 
 readAvailableEquipment :: IO [EquipmentDescription]
-readAvailableEquipment =
-    getExecutablePath >>= \exePath ->
-    readFile (takeDirectory exePath </> confFilename) >>=
-    return . read
+readAvailableEquipment = do
+    exePath <- getExecutablePath
+    let confPath = takeDirectory exePath </> confFilename
+    exists <- doesFileExist confPath
+    if exists
+        then readFile confPath >>= return . read
+        else do
+            putStrLn ("No equipment file found at " ++ confPath ++ ", creating a default one.")
+            writeFile confPath "[]"
+            pure []
     where
         confFilename = "equipment.txt"
 
